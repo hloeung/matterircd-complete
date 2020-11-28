@@ -11,7 +11,8 @@ our %IRSSI = (
     license     => 'GPL',
 );
 
-our %CACHE_MSG_THREAD_ID;
+our %MSGTHREADID_CACHE;
+my $MSGTHREADID_RE = qr/@@([0-9a-z]{26})/;
 
 signal_add_last 'complete word' => sub {
     my ($complist, $window, $word, $linestart, $want_space) = @_;
@@ -20,16 +21,16 @@ signal_add_last 'complete word' => sub {
     return unless ref $wi and $wi->{type} eq 'CHANNEL';
 
     # Only message/thread IDs at the start.
-    if ($word !~ /^@@/) {
+    if (substr($word, 0, 2) ne '@@') {
         return;
     }
-    $word =~ s/^@@//;
+    $word = substr($word, 2);
 
-    if (not exists($CACHE_MSG_THREAD_ID{$wi->{name}})) {
+    if (not exists($MSGTHREADID_CACHE{$wi->{name}})) {
         return;
     }
 
-    foreach my $msgthread_id (@{$CACHE_MSG_THREAD_ID{$wi->{name}}}) {
+    foreach my $msgthread_id (@{$MSGTHREADID_CACHE{$wi->{name}}}) {
         if ($msgthread_id =~ /^\Q$word\E/) {
             push(@$complist, "\@\@$msgthread_id");
         }
@@ -39,25 +40,18 @@ signal_add_last 'complete word' => sub {
 signal_add_last 'message public' => sub {
     my($server, $msg, $nick, $address, $target) = @_;
 
-    if ($msg !~ '@@([0-9a-z]{26})') {
+    if ($msg !~ $MSGTHREADID_RE) {
         return;
     }
     my $msgid = $1;
-
-    if (not exists($CACHE_MSG_THREAD_ID{$target})) {
-        $CACHE_MSG_THREAD_ID{$target} = ();
-        my $cache_ref = \@{$CACHE_MSG_THREAD_ID{$target}};
-        unshift(@$cache_ref, $msgid);
-        return;
-    }
-
-    my $cache_ref = \@{$CACHE_MSG_THREAD_ID{$target}};
+    my $cache_ref = \@{$MSGTHREADID_CACHE{$target}};
 
     # We want to reduce duplicates by removing them currently in the
     # per-channel cache. But as a trade off in favor of
     # speed/performance, rather than traverse the entire per-channel
-    # cache, we cap it at the first 5.
-    my $max = ($#$cache_ref < 5)? $#$cache_ref : 5;
+    # cache, we cap/limit it.
+    my $limit = 5;
+    my $max = ($#$cache_ref < $limit)? $#$cache_ref : $limit;
     for my $i (0 .. $max) {
         if (@$cache_ref[$i] eq $msgid) {
             splice(@$cache_ref, $i, 1);
