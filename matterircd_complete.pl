@@ -7,7 +7,7 @@ our %IRSSI = (
     name        => 'Matterircd Message Thread Tab Complete',
     description => 'Adds tab complettion for Matterircd message threads',
     authors     => 'Haw Loeung',
-    contact     => 'haw.loeung@canonical.com',
+    contact     => 'hloeung/Freenode',
     license     => 'GPL',
 );
 
@@ -53,11 +53,20 @@ signal_add_last 'message public' => sub {
 
     my $cache_ref = \@{$CACHE_MSG_THREAD_ID{$target}};
 
-    # Message / thread IDs are added at the start of the array so most
-    # recent would be first. We also want to avoid duplicates.
-    if (@$cache_ref[0] ne $msgid) {
-        unshift(@$cache_ref, $msgid);
+    # We want to reduce duplicates by removing them currently in the
+    # per-channel cache. But as a trade off in favor of
+    # speed/performance, rather than traverse the entire per-channel
+    # cache, we cap it at the first 5.
+    my $max = ($#$cache_ref < 5)? $#$cache_ref : 5;
+    for my $i (0 .. $max) {
+        if (@$cache_ref[$i] eq $msgid) {
+            splice(@$cache_ref, $i, 1);
+        }
     }
+
+    # Message / thread IDs are added at the start of the array so most
+    # recent would be first.
+    unshift(@$cache_ref, $msgid);
 
     # Maximum cache elements to store per channel.
     # XXX: Make this value configurable.
