@@ -68,3 +68,17 @@ signal_add_last 'message public' => sub {
         pop(@$cache_ref);
     }
 };
+
+signal_add_last 'message own_public' => sub {
+    my($server, $msg, $target) = @_;
+
+    if ($msg !~ $MSGTHREADID_RE) {
+        return;
+    }
+    my $msgid = $1;
+    my $cache_ref = \@{$MSGTHREADID_CACHE{$target}};
+
+    if (@$cache_ref[0] ne $msgid) {
+        unshift(@$cache_ref, $msgid);
+    }
+};
