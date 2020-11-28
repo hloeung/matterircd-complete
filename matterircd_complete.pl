@@ -11,8 +11,7 @@ our %IRSSI = (
     license     => 'GPL',
 );
 
-our %MSGTHREADID_CACHE;
-my $MSGTHREADID_RE = qr/@@([0-9a-z]{26})/;
+my %MSGTHREADID_CACHE;
 
 signal_add_last 'complete word' => sub {
     my ($complist, $window, $word, $linestart, $want_space) = @_;
@@ -40,7 +39,7 @@ signal_add_last 'complete word' => sub {
 signal_add_last 'message public' => sub {
     my($server, $msg, $nick, $address, $target) = @_;
 
-    if ($msg !~ $MSGTHREADID_RE) {
+    if ($msg !~ /\[@@([0-9a-z]{26})\]/) {
         return;
     }
     my $msgid = $1;
@@ -72,7 +71,7 @@ signal_add_last 'message public' => sub {
 signal_add_last 'message own_public' => sub {
     my($server, $msg, $target) = @_;
 
-    if ($msg !~ $MSGTHREADID_RE) {
+    if ($msg !~ /^@@([0-9a-z]{26})/) {
         return;
     }
     my $msgid = $1;
