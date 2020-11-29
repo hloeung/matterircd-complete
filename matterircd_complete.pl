@@ -125,6 +125,7 @@ signal_add_last 'complete word' => sub {
 
     my $wi = Irssi::active_win()->{active};
     return unless ref $wi and $wi->{type} eq 'CHANNEL';
+    my $server = Irssi::active_server();
 
     if (substr($word, 0, 1) ne '@') {
         return;
@@ -140,6 +141,10 @@ signal_add_last 'complete word' => sub {
     }
     @tmp = sort @tmp;
     foreach my $nick (@tmp) {
+        # Ignore our own nick.
+        if ($nick eq $server->{nick}) {
+            next;
+        }
         push(@$complist, "\@${nick}");
     }
 
