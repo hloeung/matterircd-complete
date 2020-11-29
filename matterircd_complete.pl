@@ -17,6 +17,29 @@ our %IRSSI = (
     license     => 'GPL',
 );
 
+
+sub cache_store {
+    my ($cache_ref, $item, $cache_size) = @_;
+
+    # We want to reduce duplicates by removing them currently in the
+    # per-channel cache. But as a trade off in favor of
+    # speed/performance, rather than traverse the entire per-channel
+    # cache, we cap/limit it.
+    my $limit = 8;
+    my $max = ($#$cache_ref < $limit)? $#$cache_ref : $limit;
+    for my $i (0 .. $max) {
+        if (@$cache_ref[$i] eq $item) {
+            splice(@$cache_ref, $i, 1);
+        }
+    }
+
+    unshift(@$cache_ref, $item);
+    if (scalar(@$cache_ref) > $cache_size) {
+        pop(@$cache_ref);
+    }
+}
+
+
 my %MSGTHREADID_CACHE;
 
 command_bind 'message_thread_id_search' => sub {
@@ -75,28 +98,8 @@ signal_add_last 'message public' => sub {
         return;
     }
 
-    my $cache_ref = \@{$MSGTHREADID_CACHE{$target}};
-
-    # We want to reduce duplicates by removing them currently in the
-    # per-channel cache. But as a trade off in favor of
-    # speed/performance, rather than traverse the entire per-channel
-    # cache, we cap/limit it.
-    my $limit = 5;
-    my $max = ($#$cache_ref < $limit)? $#$cache_ref : $limit;
-    for my $i (0 .. $max) {
-        if (@$cache_ref[$i] eq $msgid) {
-            splice(@$cache_ref, $i, 1);
-        }
-    }
-
-    # Message / thread IDs are added at the start of the array so most
-    # recent would be first.
-    unshift(@$cache_ref, $msgid);
-
-    my $cache_size = settings_get_int('message_thread_id_cache_size');
-    if (scalar(@$cache_ref) > $cache_size) {
-        pop(@$cache_ref);
-    }
+    my $cache_size = settings_get_int('matterircd_complete_message_thread_id_cache_size');
+    cache_store(\@{$MSGTHREADID_CACHE{$target}}, $msgid, $cache_size);
 };
 
 signal_add_last 'message own_public' => sub {
@@ -106,14 +109,12 @@ signal_add_last 'message own_public' => sub {
         return;
     }
     my $msgid = $1;
-    my $cache_ref = \@{$MSGTHREADID_CACHE{$target}};
 
-    if ((not @$cache_ref) || (@$cache_ref[0] ne $msgid)) {
-        unshift(@$cache_ref, $msgid);
-    }
+    my $cache_size = settings_get_int('matterircd_complete_message_thread_id_cache_size');
+    cache_store(\@{$MSGTHREADID_CACHE{$target}}, $msgid, $cache_size);
 };
 
-settings_add_int('matterircd_complete', 'message_thread_id_cache_size', 20);
+settings_add_int('matterircd_complete', 'matterircd_complete_message_thread_id_cache_size', 20);
 
 
 my %NICKNAMES_CACHE;
@@ -151,28 +152,8 @@ signal_add_last 'complete word' => sub {
 signal_add_last 'message public' => sub {
     my($server, $msg, $nick, $address, $target) = @_;
 
-    my $cache_ref = \@{$NICKNAMES_CACHE{$target}};
-
-    # We want to reduce duplicates by removing them currently in the
-    # per-channel cache. But as a trade off in favor of
-    # speed/performance, rather than traverse the entire per-channel
-    # cache, we cap/limit it.
-    my $limit = 5;
-    my $max = ($#$cache_ref < $limit)? $#$cache_ref : $limit;
-    for my $i (0 .. $max) {
-        if (@$cache_ref[$i] eq $nick) {
-            splice(@$cache_ref, $i, 1);
-        }
-    }
-
-    # Message / thread IDs are added at the start of the array so most
-    # recent would be first.
-    unshift(@$cache_ref, $nick);
-
     my $cache_size = settings_get_int('matterircd_complete_nick_cache_size');
-    if (scalar(@$cache_ref) > $cache_size) {
-        pop(@$cache_ref);
-    }
+    cache_store(\@{$NICKNAMES_CACHE{$target}}, $nick, $cache_size);
 };
 
 signal_add_last 'message own_public' => sub {
@@ -182,11 +163,9 @@ signal_add_last 'message own_public' => sub {
         return;
     }
     my $nick = $1;
-    my $cache_ref = \@{$NICKNAMES_CACHE{$target}};
 
-    if ((not @$cache_ref) || (@$cache_ref[0] ne $nick)) {
-        unshift(@$cache_ref, $nick);
-    }
+    my $cache_size = settings_get_int('matterircd_complete_nick_cache_size');
+    cache_store(\@{$NICKNAMES_CACHE{$target}}, $nick, $cache_size);
 };
 
 settings_add_int('matterircd_complete', 'matterircd_complete_nick_cache_size', 20);
