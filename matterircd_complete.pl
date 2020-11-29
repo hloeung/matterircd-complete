@@ -45,6 +45,20 @@ sub cache_store {
 
 
 my %MSGTHREADID_CACHE;
+command_bind 'matterircd_complete_msgthreadid_cache_dump' => sub {
+    my ($data, $server, $wi) = @_;
+
+    return unless ref $wi and $wi->{type} eq 'CHANNEL';
+
+    if (not exists($MSGTHREADID_CACHE{$wi->{name}})) {
+        Irssi::print("$wi->{name}: Empty cache");
+        return;
+    }
+
+    foreach my $msgthread_id (@{$MSGTHREADID_CACHE{$wi->{name}}}) {
+        Irssi::print("$wi->{name}: ${msgthread_id}");
+    }
+};
 
 my $MSGTHREADID_CACHE_SEARCH_ENABLED = 0;
 my $MSGTHREADID_CACHE_INDEX = 0;
@@ -156,6 +170,20 @@ settings_add_int('matterircd_complete', 'matterircd_complete_message_thread_id_c
 
 
 my %NICKNAMES_CACHE;
+command_bind 'matterircd_complete_nicknames_cache_dump' => sub {
+    my ($data, $server, $wi) = @_;
+
+    return unless ref $wi and $wi->{type} eq 'CHANNEL';
+
+    if (not exists($NICKNAMES_CACHE{$wi->{name}})) {
+        Irssi::print("$wi->{name}: Empty cache");
+        return;
+    }
+
+    foreach my $nick (@{$NICKNAMES_CACHE{$wi->{name}}}) {
+        Irssi::print("$wi->{name}: ${nick}");
+    }
+};
 
 signal_add_last 'complete word' => sub {
     my ($complist, $window, $word, $linestart, $want_space) = @_;
