@@ -4,8 +4,8 @@
 use strict;
 use warnings;
 
-use Irssi qw(command_bind gui_input_set gui_input_set_pos signal_add_last);
 use Irssi::TextUI;
+use Irssi qw(command_bind gui_input_set gui_input_set_pos settings_add_int settings_get_int signal_add_last);
 
 
 our $VERSION = '1.00';
@@ -80,9 +80,8 @@ signal_add_last 'message public' => sub {
     # recent would be first.
     unshift(@$cache_ref, $msgid);
 
-    # Maximum cache elements to store per channel.
-    # XXX: Make this value configurable.
-    if (scalar(@$cache_ref) > 20) {
+    my $cache_size = settings_get_int('message_thread_id_cache_size');
+    if (scalar(@$cache_ref) > $cache_size) {
         pop(@$cache_ref);
     }
 };
@@ -100,3 +99,5 @@ signal_add_last 'message own_public' => sub {
         unshift(@$cache_ref, $msgid);
     }
 };
+
+settings_add_int('matterircd_complete', 'message_thread_id_cache_size', 20);
