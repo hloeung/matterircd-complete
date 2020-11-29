@@ -58,7 +58,7 @@ command_bind 'message_thread_id_search' => sub {
     # Save input text.
     my $input = Irssi::parse_special('$L');
     # Remove existing thread.
-    $input =~ s/^@@(?:[0-9a-z]{26}|[0-9a-f]{3}]) //;
+    $input =~ s/^@@(?:[0-9a-z]{26}|[0-9a-f]{3}) //;
     gui_input_set_pos(0);
     gui_input_set('@@' . $MSGTHREADID_CACHE{$wi->{name}}[$MSGTHREADID_CACHE_INDEX] . ' ' . $input);
     $MSGTHREADID_CACHE_INDEX += 1;
@@ -84,7 +84,7 @@ signal_add_last 'gui key pressed' => sub {
         # Cancel/abort, so remove thread stuff.
         if ($key == $KEY_ESC) {
             my $input = Irssi::parse_special('$L');
-            $input =~ s/^@@(?:[0-9a-z]{26}|[0-9a-f]{3}]) //;
+            $input =~ s/^@@(?:[0-9a-z]{26}|[0-9a-f]{3}) //;
             gui_input_set_pos(0);
             gui_input_set($input);
         }
