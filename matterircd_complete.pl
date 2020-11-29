@@ -96,7 +96,7 @@ signal_add_last 'message own_public' => sub {
     my $msgid = $1;
     my $cache_ref = \@{$MSGTHREADID_CACHE{$target}};
 
-    if (@$cache_ref[0] ne $msgid) {
+    if ((not @$cache_ref) || (@$cache_ref[0] ne $msgid)) {
         unshift(@$cache_ref, $msgid);
     }
 };
