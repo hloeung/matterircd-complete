@@ -1,6 +1,12 @@
-use strict;
+# /bind ^G /message_thread_id_search
+# Use Ctrl+g to insert latest thread/message ID.
 
-use Irssi qw(signal_add_last);
+use strict;
+use warnings;
+
+use Irssi qw(command_bind gui_input_set gui_input_set_pos signal_add_last);
+use Irssi::TextUI;
+
 
 our $VERSION = '1.00';
 our %IRSSI = (
@@ -13,11 +19,28 @@ our %IRSSI = (
 
 my %MSGTHREADID_CACHE;
 
+command_bind 'message_thread_id_search' => sub {
+    my ($data, $server, $wi) = @_;
+
+    return unless ref $wi and $wi->{type} eq 'CHANNEL';
+    if (not exists($MSGTHREADID_CACHE{$wi->{name}})) {
+        return;
+    }
+
+    # XXX: Maybe add it so re-running the search command each time
+    # cycles through. For now, just add the most recent.
+    gui_input_set_pos(0);
+    gui_input_set('@@' . $MSGTHREADID_CACHE{$wi->{name}}[0] . ' ');
+};
+
 signal_add_last 'complete word' => sub {
     my ($complist, $window, $word, $linestart, $want_space) = @_;
 
     my $wi = Irssi::active_win()->{active};
     return unless ref $wi and $wi->{type} eq 'CHANNEL';
+    if (not exists($MSGTHREADID_CACHE{$wi->{name}})) {
+        return;
+    }
 
     # Only message/thread IDs at the start.
     if (substr($word, 0, 2) ne '@@') {
@@ -25,13 +48,9 @@ signal_add_last 'complete word' => sub {
     }
     $word = substr($word, 2);
 
-    if (not exists($MSGTHREADID_CACHE{$wi->{name}})) {
-        return;
-    }
-
     foreach my $msgthread_id (@{$MSGTHREADID_CACHE{$wi->{name}}}) {
         if ($msgthread_id =~ /^\Q$word\E/) {
-            push(@$complist, "\@\@$msgthread_id");
+            push(@$complist, "\@\@${msgthread_id}");
         }
     }
 };
