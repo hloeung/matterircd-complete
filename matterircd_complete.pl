@@ -114,3 +114,79 @@ signal_add_last 'message own_public' => sub {
 };
 
 settings_add_int('matterircd_complete', 'message_thread_id_cache_size', 20);
+
+
+my %NICKNAMES_CACHE;
+
+signal_add_last 'complete word' => sub {
+    my ($complist, $window, $word, $linestart, $want_space) = @_;
+
+    my $wi = Irssi::active_win()->{active};
+    return unless ref $wi and $wi->{type} eq 'CHANNEL';
+
+    if (substr($word, 0, 1) ne '@') {
+        return;
+    }
+    $word = substr($word, 1);
+
+    foreach my $nick (@{$NICKNAMES_CACHE{$wi->{name}}}) {
+        if ($nick =~ /^\Q$word\E/) {
+            push(@$complist, "\@${nick}");
+        }
+    }
+
+    # We need to store the results in a temporary array so we can sort.
+    my @tmp;
+    foreach my $nick ($wi->nicks()) {
+        if ($nick->{nick} =~ /^\Q$word\E/i) {
+            push(@tmp, "$nick->{nick}");
+        }
+    }
+    @tmp = sort @tmp;
+    foreach my $nick (@tmp) {
+        push(@$complist, "\@${nick}");
+    }
+};
+
+signal_add_last 'message public' => sub {
+    my($server, $msg, $nick, $address, $target) = @_;
+
+    my $cache_ref = \@{$NICKNAMES_CACHE{$target}};
+
+    # We want to reduce duplicates by removing them currently in the
+    # per-channel cache. But as a trade off in favor of
+    # speed/performance, rather than traverse the entire per-channel
+    # cache, we cap/limit it.
+    my $limit = 5;
+    my $max = ($#$cache_ref < $limit)? $#$cache_ref : $limit;
+    for my $i (0 .. $max) {
+        if (@$cache_ref[$i] eq $nick) {
+            splice(@$cache_ref, $i, 1);
+        }
+    }
+
+    # Message / thread IDs are added at the start of the array so most
+    # recent would be first.
+    unshift(@$cache_ref, $nick);
+
+    my $cache_size = settings_get_int('matterircd_complete_nick_cache_size');
+    if (scalar(@$cache_ref) > $cache_size) {
+        pop(@$cache_ref);
+    }
+};
+
+signal_add_last 'message own_public' => sub {
+    my($server, $msg, $target) = @_;
+
+    if ($msg !~ /^@([^@ \t:,\)]+)/) {
+        return;
+    }
+    my $nick = $1;
+    my $cache_ref = \@{$NICKNAMES_CACHE{$target}};
+
+    if ((not @$cache_ref) || (@$cache_ref[0] ne $nick)) {
+        unshift(@$cache_ref, $nick);
+    }
+};
+
+settings_add_int('matterircd_complete', 'matterircd_complete_nick_cache_size', 20);
