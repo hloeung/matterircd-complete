@@ -11,7 +11,7 @@ use Irssi qw(command_bind gui_input_set gui_input_set_pos settings_add_int setti
 
 our $VERSION = '1.00';
 our %IRSSI = (
-    name        => 'Matterircd Message Thread Tab Complete',
+    name        => 'Matterircd Tab Auto Complete',
     description => 'Adds tab complettion for Matterircd message threads',
     authors     => 'Haw Loeung',
     contact     => 'hloeung/Freenode',
@@ -29,7 +29,7 @@ sub cache_store {
     my $limit = 8;
     my $max = ($#$cache_ref < $limit)? $#$cache_ref : $limit;
     for my $i (0 .. $max) {
-        if (@$cache_ref[$i] eq $item) {
+        if ((@$cache_ref[$i]) && (@$cache_ref[$i] eq $item)) {
             splice(@$cache_ref, $i, 1);
         }
     }
@@ -43,6 +43,8 @@ sub cache_store {
 
 my %MSGTHREADID_CACHE;
 
+my $MSGTHREADID_CACHE_SEARCH_ENABLED = 0;
+my $MSGTHREADID_CACHE_INDEX = 0;
 command_bind 'message_thread_id_search' => sub {
     my ($data, $server, $wi) = @_;
 
@@ -51,10 +53,42 @@ command_bind 'message_thread_id_search' => sub {
         return;
     }
 
-    # XXX: Maybe add it so re-running the search command each time
-    # cycles through. For now, just add the most recent.
+    $MSGTHREADID_CACHE_SEARCH_ENABLED = 1;
+
+    # Save input text.
+    my $input = Irssi::parse_special('$L');
+    # Remove existing thread.
+    $input =~ s/^@@(?:[0-9a-z]{26}|[0-9a-f]{3}]) //;
     gui_input_set_pos(0);
-    gui_input_set('@@' . $MSGTHREADID_CACHE{$wi->{name}}[0] . ' ');
+    gui_input_set('@@' . $MSGTHREADID_CACHE{$wi->{name}}[$MSGTHREADID_CACHE_INDEX] . ' ' . $input);
+    $MSGTHREADID_CACHE_INDEX += 1;
+    if ($MSGTHREADID_CACHE_INDEX > $#{$MSGTHREADID_CACHE{$wi->{name}}}) {
+        # Cycle back to the start.
+        $MSGTHREADID_CACHE_INDEX = 0;
+    }
+};
+
+my $KEY_ESC = 27;
+my $KEY_RET = 10;
+my $KEY_SPC = 32;
+
+signal_add_last 'gui key pressed' => sub {
+    my ($key) = @_;
+    if (not $MSGTHREADID_CACHE_SEARCH_ENABLED) {
+        return;
+    }
+
+    if (($key == $KEY_ESC) || ($key == $KEY_RET)) {
+        $MSGTHREADID_CACHE_SEARCH_ENABLED = 0;
+        $MSGTHREADID_CACHE_INDEX = 0;
+        # Cancel/abort, so remove thread stuff.
+        if ($key == $KEY_ESC) {
+            my $input = Irssi::parse_special('$L');
+            $input =~ s/^@@(?:[0-9a-z]{26}|[0-9a-f]{3}]) //;
+            gui_input_set_pos(0);
+            gui_input_set($input);
+        }
+    }
 };
 
 signal_add_last 'complete word' => sub {
