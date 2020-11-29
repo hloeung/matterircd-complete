@@ -1,5 +1,8 @@
-# /bind ^G /message_thread_id_search
-# Use Ctrl+g to insert latest thread/message ID.
+# '/bind ^G /message_thread_id_search'
+# Use Ctrl+g to insert latest thread/message ID (ESC to abort).
+#
+# @@+TAB to tab auto-complete message/thread ID.
+# @ +TAB to tab auto-complete IRC nick.
 
 use strict;
 use warnings;
