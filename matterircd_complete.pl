@@ -58,10 +58,23 @@ signal_add_last 'complete word' => sub {
 signal_add_last 'message public' => sub {
     my($server, $msg, $nick, $address, $target) = @_;
 
-    if ($msg !~ /\[@@([0-9a-z]{26})\]/) {
+    my $msgid = '';
+    # Mattermost message/thread IDs.
+    if ($msg =~ /(?:^\[@@([0-9a-z]{26})\])|(?:\[@@([0-9a-z]{26})\]$)/) {
+        $msgid = $1 ? $1 : $2;
+    }
+    # matterircd generated 3-letter hexadecimal.
+    elsif ($msg =~ /(?:^\[([0-9a-f]{3})\])|(?:\[([0-9a-f]{3})\]$)/) {
+        $msgid = $1 ? $1 : $2;
+    }
+    # matterircd generated 3-letter hexadecimal replying to threads.
+    elsif ($msg =~ /(?:^\[[0-9a-f]{3}->([0-9a-f]{3})\])|(?:\[[0-9a-f]{3}->([0-9a-f]{3})\]$)/) {
+        $msgid = $1 ? $1 : $2;
+    }
+    else {
         return;
     }
-    my $msgid = $1;
+
     my $cache_ref = \@{$MSGTHREADID_CACHE{$target}};
 
     # We want to reduce duplicates by removing them currently in the
@@ -89,7 +102,7 @@ signal_add_last 'message public' => sub {
 signal_add_last 'message own_public' => sub {
     my($server, $msg, $target) = @_;
 
-    if ($msg !~ /^@@([0-9a-z]{26})/) {
+    if ($msg !~ /^@@((?:[0-9a-z]{26})|(?:[0-9a-f]{3}))/) {
         return;
     }
     my $msgid = $1;
