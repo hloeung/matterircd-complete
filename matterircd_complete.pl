@@ -48,15 +48,19 @@ my %MSGTHREADID_CACHE;
 command_bind 'matterircd_complete_msgthreadid_cache_dump' => sub {
     my ($data, $server, $wi) = @_;
 
-    return unless ref $wi and $wi->{type} eq 'CHANNEL';
+    if (not $data) {
+        return unless ref $wi and $wi->{type} eq 'CHANNEL';
+    }
 
-    if (not exists($MSGTHREADID_CACHE{$wi->{name}})) {
-        Irssi::print("$wi->{name}: Empty cache");
+    my $channel = $data ? $data : $wi->{name};
+
+    if (not exists($MSGTHREADID_CACHE{$channel})) {
+        Irssi::print("${channel}: Empty cache");
         return;
     }
 
-    foreach my $msgthread_id (@{$MSGTHREADID_CACHE{$wi->{name}}}) {
-        Irssi::print("$wi->{name}: ${msgthread_id}");
+    foreach my $msgthread_id (@{$MSGTHREADID_CACHE{$channel}}) {
+        Irssi::print("${channel}: ${msgthread_id}");
     }
 };
 
@@ -173,15 +177,19 @@ my %NICKNAMES_CACHE;
 command_bind 'matterircd_complete_nicknames_cache_dump' => sub {
     my ($data, $server, $wi) = @_;
 
-    return unless ref $wi and $wi->{type} eq 'CHANNEL';
+    if (not $data) {
+        return unless ref $wi and $wi->{type} eq 'CHANNEL';
+    }
 
-    if (not exists($NICKNAMES_CACHE{$wi->{name}})) {
-        Irssi::print("$wi->{name}: Empty cache");
+    my $channel = $data ? $data : $wi->{name};
+
+    if (not exists($NICKNAMES_CACHE{$channel})) {
+        Irssi::print("${channel}: Empty cache");
         return;
     }
 
-    foreach my $nick (@{$NICKNAMES_CACHE{$wi->{name}}}) {
-        Irssi::print("$wi->{name}: ${nick}");
+    foreach my $nick (@{$NICKNAMES_CACHE{$channel}}) {
+        Irssi::print("${channel}: ${nick}");
     }
 };
 
