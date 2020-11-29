@@ -3,6 +3,7 @@
 
 use strict;
 use warnings;
+use experimental 'smartmatch';
 
 use Irssi::TextUI;
 use Irssi qw(command_bind gui_input_set gui_input_set_pos settings_add_int settings_get_int signal_add_last);
@@ -130,12 +131,6 @@ signal_add_last 'complete word' => sub {
     }
     $word = substr($word, 1);
 
-    foreach my $nick (@{$NICKNAMES_CACHE{$wi->{name}}}) {
-        if ($nick =~ /^\Q$word\E/) {
-            push(@$complist, "\@${nick}");
-        }
-    }
-
     # We need to store the results in a temporary array so we can sort.
     my @tmp;
     foreach my $nick ($wi->nicks()) {
@@ -146,6 +141,16 @@ signal_add_last 'complete word' => sub {
     @tmp = sort @tmp;
     foreach my $nick (@tmp) {
         push(@$complist, "\@${nick}");
+    }
+
+    if (not exists($NICKNAMES_CACHE{$wi->{name}})) {
+        return;
+    }
+    # We want to make sure users are still in channel for those still in the cache.
+    foreach my $nick (reverse @{$NICKNAMES_CACHE{$wi->{name}}}) {
+        if ("\@${nick}" ~~ @$complist) {
+            unshift(@$complist, "\@${nick}");
+        }
     }
 };
 
