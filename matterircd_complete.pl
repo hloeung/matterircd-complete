@@ -169,6 +169,8 @@ signal_add_last 'complete word' => sub {
     }
     $word = substr($word, 1);
 
+    my $compl_char = Irssi::settings_get_str('completion_char');
+
     # We need to store the results in a temporary array so we can sort.
     my @tmp;
     foreach my $nick ($wi->nicks()) {
@@ -182,16 +184,19 @@ signal_add_last 'complete word' => sub {
         if ($nick eq $server->{nick}) {
             next;
         }
-        push(@$complist, "\@${nick}");
+        push(@$complist, "\@${nick}${compl_char}");
     }
 
     if (not exists($NICKNAMES_CACHE{$wi->{name}})) {
         return;
     }
+    # We use the populated cache so frequent and active users in
+    # channel come before those idling there. e.g. In a channel where
+    # @barryp talks more often, it will come before @barry-m.
     # We want to make sure users are still in channel for those still in the cache.
     foreach my $nick (reverse @{$NICKNAMES_CACHE{$wi->{name}}}) {
         if ("\@${nick}" ~~ @$complist) {
-            unshift(@$complist, "\@${nick}");
+            unshift(@$complist, "\@${nick}${compl_char}");
         }
     }
 };
