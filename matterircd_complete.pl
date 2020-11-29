@@ -223,7 +223,7 @@ signal_add_last 'complete word' => sub {
     # @barryp talks more often, it will come before @barry-m.
     # We want to make sure users are still in channel for those still in the cache.
     foreach my $nick (reverse @{$NICKNAMES_CACHE{$wi->{name}}}) {
-        if ("\@${nick}" ~~ @$complist) {
+        if ("\@${nick}${compl_char}" ~~ @$complist) {
             unshift(@$complist, "\@${nick}${compl_char}");
         }
     }
