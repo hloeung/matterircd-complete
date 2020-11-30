@@ -45,6 +45,7 @@ sub cache_store {
 
 
 my %MSGTHREADID_CACHE;
+settings_add_int('matterircd_complete', 'matterircd_complete_message_thread_id_cache_size', 20);
 command_bind 'matterircd_complete_msgthreadid_cache_dump' => sub {
     my ($data, $server, $wi) = @_;
 
@@ -172,10 +173,9 @@ signal_add_last 'message own_public' => sub {
     cache_store(\@{$MSGTHREADID_CACHE{$target}}, $msgid, $cache_size);
 };
 
-settings_add_int('matterircd_complete', 'matterircd_complete_message_thread_id_cache_size', 20);
-
 
 my %NICKNAMES_CACHE;
+settings_add_int('matterircd_complete', 'matterircd_complete_nick_cache_size', 20);
 command_bind 'matterircd_complete_nicknames_cache_dump' => sub {
     my ($data, $server, $wi) = @_;
 
@@ -260,4 +260,3 @@ signal_add_last 'message own_public' => sub {
     cache_store(\@{$NICKNAMES_CACHE{$target}}, $nick, $cache_size);
 };
 
-settings_add_int('matterircd_complete', 'matterircd_complete_nick_cache_size', 20);
