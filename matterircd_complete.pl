@@ -78,40 +78,47 @@ command_bind 'message_thread_id_search' => sub {
     }
 
     $MSGTHREADID_CACHE_SEARCH_ENABLED = 1;
-
-    # Save input text.
-    my $input = Irssi::parse_special('$L');
-    # Remove existing thread.
-    $input =~ s/^@@(?:[0-9a-z]{26}|[0-9a-f]{3}) //;
-    gui_input_set_pos(0);
-    gui_input_set('@@' . $MSGTHREADID_CACHE{$wi->{name}}[$MSGTHREADID_CACHE_INDEX] . ' ' . $input);
+    my $msgthreadid = $MSGTHREADID_CACHE{$wi->{name}}[$MSGTHREADID_CACHE_INDEX];
     $MSGTHREADID_CACHE_INDEX += 1;
     if ($MSGTHREADID_CACHE_INDEX > $#{$MSGTHREADID_CACHE{$wi->{name}}}) {
         # Cycle back to the start.
         $MSGTHREADID_CACHE_INDEX = 0;
     }
+
+    # Save input text.
+    my $input = Irssi::parse_special('$L');
+    # Remove existing thread.
+    $input =~ s/^@@(?:[0-9a-z]{26}|[0-9a-f]{3}) //;
+    # Insert message/thread ID from cache.
+    gui_input_set_pos(0);
+    gui_input_set("\@\@${msgthreadid} ${input}");
 };
 
 my $KEY_ESC = 27;
-my $KEY_RET = 10;
+my $KEY_RET = 13;
 my $KEY_SPC = 32;
 
 signal_add_last 'gui key pressed' => sub {
     my ($key) = @_;
+
     if (not $MSGTHREADID_CACHE_SEARCH_ENABLED) {
         return;
     }
 
-    if (($key == $KEY_ESC) || ($key == $KEY_RET)) {
-        $MSGTHREADID_CACHE_SEARCH_ENABLED = 0;
+    if ($key == $KEY_RET) {
         $MSGTHREADID_CACHE_INDEX = 0;
+        $MSGTHREADID_CACHE_SEARCH_ENABLED = 0;
+    }
+
+    elsif ($key == $KEY_ESC) {
         # Cancel/abort, so remove thread stuff.
-        if ($key == $KEY_ESC) {
-            my $input = Irssi::parse_special('$L');
-            $input =~ s/^@@(?:[0-9a-z]{26}|[0-9a-f]{3}) //;
-            gui_input_set_pos(0);
-            gui_input_set($input);
-        }
+        my $input = Irssi::parse_special('$L');
+        $input =~ s/^@@(?:[0-9a-z]{26}|[0-9a-f]{3}) //;
+        gui_input_set_pos(0);
+        gui_input_set($input);
+
+        $MSGTHREADID_CACHE_INDEX = 0;
+        $MSGTHREADID_CACHE_SEARCH_ENABLED = 0;
     }
 };
 
@@ -259,4 +266,3 @@ signal_add_last 'message own_public' => sub {
     my $cache_size = settings_get_int('matterircd_complete_nick_cache_size');
     cache_store(\@{$NICKNAMES_CACHE{$target}}, $nick, $cache_size);
 };
-
