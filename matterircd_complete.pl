@@ -9,7 +9,7 @@ use warnings;
 use experimental 'smartmatch';
 
 use Irssi::TextUI;
-use Irssi qw(command_bind gui_input_set gui_input_set_pos settings_add_int settings_get_int signal_add_last);
+use Irssi qw(command_bind gui_input_set gui_input_set_pos settings_add_bool settings_add_int settings_get_bool settings_get_int signal_add_last signal_continue);
 
 
 our $VERSION = '1.00';
@@ -20,6 +20,19 @@ our %IRSSI = (
     contact     => 'hloeung/Freenode',
     license     => 'GPL',
 );
+
+
+# Rely on message/thread IDs stored in message cache so we can shorten
+# to save on screen real-estate.
+settings_add_bool('matterircd_complete', 'matterircd_complete_shorten_message_thread_id', 0);
+signal_add_last 'message public' => sub {
+    my($server, $msg, $nick, $address, $target) = @_;
+
+    return unless settings_get_bool('matterircd_complete_shorten_message_thread_id');
+
+    $msg =~ s/\[\@\@([0-9a-z]{4})[0-9a-z]{22}\]$/\x0314[\@\@$1..]/;
+    signal_continue($server, $msg, $nick, $address, $target);
+};
 
 
 sub cache_store {
