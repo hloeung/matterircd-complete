@@ -9,7 +9,7 @@ use warnings;
 use experimental 'smartmatch';
 
 use Irssi::TextUI;
-use Irssi qw(command_bind gui_input_set gui_input_set_pos settings_add_bool settings_add_int settings_get_bool settings_get_int signal_add_last signal_continue);
+use Irssi qw(command_bind gui_input_set gui_input_set_pos parse_special settings_add_bool settings_add_int settings_get_bool settings_get_int settings_get_str signal_add signal_add_last signal_continue);
 
 
 our $VERSION = '1.00';
@@ -86,9 +86,7 @@ command_bind 'message_thread_id_search' => sub {
     my ($data, $server, $wi) = @_;
 
     return unless ref $wi and $wi->{type} eq 'CHANNEL';
-    if (not exists($MSGTHREADID_CACHE{$wi->{name}})) {
-        return;
-    }
+    return unless exists($MSGTHREADID_CACHE{$wi->{name}});
 
     $MSGTHREADID_CACHE_SEARCH_ENABLED = 1;
     my $msgthreadid = $MSGTHREADID_CACHE{$wi->{name}}[$MSGTHREADID_CACHE_INDEX];
@@ -99,7 +97,7 @@ command_bind 'message_thread_id_search' => sub {
     }
 
     # Save input text.
-    my $input = Irssi::parse_special('$L');
+    my $input = parse_special('$L');
     # Remove existing thread.
     $input =~ s/^@@(?:[0-9a-z]{26}|[0-9a-f]{3}) //;
     # Insert message/thread ID from cache.
@@ -114,9 +112,7 @@ my $KEY_SPC = 32;
 signal_add_last 'gui key pressed' => sub {
     my ($key) = @_;
 
-    if (not $MSGTHREADID_CACHE_SEARCH_ENABLED) {
-        return;
-    }
+    return unless $MSGTHREADID_CACHE_SEARCH_ENABLED;
 
     if ($key == $KEY_RET) {
         $MSGTHREADID_CACHE_INDEX = 0;
@@ -125,7 +121,7 @@ signal_add_last 'gui key pressed' => sub {
 
     elsif ($key == $KEY_ESC) {
         # Cancel/abort, so remove thread stuff.
-        my $input = Irssi::parse_special('$L');
+        my $input = parse_special('$L');
         $input =~ s/^@@(?:[0-9a-z]{26}|[0-9a-f]{3}) //;
         gui_input_set_pos(0);
         gui_input_set($input);
@@ -140,14 +136,10 @@ signal_add_last 'complete word' => sub {
 
     my $wi = Irssi::active_win()->{active};
     return unless ref $wi and $wi->{type} eq 'CHANNEL';
-    if (not exists($MSGTHREADID_CACHE{$wi->{name}})) {
-        return;
-    }
+    return unless exists($MSGTHREADID_CACHE{$wi->{name}});
 
     # Only message/thread IDs at the start.
-    if (substr($word, 0, 2) ne '@@') {
-        return;
-    }
+    return unless substr($word, 0, 2) eq '@@';
     $word = substr($word, 2);
 
     foreach my $msgthread_id (@{$MSGTHREADID_CACHE{$wi->{name}}}) {
@@ -157,7 +149,7 @@ signal_add_last 'complete word' => sub {
     }
 };
 
-signal_add_last 'message public' => sub {
+signal_add 'message public' => sub {
     my($server, $msg, $nick, $address, $target) = @_;
 
     my $msgid = '';
@@ -224,12 +216,10 @@ signal_add_last 'complete word' => sub {
     return unless ref $wi and $wi->{type} eq 'CHANNEL';
     my $server = Irssi::active_server();
 
-    if (substr($word, 0, 1) ne '@') {
-        return;
-    }
+    return unless substr($word, 0, 1) eq '@';
     $word = substr($word, 1);
 
-    my $compl_char = Irssi::settings_get_str('completion_char');
+    my $compl_char = settings_get_str('completion_char');
 
     # We need to store the results in a temporary array so we can sort.
     my @tmp;
@@ -247,9 +237,8 @@ signal_add_last 'complete word' => sub {
         push(@$complist, "\@${nick}${compl_char}");
     }
 
-    if (not exists($NICKNAMES_CACHE{$wi->{name}})) {
-        return;
-    }
+    return unless exists($NICKNAMES_CACHE{$wi->{name}});
+
     # We use the populated cache so frequent and active users in
     # channel come before those idling there. e.g. In a channel where
     # @barryp talks more often, it will come before @barry-m.
