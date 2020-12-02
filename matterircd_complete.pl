@@ -4,10 +4,15 @@
 #
 # '/bind ^G /message_thread_id_search'
 #
-# Use Ctrl+g to insert latest thread/message ID (ESC to abort).
+# Use Ctrl+g to insert latest thread/message ID (Ctrl+c to abort).
 #
 # @@+TAB to tab auto-complete message/thread ID.
 # @ +TAB to tab auto-complete IRC nick.
+#
+# Use '/matterircd_complete_msgthreadid_cache_dump' or
+# '/matterircd_complete_nicknames_cache_dump' to show contents of the
+# cache.
+#
 
 use strict;
 use warnings;
@@ -35,6 +40,8 @@ sub shorten_msgthreadid {
 
     return unless settings_get_bool('matterircd_complete_shorten_message_thread_id');
 
+    # For '/me' actions, it has trailing space so we need to use \s*
+    # here.
     $msg =~ s/\[\@\@([0-9a-z]{4})[0-9a-z]{22}\]\s*$/\x0314[\@\@$1..]/;
     signal_continue($server, $msg, $nick, $address, $target);
 }
@@ -114,9 +121,10 @@ command_bind 'message_thread_id_search' => sub {
     gui_input_set("\@\@${msgthreadid} ${input}");
 };
 
-my $KEY_ESC = 27;
-my $KEY_RET = 13;
-my $KEY_SPC = 32;
+my $KEY_CTRL_C = 3;
+my $KEY_ESC    = 27;
+my $KEY_RET    = 13;
+my $KEY_SPC    = 32;
 
 signal_add_last 'gui key pressed' => sub {
     my ($key) = @_;
@@ -128,7 +136,7 @@ signal_add_last 'gui key pressed' => sub {
         $MSGTHREADID_CACHE_SEARCH_ENABLED = 0;
     }
 
-    elsif ($key == $KEY_ESC) {
+    elsif ($key == $KEY_CTRL_C) {
         # Cancel/abort, so remove thread stuff.
         my $input = parse_special('$L');
         $input =~ s/^@@(?:[0-9a-z]{26}|[0-9a-f]{3}) //;
