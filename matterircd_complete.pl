@@ -25,15 +25,16 @@ our %IRSSI = (
 # Rely on message/thread IDs stored in message cache so we can shorten
 # to save on screen real-estate.
 settings_add_bool('matterircd_complete', 'matterircd_complete_shorten_message_thread_id', 0);
-signal_add_last 'message public' => sub {
+sub shorten_msgthreadid {
     my($server, $msg, $nick, $address, $target) = @_;
 
     return unless settings_get_bool('matterircd_complete_shorten_message_thread_id');
 
-    $msg =~ s/\[\@\@([0-9a-z]{4})[0-9a-z]{22}\]$/\x0314[\@\@$1..]/;
+    $msg =~ s/\[\@\@([0-9a-z]{4})[0-9a-z]{22}\]\s*$/\x0314[\@\@$1..]/;
     signal_continue($server, $msg, $nick, $address, $target);
-};
-
+}
+signal_add_last('message public', 'shorten_msgthreadid');
+signal_add_last('message irc action', 'shorten_msgthreadid');
 
 sub cache_store {
     my ($cache_ref, $item, $cache_size) = @_;
