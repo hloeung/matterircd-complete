@@ -40,6 +40,8 @@ signal_add_last('message public', 'shorten_msgthreadid');
 sub cache_store {
     my ($cache_ref, $item, $cache_size) = @_;
 
+    return unless $item ne '';
+
     # We want to reduce duplicates by removing them currently in the
     # per-channel cache. But as a trade off in favor of
     # speed/performance, rather than traverse the entire per-channel
@@ -137,7 +139,6 @@ signal_add_last 'complete word' => sub {
     my ($complist, $window, $word, $linestart, $want_space) = @_;
 
     my $wi = Irssi::active_win()->{active};
-    return unless ref $wi and $wi->{type} eq 'CHANNEL';
     return unless exists($MSGTHREADID_CACHE{$wi->{name}});
 
     # Only message/thread IDs at the start.
@@ -151,7 +152,7 @@ signal_add_last 'complete word' => sub {
     }
 };
 
-signal_add 'message public' => sub {
+sub cache_msgthreadid {
     my($server, $msg, $nick, $address, $target) = @_;
 
     my $msgid = '';
@@ -173,10 +174,25 @@ signal_add 'message public' => sub {
 
     my $cache_size = settings_get_int('matterircd_complete_message_thread_id_cache_size');
     cache_store(\@{$MSGTHREADID_CACHE{$target}}, $msgid, $cache_size);
+}
+signal_add('message irc action', 'cache_msgthreadid');
+signal_add('message private', 'cache_msgthreadid');
+signal_add('message public', 'cache_msgthreadid');
+
+signal_add 'message own_public' => sub {
+    my($server, $msg, $target) = @_;
+
+    if ($msg !~ /^@@((?:[0-9a-z]{26})|(?:[0-9a-f]{3}))/) {
+        return;
+    }
+    my $msgid = $1;
+
+    my $cache_size = settings_get_int('matterircd_complete_message_thread_id_cache_size');
+    cache_store(\@{$MSGTHREADID_CACHE{$target}}, $msgid, $cache_size);
 };
 
-signal_add_last 'message own_public' => sub {
-    my($server, $msg, $target) = @_;
+signal_add 'message own_private' => sub {
+    my($server, $msg, $target, $orig_target) = @_;
 
     if ($msg !~ /^@@((?:[0-9a-z]{26})|(?:[0-9a-f]{3}))/) {
         return;
