@@ -1,4 +1,9 @@
+#
+# Add it to ~/.irssi/scripts/autorun, or:
+# '/script load ~/.irssi/scripts/matterircd_complete.pl'
+#
 # '/bind ^G /message_thread_id_search'
+#
 # Use Ctrl+g to insert latest thread/message ID (ESC to abort).
 #
 # @@+TAB to tab auto-complete message/thread ID.
