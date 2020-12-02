@@ -19,7 +19,7 @@ use warnings;
 use experimental 'smartmatch';
 
 use Irssi::TextUI;
-use Irssi qw(command_bind gui_input_set gui_input_set_pos parse_special settings_add_bool settings_add_int settings_get_bool settings_get_int settings_get_str signal_add signal_add_last signal_continue);
+use Irssi qw(command_bind gui_input_set gui_input_get_pos gui_input_set_pos parse_special settings_add_bool settings_add_int settings_get_bool settings_get_int settings_get_str signal_add signal_add_last signal_continue);
 
 
 our $VERSION = '1.00';
@@ -139,9 +139,22 @@ signal_add_last 'gui key pressed' => sub {
     elsif ($key == $KEY_CTRL_C) {
         # Cancel/abort, so remove thread stuff.
         my $input = parse_special('$L');
-        $input =~ s/^@@(?:[0-9a-z]{26}|[0-9a-f]{3}) //;
-        gui_input_set_pos(0);
+        my $pos = 0;
+        if ($input =~ s/^(@@(?:[0-9a-z]{26}|[0-9a-f]{3}) )//) {
+            $pos = gui_input_get_pos() - length($1);
+        }
+        # Remove the Ctrl+C character.
+        my $keychr = chr($key);
+        $input =~ s/$keychr//;
+        # We also want to move the input position back one for Ctrl+C
+        # char.
+        $pos -= 1;
+
+        # Replace the text in the input box with our modified version,
+        # then move cursor positon to where it was without the
+        # message/thread ID.
         gui_input_set($input);
+        gui_input_set_pos($pos);
 
         $MSGTHREADID_CACHE_INDEX = 0;
         $MSGTHREADID_CACHE_SEARCH_ENABLED = 0;
