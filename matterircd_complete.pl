@@ -33,8 +33,9 @@ sub shorten_msgthreadid {
     $msg =~ s/\[\@\@([0-9a-z]{4})[0-9a-z]{22}\]\s*$/\x0314[\@\@$1..]/;
     signal_continue($server, $msg, $nick, $address, $target);
 }
-signal_add_last('message public', 'shorten_msgthreadid');
 signal_add_last('message irc action', 'shorten_msgthreadid');
+signal_add_last('message private', 'shorten_msgthreadid');
+signal_add_last('message public', 'shorten_msgthreadid');
 
 sub cache_store {
     my ($cache_ref, $item, $cache_size) = @_;
