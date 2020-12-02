@@ -1,6 +1,7 @@
 #
 # Add it to ~/.irssi/scripts/autorun, or:
 # '/script load ~/.irssi/scripts/matterircd_complete.pl'
+# '/set matterircd_complete_networks <...>'
 #
 # '/bind ^G /message_thread_id_search'
 #
@@ -19,7 +20,7 @@ use warnings;
 use experimental 'smartmatch';
 
 use Irssi::TextUI;
-use Irssi qw(command_bind gui_input_set gui_input_get_pos gui_input_set_pos parse_special settings_add_bool settings_add_int settings_get_bool settings_get_int settings_get_str signal_add signal_add_last signal_continue);
+use Irssi qw(command_bind gui_input_set gui_input_get_pos gui_input_set_pos parse_special settings_add_bool settings_add_int settings_get_bool settings_get_int settings_get_str settings_add_str signal_add signal_add_last signal_continue);
 
 
 our $VERSION = '1.00';
@@ -31,6 +32,7 @@ our %IRSSI = (
     license     => 'GPL',
 );
 
+settings_add_str('matterircd_complete', 'matterircd_complete_networks', '');
 
 # Rely on message/thread IDs stored in message cache so we can shorten
 # to save on screen real-estate.
@@ -39,6 +41,9 @@ sub shorten_msgthreadid {
     my($server, $msg, $nick, $address, $target) = @_;
 
     return unless settings_get_bool('matterircd_complete_shorten_message_thread_id');
+
+    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
+    return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
     # For '/me' actions, it has trailing space so we need to use \s*
     # here.
@@ -78,6 +83,8 @@ settings_add_int('matterircd_complete', 'matterircd_complete_message_thread_id_c
 command_bind 'matterircd_complete_msgthreadid_cache_dump' => sub {
     my ($data, $server, $wi) = @_;
 
+    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
+    return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
     if (not $data) {
         return unless ref $wi and $wi->{type} eq 'CHANNEL';
     }
@@ -101,6 +108,8 @@ my $MSGTHREADID_CACHE_INDEX = 0;
 command_bind 'message_thread_id_search' => sub {
     my ($data, $server, $wi) = @_;
 
+    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
+    return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
     return unless ref $wi and $wi->{type} eq 'CHANNEL';
     return unless exists($MSGTHREADID_CACHE{$wi->{name}});
 
@@ -130,6 +139,10 @@ signal_add_last 'gui key pressed' => sub {
     my ($key) = @_;
 
     return unless $MSGTHREADID_CACHE_SEARCH_ENABLED;
+
+    my $wi = Irssi::active_win()->{active};
+    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
+    return unless exists $chatnets{'*'} || exists $chatnets{$wi->{server}->{chatnet}};
 
     if ($key == $KEY_RET) {
         $MSGTHREADID_CACHE_INDEX = 0;
@@ -165,6 +178,8 @@ signal_add_last 'complete word' => sub {
     my ($complist, $window, $word, $linestart, $want_space) = @_;
 
     my $wi = Irssi::active_win()->{active};
+    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
+    return unless exists $chatnets{'*'} || exists $chatnets{$wi->{server}->{chatnet}};
     return unless exists($MSGTHREADID_CACHE{$wi->{name}});
 
     # Only message/thread IDs at the start.
@@ -180,6 +195,9 @@ signal_add_last 'complete word' => sub {
 
 sub cache_msgthreadid {
     my($server, $msg, $nick, $address, $target) = @_;
+
+    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
+    return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
     my $msgid = '';
     # Mattermost message/thread IDs.
@@ -208,6 +226,9 @@ signal_add('message public', 'cache_msgthreadid');
 signal_add 'message own_public' => sub {
     my($server, $msg, $target) = @_;
 
+    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
+    return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
+
     if ($msg !~ /^@@((?:[0-9a-z]{26})|(?:[0-9a-f]{3}))/) {
         return;
     }
@@ -219,6 +240,9 @@ signal_add 'message own_public' => sub {
 
 signal_add 'message own_private' => sub {
     my($server, $msg, $target, $orig_target) = @_;
+
+    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
+    return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
     if ($msg !~ /^@@((?:[0-9a-z]{26})|(?:[0-9a-f]{3}))/) {
         return;
@@ -235,6 +259,8 @@ settings_add_int('matterircd_complete', 'matterircd_complete_nick_cache_size', 2
 command_bind 'matterircd_complete_nicknames_cache_dump' => sub {
     my ($data, $server, $wi) = @_;
 
+    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
+    return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
     if (not $data) {
         return unless ref $wi and $wi->{type} eq 'CHANNEL';
     }
@@ -257,6 +283,8 @@ signal_add_last 'complete word' => sub {
     my ($complist, $window, $word, $linestart, $want_space) = @_;
 
     my $wi = Irssi::active_win()->{active};
+    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
+    return unless exists $chatnets{'*'} || exists $chatnets{$wi->{server}->{chatnet}};
     return unless ref $wi and $wi->{type} eq 'CHANNEL';
     my $server = Irssi::active_server();
 
@@ -297,12 +325,18 @@ signal_add_last 'complete word' => sub {
 signal_add_last 'message public' => sub {
     my($server, $msg, $nick, $address, $target) = @_;
 
+    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
+    return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
+
     my $cache_size = settings_get_int('matterircd_complete_nick_cache_size');
     cache_store(\@{$NICKNAMES_CACHE{$target}}, $nick, $cache_size);
 };
 
 signal_add_last 'message own_public' => sub {
     my($server, $msg, $target) = @_;
+
+    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
+    return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
     if ($msg !~ /^@([^@ \t:,\)]+)/) {
         return;
