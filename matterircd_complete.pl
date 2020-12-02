@@ -29,7 +29,7 @@ our %IRSSI = (
 
 # Rely on message/thread IDs stored in message cache so we can shorten
 # to save on screen real-estate.
-settings_add_bool('matterircd_complete', 'matterircd_complete_shorten_message_thread_id', 0);
+settings_add_bool('matterircd_complete', 'matterircd_complete_shorten_message_thread_id', 1);
 sub shorten_msgthreadid {
     my($server, $msg, $nick, $address, $target) = @_;
 
