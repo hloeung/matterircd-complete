@@ -1,4 +1,7 @@
 #
+# For the full matterircd_complete experience, your matterircd.toml
+# should have SuffixContext=true and ThreadContext="mattermost".
+#
 # Add it to ~/.irssi/scripts/autorun, or:
 # '/script load ~/.irssi/scripts/matterircd_complete.pl'
 # '/set matterircd_complete_networks <...>'
