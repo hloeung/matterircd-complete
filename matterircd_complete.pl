@@ -86,11 +86,12 @@ settings_add_int('matterircd_complete', 'matterircd_complete_message_thread_id_c
 command_bind 'matterircd_complete_msgthreadid_cache_dump' => sub {
     my ($data, $server, $wi) = @_;
 
+    if (not $data) {
+        return unless ref $wi and ($wi->{type} eq 'CHANNEL' or $wi->{type} eq 'QUERY');
+    }
+
     my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
-    if (not $data) {
-        return unless ref $wi and $wi->{type} eq 'CHANNEL';
-    }
 
     my $channel = $data ? $data : $wi->{name};
     # Remove leading and trailing whitespace.
@@ -111,10 +112,11 @@ my $MSGTHREADID_CACHE_INDEX = 0;
 command_bind 'message_thread_id_search' => sub {
     my ($data, $server, $wi) = @_;
 
+    return unless ref $wi and ($wi->{type} eq 'CHANNEL' or $wi->{type} eq 'QUERY');
+    return unless exists($MSGTHREADID_CACHE{$wi->{name}});
+
     my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
-    return unless ref $wi and $wi->{type} eq 'CHANNEL';
-    return unless exists($MSGTHREADID_CACHE{$wi->{name}});
 
     $MSGTHREADID_CACHE_SEARCH_ENABLED = 1;
     my $msgthreadid = $MSGTHREADID_CACHE{$wi->{name}}[$MSGTHREADID_CACHE_INDEX];
@@ -143,9 +145,9 @@ signal_add_last 'gui key pressed' => sub {
 
     return unless $MSGTHREADID_CACHE_SEARCH_ENABLED;
 
-    my $wi = Irssi::active_win()->{active};
+    my $server = Irssi::active_server();
     my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
-    return unless exists $chatnets{'*'} || exists $chatnets{$wi->{server}->{chatnet}};
+    return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
     if ($key == $KEY_RET) {
         $MSGTHREADID_CACHE_INDEX = 0;
@@ -180,16 +182,16 @@ signal_add_last 'gui key pressed' => sub {
 signal_add_last 'complete word' => sub {
     my ($complist, $window, $word, $linestart, $want_space) = @_;
 
-    my $wi = Irssi::active_win()->{active};
-    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
-    return unless exists $chatnets{'*'} || exists $chatnets{$wi->{server}->{chatnet}};
-    return unless exists($MSGTHREADID_CACHE{$wi->{name}});
-
-    # Only message/thread IDs at the start.
     return unless substr($word, 0, 2) eq '@@';
+    return unless $window->{active} and ($window->{active}->{type} eq 'CHANNEL' || $window->{active}->{type} eq 'QUERY');
+    return unless exists($MSGTHREADID_CACHE{$window->{active}->{name}});
+
+    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
+    return unless exists $chatnets{'*'} || exists $chatnets{$window->{active_server}->{chatnet}};
+
     $word = substr($word, 2);
 
-    foreach my $msgthread_id (@{$MSGTHREADID_CACHE{$wi->{name}}}) {
+    foreach my $msgthread_id (@{$MSGTHREADID_CACHE{$window->{active}->{name}}}) {
         if ($msgthread_id =~ /^\Q$word\E/) {
             push(@$complist, "\@\@${msgthread_id}");
         }
@@ -262,11 +264,12 @@ settings_add_int('matterircd_complete', 'matterircd_complete_nick_cache_size', 2
 command_bind 'matterircd_complete_nicknames_cache_dump' => sub {
     my ($data, $server, $wi) = @_;
 
-    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
-    return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
     if (not $data) {
         return unless ref $wi and $wi->{type} eq 'CHANNEL';
     }
+
+    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
+    return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
     my $channel = $data ? $data : $wi->{name};
     # Remove leading and trailing whitespace.
@@ -285,20 +288,18 @@ command_bind 'matterircd_complete_nicknames_cache_dump' => sub {
 signal_add_last 'complete word' => sub {
     my ($complist, $window, $word, $linestart, $want_space) = @_;
 
-    my $wi = Irssi::active_win()->{active};
-    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
-    return unless exists $chatnets{'*'} || exists $chatnets{$wi->{server}->{chatnet}};
-    return unless ref $wi and $wi->{type} eq 'CHANNEL';
-    my $server = Irssi::active_server();
-
     return unless substr($word, 0, 1) eq '@';
-    $word = substr($word, 1);
+    return unless $window->{active} and $window->{active}->{type} eq 'CHANNEL';
 
+    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
+    return unless exists $chatnets{'*'} || exists $chatnets{$window->{active_server}->{chatnet}};
+
+    $word = substr($word, 1);
     my $compl_char = settings_get_str('completion_char');
 
     # We need to store the results in a temporary array so we can sort.
     my @tmp;
-    foreach my $nick ($wi->nicks()) {
+    foreach my $nick ($window->{active}->nicks()) {
         if ($nick->{nick} =~ /^\Q$word\E/i) {
             push(@tmp, "$nick->{nick}");
         }
@@ -306,19 +307,19 @@ signal_add_last 'complete word' => sub {
     @tmp = sort @tmp;
     foreach my $nick (@tmp) {
         # Ignore our own nick.
-        if ($nick eq $server->{nick}) {
+        if ($nick eq $window->{active_server}->{nick}) {
             next;
         }
         push(@$complist, "\@${nick}${compl_char}");
     }
 
-    return unless exists($NICKNAMES_CACHE{$wi->{name}});
+    return unless exists($NICKNAMES_CACHE{$window->{active}->{name}});
 
     # We use the populated cache so frequent and active users in
     # channel come before those idling there. e.g. In a channel where
     # @barryp talks more often, it will come before @barry-m.
     # We want to make sure users are still in channel for those still in the cache.
-    foreach my $nick (reverse @{$NICKNAMES_CACHE{$wi->{name}}}) {
+    foreach my $nick (reverse @{$NICKNAMES_CACHE{$window->{active}->{name}}}) {
         if ("\@${nick}${compl_char}" ~~ @$complist) {
             unshift(@$complist, "\@${nick}${compl_char}");
         }
