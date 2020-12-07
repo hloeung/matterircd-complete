@@ -7,6 +7,9 @@
 #   /script load ~/.irssi/scripts/matterircd_complete.pl
 #   /set matterircd_complete_networks <...>
 #
+# NOTE: It is important to set which networks to enable plugin for per
+# above ^.
+#
 # Bind message/thread ID completion to a key to make it easier to
 # reply to threads:
 #
@@ -21,6 +24,12 @@
 #
 #   @@+TAB to tab auto-complete message/thread ID.
 #   @ +TAB to tab auto-complete IRC nick. Active users appear first.
+#
+# By default, message/thread IDs are shortened from 26 characters to
+# first 4. It is also grayed out to try reduce noise and make it
+# easier to read conversations. To disable this use:
+#
+#   /set matterircd_complete_shorten_message_thread_id 0
 #
 # Use the dump commands to show the contents of the cache:
 #
