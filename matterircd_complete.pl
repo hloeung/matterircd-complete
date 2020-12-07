@@ -3,19 +3,36 @@
 # should have SuffixContext=true and ThreadContext="mattermost".
 #
 # Add it to ~/.irssi/scripts/autorun, or:
-# '/script load ~/.irssi/scripts/matterircd_complete.pl'
-# '/set matterircd_complete_networks <...>'
 #
-# '/bind ^G /message_thread_id_search'
+#   /script load ~/.irssi/scripts/matterircd_complete.pl
+#   /set matterircd_complete_networks <...>
 #
-# Use Ctrl+g to insert latest thread/message ID (Ctrl+c to abort).
+# Bind message/thread ID completion to a key to make it easier to
+# reply to threads:
 #
-# @@+TAB to tab auto-complete message/thread ID.
-# @ +TAB to tab auto-complete IRC nick.
+#   /bind ^G /message_thread_id_search'
 #
-# Use '/matterircd_complete_msgthreadid_cache_dump' or
-# '/matterircd_complete_nicknames_cache_dump' to show contents of the
-# cache.
+# (Or pick your own shortcut keys to bind to).
+#
+# Then:
+#
+#   Ctrl+g - Insert latest message/thread ID.
+#   Ctrl+c - Abort inserting message/thread ID. Also clears existing.
+#
+#   @@+TAB to tab auto-complete message/thread ID.
+#   @ +TAB to tab auto-complete IRC nick. Active users appear first.
+#
+# Use the dump commands to show the contents of the cache:
+#
+#   /matterircd_complete_msgthreadid_cache_dump
+#   /matterircd_complete_nicknames_cache_dump
+#
+# (You can bind these to keys).
+#
+# To increase or decrease the size of the cache, use:
+#
+#   /set matterircd_complete_message_thread_id_cache_size 20
+#   /set matterircd_complete_nick_cache_size 20
 #
 
 use strict;
@@ -126,13 +143,15 @@ command_bind 'message_thread_id_search' => sub {
         $MSGTHREADID_CACHE_INDEX = 0;
     }
 
-    # Save input text.
-    my $input = parse_special('$L');
-    # Remove existing thread.
-    $input =~ s/^@@(?:[0-9a-z]{26}|[0-9a-f]{3}) //;
-    # Insert message/thread ID from cache.
-    gui_input_set_pos(0);
-    gui_input_set("\@\@${msgthreadid} ${input}");
+    if ($msgthreadid) {
+        # Save input text.
+        my $input = parse_special('$L');
+        # Remove existing thread.
+        $input =~ s/^@@(?:[0-9a-z]{26}|[0-9a-f]{3}) //;
+        # Insert message/thread ID from cache.
+        gui_input_set_pos(0);
+        gui_input_set("\@\@${msgthreadid} ${input}");
+    }
 };
 
 my $KEY_CTRL_C = 3;
