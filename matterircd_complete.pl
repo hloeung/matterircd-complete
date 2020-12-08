@@ -75,8 +75,10 @@ sub shorten_msgthreadid {
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
     # For '/me' actions, it has trailing space so we need to use \s*
-    # here.
-    $msg =~ s/\[\@\@([0-9a-z]{4})[0-9a-z]{22}\]\s*$/\x0314[\@\@$1 ...]/;
+    # here. We use unicode ellipsis (...) here to both allow word
+    # selection to just select parts of the message/thread ID when
+    # copying & pasting and save on screen real estate.
+    $msg =~ s/\[\@\@([0-9a-z]{4})[0-9a-z]{22}\]\s*$/\x0314[\@\@$1…]/;
     signal_continue($server, $msg, $nick, $address, $target);
 }
 signal_add_last('message irc action', 'shorten_msgthreadid');
