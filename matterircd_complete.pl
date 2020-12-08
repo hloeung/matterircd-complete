@@ -40,7 +40,7 @@
 #
 # To increase or decrease the size of the cache, use:
 #
-#   /set matterircd_complete_message_thread_id_cache_size 20
+#   /set matterircd_complete_message_thread_id_cache_size 50
 #   /set matterircd_complete_nick_cache_size 20
 #
 
@@ -108,7 +108,7 @@ sub cache_store {
 
 
 my %MSGTHREADID_CACHE;
-settings_add_int('matterircd_complete', 'matterircd_complete_message_thread_id_cache_size', 20);
+settings_add_int('matterircd_complete', 'matterircd_complete_message_thread_id_cache_size', 50);
 command_bind 'matterircd_complete_msgthreadid_cache_dump' => sub {
     my ($data, $server, $wi) = @_;
 
