@@ -76,7 +76,7 @@ sub shorten_msgthreadid {
 
     # For '/me' actions, it has trailing space so we need to use \s*
     # here.
-    $msg =~ s/\[\@\@([0-9a-z]{4})[0-9a-z]{22}\]\s*$/\x0314[\@\@$1..]/;
+    $msg =~ s/\[\@\@([0-9a-z]{4})[0-9a-z]{22}\]\s*$/\x0314[\@\@$1]/;
     signal_continue($server, $msg, $nick, $address, $target);
 }
 signal_add_last('message irc action', 'shorten_msgthreadid');
