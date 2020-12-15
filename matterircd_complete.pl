@@ -55,7 +55,7 @@ use Irssi qw(command_bind gui_input_set gui_input_get_pos gui_input_set_pos pars
 our $VERSION = '1.00';
 our %IRSSI = (
     name        => 'Matterircd Tab Auto Complete',
-    description => 'Adds tab complettion for Matterircd message threads',
+    description => 'Adds tab completion for Matterircd message threads',
     authors     => 'Haw Loeung',
     contact     => 'hloeung/Freenode',
     license     => 'GPL',
