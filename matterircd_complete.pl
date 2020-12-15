@@ -241,16 +241,19 @@ sub cache_msgthreadid {
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
     my $msgid = '';
+
+    # For '/me' actions, it has trailing space so we need to use \s*
+    # here. We use unicode ellipsis (...) here to both allow
     # Mattermost message/thread IDs.
-    if ($msg =~ /(?:^\[@@([0-9a-z]{26})\])|(?:\[@@([0-9a-z]{26})\]$)/) {
+    if ($msg =~ /(?:^\[@@([0-9a-z]{26})\])|(?:\[@@([0-9a-z]{26})\]\s*$)/) {
         $msgid = $1 ? $1 : $2;
     }
     # matterircd generated 3-letter hexadecimal.
-    elsif ($msg =~ /(?:^\[([0-9a-f]{3})\])|(?:\[([0-9a-f]{3})\]$)/) {
+    elsif ($msg =~ /(?:^\[([0-9a-f]{3})\])|(?:\[([0-9a-f]{3})\]\s*$)/) {
         $msgid = $1 ? $1 : $2;
     }
     # matterircd generated 3-letter hexadecimal replying to threads.
-    elsif ($msg =~ /(?:^\[[0-9a-f]{3}->([0-9a-f]{3})\])|(?:\[[0-9a-f]{3}->([0-9a-f]{3})\]$)/) {
+    elsif ($msg =~ /(?:^\[[0-9a-f]{3}->([0-9a-f]{3})\])|(?:\[[0-9a-f]{3}->([0-9a-f]{3})\]\s*$)/) {
         $msgid = $1 ? $1 : $2;
     }
     else {
@@ -362,7 +365,7 @@ signal_add_last 'complete word' => sub {
     }
 };
 
-signal_add_last 'message public' => sub {
+sub cache_ircnick {
     my($server, $msg, $nick, $address, $target) = @_;
 
     my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
@@ -370,7 +373,9 @@ signal_add_last 'message public' => sub {
 
     my $cache_size = settings_get_int('matterircd_complete_nick_cache_size');
     cache_store(\@{$NICKNAMES_CACHE{$target}}, $nick, $cache_size);
-};
+}
+signal_add('message irc action', 'cache_ircnick');
+signal_add('message public', 'cache_ircnick');
 
 signal_add_last 'message own_public' => sub {
     my($server, $msg, $target) = @_;
