@@ -88,6 +88,7 @@ sub update_msgthreadid {
     signal_continue($server, $msg, $nick, $address, $target);
 }
 signal_add_last('message irc action', 'update_msgthreadid');
+signal_add_last('message irc notice', 'update_msgthreadid');
 signal_add_last('message private', 'update_msgthreadid');
 signal_add_last('message public', 'update_msgthreadid');
 
@@ -264,6 +265,7 @@ sub cache_msgthreadid {
     cache_store(\@{$MSGTHREADID_CACHE{$target}}, $msgid, $cache_size);
 }
 signal_add('message irc action', 'cache_msgthreadid');
+signal_add('message irc notice', 'cache_msgthreadid');
 signal_add('message private', 'cache_msgthreadid');
 signal_add('message public', 'cache_msgthreadid');
 
@@ -375,6 +377,7 @@ sub cache_ircnick {
     cache_store(\@{$NICKNAMES_CACHE{$target}}, $nick, $cache_size);
 }
 signal_add('message irc action', 'cache_ircnick');
+signal_add('message irc notice', 'cache_ircnick');
 signal_add('message public', 'cache_ircnick');
 
 signal_add_last 'message own_public' => sub {
