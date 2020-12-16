@@ -51,6 +51,8 @@ use experimental 'smartmatch';
 use Irssi::TextUI;
 use Irssi qw(command_bind gui_input_set gui_input_get_pos gui_input_set_pos parse_special settings_add_bool settings_add_int settings_get_bool settings_get_int settings_get_str settings_add_str signal_add signal_add_last signal_continue);
 
+# Enable for debugging purposes only.
+# use Data::Dumper;
 
 our $VERSION = '1.00';
 our %IRSSI = (
@@ -392,5 +394,13 @@ signal_add_last 'message own_public' => sub {
     my $nick = $1;
 
     my $cache_size = settings_get_int('matterircd_complete_nick_cache_size');
-    cache_store(\@{$NICKNAMES_CACHE{$target}}, $nick, $cache_size);
+    # We want to make sure that the nick or user is still online and
+    # in the channel.
+    my $wi = Irssi::active_win()->{active};
+    foreach my $cur ($wi->nicks()) {
+        if ($nick eq $cur->{nick}) {
+            cache_store(\@{$NICKNAMES_CACHE{$target}}, $nick, $cache_size);
+            return;
+        }
+    }
 };
