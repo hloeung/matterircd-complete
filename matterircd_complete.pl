@@ -15,6 +15,10 @@
 #
 #   /bind ^G /message_thread_id_search'
 #
+# Also bind to insert nicknames:
+#
+#   /bind ^F /nicknames_search
+#
 # (Or pick your own shortcut keys to bind to).
 #
 # Then:
@@ -437,11 +441,14 @@ command_bind 'nicknames_search' => sub {
         # Save input text.
         my $input = parse_special('$L');
         my $compl_char = settings_get_str('completion_char');
-        # Remove existing nickname.
+        # Remove any existing nickname and insert one from the cache.
+        my $msgid = "";
+        if ($input =~ s/^(\@\@(?:[0-9a-z]{26}|[0-9a-f]{3}) )//) {
+            $msgid = $1;
+        }
         $input =~ s/^\@[^${compl_char}]+$compl_char //;
-        # Insert nickname from cache.
         gui_input_set_pos(0);
-        gui_input_set("\@${nickname}${compl_char}${input} ");
+        gui_input_set("${msgid}\@${nickname}${compl_char} ${input}");
     }
 };
 
