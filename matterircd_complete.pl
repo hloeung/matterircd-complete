@@ -63,6 +63,11 @@ our %IRSSI = (
     license     => 'GPL',
 );
 
+my $KEY_CTRL_C = 3;
+my $KEY_ESC    = 27;
+my $KEY_RET    = 13;
+my $KEY_SPC    = 32;
+
 settings_add_str('matterircd_complete', 'matterircd_complete_networks', '');
 
 # Rely on message/thread IDs stored in message cache so we can shorten
@@ -173,11 +178,6 @@ command_bind 'message_thread_id_search' => sub {
         gui_input_set("\@\@${msgthreadid} ${input}");
     }
 };
-
-my $KEY_CTRL_C = 3;
-my $KEY_ESC    = 27;
-my $KEY_RET    = 13;
-my $KEY_SPC    = 32;
 
 signal_add_last 'gui key pressed' => sub {
     my ($key) = @_;
@@ -411,5 +411,76 @@ signal_add_last 'message own_public' => sub {
             cache_store(\@{$NICKNAMES_CACHE{$target}}, $nick, $cache_size);
             return;
         }
+    }
+};
+
+my $NICKNAMES_CACHE_SEARCH_ENABLED = 0;
+my $NICKNAMES_CACHE_INDEX = 0;
+command_bind 'nicknames_search' => sub {
+    my ($data, $server, $wi) = @_;
+
+    return unless ref $wi and ($wi->{type} eq 'CHANNEL' or $wi->{type} eq 'QUERY');
+    return unless exists($NICKNAMES_CACHE{$wi->{name}});
+
+    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
+    return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
+
+    $NICKNAMES_CACHE_SEARCH_ENABLED = 1;
+    my $nickname = $NICKNAMES_CACHE{$wi->{name}}[$NICKNAMES_CACHE_INDEX];
+    $NICKNAMES_CACHE_INDEX += 1;
+    if ($NICKNAMES_CACHE_INDEX > $#{$NICKNAMES_CACHE{$wi->{name}}}) {
+        # Cycle back to the start.
+        $NICKNAMES_CACHE_INDEX = 0;
+    }
+
+    if ($nickname) {
+        # Save input text.
+        my $input = parse_special('$L');
+        my $compl_char = settings_get_str('completion_char');
+        # Remove existing nickname.
+        $input =~ s/^\@[^${compl_char}]+$compl_char //;
+        # Insert nickname from cache.
+        gui_input_set_pos(0);
+        gui_input_set("\@${nickname}${compl_char}${input} ");
+    }
+};
+
+signal_add_last 'gui key pressed' => sub {
+    my ($key) = @_;
+
+    return unless $NICKNAMES_CACHE_SEARCH_ENABLED;
+
+    my $server = Irssi::active_server();
+    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
+    return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
+
+    if ($key == $KEY_RET) {
+        $NICKNAMES_CACHE_INDEX = 0;
+        $NICKNAMES_CACHE_SEARCH_ENABLED = 0;
+    }
+
+    elsif ($key == $KEY_CTRL_C) {
+        # Cancel/abort, so remove current nickname.
+        my $input = parse_special('$L');
+        my $compl_char = settings_get_str('completion_char');
+        my $pos = 0;
+        if ($input =~ s/^(\@[^${compl_char}]+$compl_char )//) {
+            $pos = gui_input_get_pos() - length($1);
+        }
+        # Remove the Ctrl+C character.
+        my $keychr = chr($key);
+        $input =~ s/$keychr//;
+        # We also want to move the input position back one for Ctrl+C
+        # char.
+        $pos -= 1;
+
+        # Replace the text in the input box with our modified version,
+        # then move cursor positon to where it was without the
+        # current nickname.
+        gui_input_set($input);
+        gui_input_set_pos($pos);
+
+        $NICKNAMES_CACHE_INDEX = 0;
+        $NICKNAMES_CACHE_SEARCH_ENABLED = 0;
     }
 };
