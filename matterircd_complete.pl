@@ -363,7 +363,13 @@ signal_add_last 'complete word' => sub {
     # @barryp talks more often, it will come before @barry-m.
     # We want to make sure users are still in channel for those still in the cache.
     foreach my $nick (reverse @{$NICKNAMES_CACHE{$window->{active}->{name}}}) {
-        if ("\@${nick}${compl_char}" ~~ @$complist) {
+        my $nick_compl = "\@${nick}${compl_char}";
+        # Skip over if nick is already first in completion list.
+        if ($nick_compl eq @{$complist}[0]) {
+            next;
+        }
+        # Only add to completion list if user/nick is online and in channel.
+        elsif ("\@${nick}${compl_char}" ~~ @$complist) {
             unshift(@$complist, "\@${nick}${compl_char}");
         }
     }
