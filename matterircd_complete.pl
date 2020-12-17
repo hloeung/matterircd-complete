@@ -397,6 +397,9 @@ signal_add_last 'message own_public' => sub {
     # We want to make sure that the nick or user is still online and
     # in the channel.
     my $wi = Irssi::active_win()->{active};
+    if (not defined $wi) {
+        return;
+    }
     foreach my $cur ($wi->nicks()) {
         if ($nick eq $cur->{nick}) {
             cache_store(\@{$NICKNAMES_CACHE{$target}}, $nick, $cache_size);
