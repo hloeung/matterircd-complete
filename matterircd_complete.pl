@@ -369,7 +369,7 @@ signal_add_last 'complete word' => sub {
     foreach my $nick (reverse @{$NICKNAMES_CACHE{$window->{active}->{name}}}) {
         my $nick_compl = "\@${nick}${compl_char}";
         # Skip over if nick is already first in completion list.
-        if ($nick_compl eq @{$complist}[0]) {
+        if ((scalar(@{$complist}) > 0) and ($nick_compl eq @{$complist}[0])) {
             next;
         }
         # Only add to completion list if user/nick is online and in channel.
