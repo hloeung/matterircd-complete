@@ -335,16 +335,18 @@ command_bind 'matterircd_complete_nicknames_cache_dump' => sub {
     }
 };
 
-signal_add_last 'complete word' => sub {
+signal_add 'complete word' => sub {
     my ($complist, $window, $word, $linestart, $want_space) = @_;
 
-    return unless substr($word, 0, 1) eq '@';
+    return if substr($word, 0, 2) eq '@@';
     return unless $window->{active} and $window->{active}->{type} eq 'CHANNEL';
 
     my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$window->{active_server}->{chatnet}};
 
-    $word = substr($word, 1);
+    if (substr($word, 0, 1) eq '@') {
+        $word = substr($word, 1);
+    }
     my $compl_char = settings_get_str('completion_char');
 
     # We need to store the results in a temporary array so we can sort.
