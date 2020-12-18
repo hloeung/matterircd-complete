@@ -87,6 +87,7 @@ sub update_msgthreadid {
     # \s* here.
     $msg =~ s/\[\@\@([0-9a-z]{26})\]\s*$/\@\@PLACEHOLDER\@\@/;
     my $msgthreadid = $1;
+    return unless $msgthreadid;
 
     my $len = settings_get_int('matterircd_complete_shorten_message_thread_id');
     if ($len) {
