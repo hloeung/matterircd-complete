@@ -30,8 +30,8 @@
 #   @ +TAB to tab auto-complete IRC nick. Active users appear first.
 #
 # By default, message/thread IDs are shortened from 26 characters to
-# first 4. It is also grayed out to try reduce noise and make it
-# easier to read conversations. To disable this use:
+# first few (default 4). It is also grayed out to try reduce noise and
+# make it easier to read conversations. To disable this use:
 #
 #   /set matterircd_complete_shorten_message_thread_id 0
 #
@@ -76,25 +76,27 @@ settings_add_str('matterircd_complete', 'matterircd_complete_networks', '');
 
 # Rely on message/thread IDs stored in message cache so we can shorten
 # to save on screen real-estate.
-settings_add_bool('matterircd_complete', 'matterircd_complete_shorten_message_thread_id', 1);
+settings_add_int('matterircd_complete', 'matterircd_complete_shorten_message_thread_id', 4);
 sub update_msgthreadid {
     my($server, $msg, $nick, $address, $target) = @_;
 
     my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
-    if (settings_get_bool('matterircd_complete_shorten_message_thread_id')) {
+    # For '/me' actions, it has trailing space so we need to use
+    # \s* here.
+    $msg =~ s/\[\@\@([0-9a-z]{26})\]\s*$/\@\@PLACEHOLDER\@\@/;
+    my $msgthreadid = $1;
 
-        # For '/me' actions, it has trailing space so we need to use
-        # \s* here. We use unicode ellipsis (...) here to both allow
-        # word selection to just select parts of the message/thread ID
-        # when copying & pasting and save on screen real estate.
-        $msg =~ s/\[\@\@([0-9a-z]{4})[0-9a-z]{22}\]\s*$/\x0314[\@\@$1…]/;
-    } else {
-        # For '/me' actions, it has trailing space so we need to use
-        # \s* here.
-        $msg =~ s/\[\@\@([0-9a-z]{26})\]\s*$/\x0314[\@\@$1]/;
+    my $len = settings_get_int('matterircd_complete_shorten_message_thread_id');
+    if ($len) {
+        # Shorten to length configured. We use unicode ellipsis (...)
+        # here to both allow word selection to just select parts of
+        # the message/thread ID when copying & pasting and save on
+        # screen real estate.
+        $msgthreadid = substr($msgthreadid, 0, $len) . '…';
     }
+    $msg =~ s/\@\@PLACEHOLDER\@\@/\x0314[\@\@${msgthreadid}]/;
 
     signal_continue($server, $msg, $nick, $address, $target);
 }
