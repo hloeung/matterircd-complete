@@ -352,19 +352,19 @@ signal_add 'complete word' => sub {
     }
     my $compl_char = settings_get_str('completion_char');
 
-    # We need to store the results in a temporary array so we can sort.
+    # We need to store the results in a temporary array so we can
+    # sort.
     my @tmp;
     foreach my $nick ($window->{active}->nicks()) {
-        if ($nick->{nick} =~ /^\Q$word\E/i) {
-            push(@tmp, "$nick->{nick}");
+        # Ignore our own nick.
+        if ($nick->{nick} eq $window->{active}->{ownnick}->{nick}) {
+            next;
+        } elsif ($nick->{nick} =~ /^\Q$word\E/i) {
+            push(@tmp, $nick->{nick});
         }
     }
     @tmp = sort @tmp;
     foreach my $nick (@tmp) {
-        # Ignore our own nick.
-        if ($nick eq $window->{active_server}->{nick}) {
-            next;
-        }
         push(@$complist, "\@${nick}${compl_char}");
     }
 
@@ -372,8 +372,9 @@ signal_add 'complete word' => sub {
 
     # We use the populated cache so frequent and active users in
     # channel come before those idling there. e.g. In a channel where
-    # @barryp talks more often, it will come before @barry-m.
-    # We want to make sure users are still in channel for those still in the cache.
+    # @barryp talks more often, it will come before @barry-m. We also
+    # want to make sure users are still in channel for those still in
+    # the cache.
     foreach my $nick (reverse @{$NICKNAMES_CACHE{$window->{active}->{name}}}) {
         my $nick_compl = "\@${nick}${compl_char}";
         # Skip over if nick is already first in completion list.
@@ -381,7 +382,7 @@ signal_add 'complete word' => sub {
             next;
         }
         # Only add to completion list if user/nick is online and in channel.
-        elsif ("\@${nick}${compl_char}" ~~ @$complist) {
+        elsif (${nick} ~~ @tmp) {
             unshift(@$complist, "\@${nick}${compl_char}");
         }
     }
@@ -426,21 +427,50 @@ signal_add_last 'message own_public' => sub {
     }
 };
 
+my @NICKNAMES_CACHE_SEARCH;
 my $NICKNAMES_CACHE_SEARCH_ENABLED = 0;
 my $NICKNAMES_CACHE_INDEX = 0;
 command_bind 'nicknames_search' => sub {
     my ($data, $server, $wi) = @_;
 
     return unless ref $wi and ($wi->{type} eq 'CHANNEL' or $wi->{type} eq 'QUERY');
-    return unless exists($NICKNAMES_CACHE{$wi->{name}});
 
     my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
+    @NICKNAMES_CACHE_SEARCH = ();
+    foreach my $nick ($wi->nicks()) {
+        # Ignore our own nick.
+        if ($nick->{nick} eq $wi->{ownnick}->{nick}) {
+            next;
+        }
+        push(@NICKNAMES_CACHE_SEARCH, $nick->{nick});
+    }
+    @NICKNAMES_CACHE_SEARCH = sort @NICKNAMES_CACHE_SEARCH;
+
+    if (exists($NICKNAMES_CACHE{$wi->{name}})) {
+        # We use the populated cache so frequent and active users in
+        # channel come before those idling there. e.g. In a channel
+        # where @barryp talks more often, it will come before
+        # @barry-m.  We also want to make sure users are still in
+        # channel for those still in the cache.
+        foreach my $nick (reverse @{$NICKNAMES_CACHE{$wi->{name}}}) {
+            # Skip over if nick is already first in completion list.
+            if ((scalar(@NICKNAMES_CACHE_SEARCH) > 0) and ($nick eq $NICKNAMES_CACHE_SEARCH[0])) {
+                next;
+            }
+            # Only add to completion list if user/nick is online and
+            # in channel.
+            elsif ($nick ~~ @NICKNAMES_CACHE_SEARCH) {
+                unshift(@NICKNAMES_CACHE_SEARCH, $nick);
+            }
+        }
+    }
+
     $NICKNAMES_CACHE_SEARCH_ENABLED = 1;
-    my $nickname = $NICKNAMES_CACHE{$wi->{name}}[$NICKNAMES_CACHE_INDEX];
+    my $nickname = $NICKNAMES_CACHE_SEARCH[$NICKNAMES_CACHE_INDEX];
     $NICKNAMES_CACHE_INDEX += 1;
-    if ($NICKNAMES_CACHE_INDEX > $#{$NICKNAMES_CACHE{$wi->{name}}}) {
+    if ($NICKNAMES_CACHE_INDEX > $#NICKNAMES_CACHE_SEARCH) {
         # Cycle back to the start.
         $NICKNAMES_CACHE_INDEX = 0;
     }
@@ -472,6 +502,7 @@ signal_add_last 'gui key pressed' => sub {
     if ($key == $KEY_RET) {
         $NICKNAMES_CACHE_INDEX = 0;
         $NICKNAMES_CACHE_SEARCH_ENABLED = 0;
+        @NICKNAMES_CACHE_SEARCH = ();
     }
 
     # Cancel/abort, so remove current nickname.
