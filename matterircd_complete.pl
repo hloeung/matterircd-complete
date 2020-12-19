@@ -200,19 +200,22 @@ signal_add_last 'gui key pressed' => sub {
         $MSGTHREADID_CACHE_SEARCH_ENABLED = 0;
     }
 
+    # Cancel/abort, so remove thread stuff.
     elsif ($key == $KEY_CTRL_C) {
-        # Cancel/abort, so remove thread stuff.
         my $input = parse_special('$L');
+
+        # Remove the Ctrl+C character.
+        my $keychr = chr($key);
+        $input =~ s/$keychr//;
+
         my $pos = 0;
         if ($input =~ s/^(@@(?:[0-9a-z]{26}|[0-9a-f]{3}) )//) {
             $pos = gui_input_get_pos() - length($1);
         }
-        # Remove the Ctrl+C character.
-        my $keychr = chr($key);
-        $input =~ s/$keychr//;
+
         # We also want to move the input position back one for Ctrl+C
         # char.
-        $pos -= 1;
+        $pos = $pos > 0 ? $pos - 1 : 0;
 
         # Replace the text in the input box with our modified version,
         # then move cursor positon to where it was without the
@@ -471,20 +474,23 @@ signal_add_last 'gui key pressed' => sub {
         $NICKNAMES_CACHE_SEARCH_ENABLED = 0;
     }
 
+    # Cancel/abort, so remove current nickname.
     elsif ($key == $KEY_CTRL_C) {
-        # Cancel/abort, so remove current nickname.
         my $input = parse_special('$L');
+
+        # Remove the Ctrl+C character.
+        my $keychr = chr($key);
+        $input =~ s/$keychr//;
+
         my $compl_char = settings_get_str('completion_char');
         my $pos = 0;
         if ($input =~ s/^(\@[^${compl_char}]+$compl_char )//) {
             $pos = gui_input_get_pos() - length($1);
         }
-        # Remove the Ctrl+C character.
-        my $keychr = chr($key);
-        $input =~ s/$keychr//;
+
         # We also want to move the input position back one for Ctrl+C
         # char.
-        $pos -= 1;
+        $pos = $pos > 0 ? $pos - 1 : 0;
 
         # Replace the text in the input box with our modified version,
         # then move cursor positon to where it was without the
