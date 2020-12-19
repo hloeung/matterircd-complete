@@ -144,7 +144,7 @@ command_bind 'matterircd_complete_msgthreadid_cache_dump' => sub {
 
     my $channel = $data ? $data : $wi->{name};
     # Remove leading and trailing whitespace.
-    $channel =~ s/^\s+|\s+$//g;
+    $channel =~ tr/ 	//d;
 
     if (not exists($MSGTHREADID_CACHE{$channel})) {
         Irssi::print("${channel}: Empty cache");
@@ -326,7 +326,7 @@ command_bind 'matterircd_complete_nicknames_cache_dump' => sub {
 
     my $channel = $data ? $data : $wi->{name};
     # Remove leading and trailing whitespace.
-    $channel =~ s/^\s+|\s+$//g;
+    $channel =~ tr/ 	//d;
 
     if (not exists($NICKNAMES_CACHE{$channel})) {
         Irssi::print("${channel}: Empty cache");
@@ -351,16 +351,18 @@ signal_add 'complete word' => sub {
         $word = substr($word, 1);
     }
     my $compl_char = settings_get_str('completion_char');
+    my $own_nick = $window->{active}->{ownnick}->{nick};
 
     # We need to store the results in a temporary array so we can
     # sort.
     my @tmp;
-    foreach my $nick ($window->{active}->nicks()) {
+    foreach my $cur ($window->{active}->nicks()) {
+        my $nick = $cur->{nick};
         # Ignore our own nick.
-        if ($nick->{nick} eq $window->{active}->{ownnick}->{nick}) {
+        if ($nick eq $own_nick) {
             next;
-        } elsif ($nick->{nick} =~ /^\Q$word\E/i) {
-            push(@tmp, $nick->{nick});
+        } elsif ($nick =~ /^\Q$word\E/i) {
+            push(@tmp, $nick);
         }
     }
     @tmp = sort @tmp;
@@ -438,13 +440,16 @@ command_bind 'nicknames_search' => sub {
     my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
+    my $own_nick = $wi->{ownnick}->{nick};
+
     @NICKNAMES_CACHE_SEARCH = ();
-    foreach my $nick ($wi->nicks()) {
+    foreach my $cur ($wi->nicks()) {
+        my $nick = $cur->{nick};
         # Ignore our own nick.
-        if ($nick->{nick} eq $wi->{ownnick}->{nick}) {
+        if ($nick eq $own_nick) {
             next;
         }
-        push(@NICKNAMES_CACHE_SEARCH, $nick->{nick});
+        push(@NICKNAMES_CACHE_SEARCH, $nick);
     }
     @NICKNAMES_CACHE_SEARCH = sort @NICKNAMES_CACHE_SEARCH;
 
