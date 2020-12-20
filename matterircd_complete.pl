@@ -422,7 +422,7 @@ sub cache_ircnick {
     my $cache_size = settings_get_int('matterircd_complete_nick_cache_size');
     my @ignore_nicks = split(/\s+/, settings_get_str('matterircd_complete_nick_ignore'));
     # Ignore nicks configured to be ignored such as bots.
-    if (! $nick ~~ @ignore_nicks) {
+    if ($nick !~ @ignore_nicks) {
         cache_store(\@{$NICKNAMES_CACHE{$target}}, $nick, $cache_size);
     }
 }
