@@ -560,5 +560,6 @@ signal_add_last 'gui key pressed' => sub {
 
         $NICKNAMES_CACHE_INDEX = 0;
         $NICKNAMES_CACHE_SEARCH_ENABLED = 0;
+        @NICKNAMES_CACHE_SEARCH = ();
     }
 };
