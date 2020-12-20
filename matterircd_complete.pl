@@ -13,7 +13,7 @@
 # Bind message/thread ID completion to a key to make it easier to
 # reply to threads:
 #
-#   /bind ^G /message_thread_id_search'
+#   /bind ^G /message_thread_id_search
 #
 # Also bind to insert nicknames:
 #
