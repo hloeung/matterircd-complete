@@ -38,7 +38,7 @@
 # Use the dump commands to show the contents of the cache:
 #
 #   /matterircd_complete_msgthreadid_cache_dump
-#   /matterircd_complete_nicknames_cache_dump
+#   /matterircd_complete_nick_cache_dump
 #
 # (You can bind these to keys).
 #
@@ -47,6 +47,9 @@
 #   /set matterircd_complete_message_thread_id_cache_size 50
 #   /set matterircd_complete_nick_cache_size 20
 #
+# To ignore specific nicks in autocomplete:
+#
+#   /set matterircd_complete_nick_ignore somebot anotherbot
 
 use strict;
 use warnings;
@@ -73,6 +76,7 @@ my $KEY_RET    = 13;
 my $KEY_SPC    = 32;
 
 settings_add_str('matterircd_complete', 'matterircd_complete_networks', '');
+settings_add_str('matterircd_complete', 'matterircd_complete_nick_ignore', '');
 
 # Rely on message/thread IDs stored in message cache so we can shorten
 # to save on screen real-estate.
@@ -254,6 +258,12 @@ sub cache_msgthreadid {
 
     my $msgid = '';
 
+    my @ignore_nicks = split(/\s+/, settings_get_str('matterircd_complete_nick_ignore'));
+    # Ignore nicks configured to be ignored such as bots.
+    if ($nick ~~ @ignore_nicks) {
+        return;
+    }
+
     # For '/me' actions, it has trailing space so we need to use \s*
     # here. We use unicode ellipsis (...) here to both allow
     # Mattermost message/thread IDs.
@@ -313,7 +323,7 @@ signal_add 'message own_private' => sub {
 
 my %NICKNAMES_CACHE;
 settings_add_int('matterircd_complete', 'matterircd_complete_nick_cache_size', 20);
-command_bind 'matterircd_complete_nicknames_cache_dump' => sub {
+command_bind 'matterircd_complete_nick_cache_dump' => sub {
     my ($data, $server, $wi) = @_;
 
     if (not $data) {
@@ -351,6 +361,7 @@ signal_add 'complete word' => sub {
     }
     my $compl_char = settings_get_str('completion_char');
     my $own_nick = $window->{active}->{ownnick}->{nick};
+    my @ignore_nicks = split(/\s+/, settings_get_str('matterircd_complete_nick_ignore'));
 
     # We need to store the results in a temporary array so we can
     # sort.
@@ -360,7 +371,13 @@ signal_add 'complete word' => sub {
         # Ignore our own nick.
         if ($nick eq $own_nick) {
             next;
-        } elsif ($nick =~ /^\Q$word\E/i) {
+        }
+        # Ignore nicks configured to be ignored such as bots.
+        elsif ($nick ~~ @ignore_nicks) {
+            next;
+        }
+        # Only those matching partial word.
+        elsif ($nick =~ /^\Q$word\E/i) {
             push(@tmp, $nick);
         }
     }
@@ -396,7 +413,11 @@ sub cache_ircnick {
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
     my $cache_size = settings_get_int('matterircd_complete_nick_cache_size');
-    cache_store(\@{$NICKNAMES_CACHE{$target}}, $nick, $cache_size);
+    my @ignore_nicks = split(/\s+/, settings_get_str('matterircd_complete_nick_ignore'));
+    # Ignore nicks configured to be ignored such as bots.
+    if (! $nick ~~ @ignore_nicks) {
+        cache_store(\@{$NICKNAMES_CACHE{$target}}, $nick, $cache_size);
+    }
 }
 signal_add('message irc action', 'cache_ircnick');
 signal_add('message irc notice', 'cache_ircnick');
@@ -423,7 +444,7 @@ signal_add_last 'message own_public' => sub {
     foreach my $cur ($wi->nicks()) {
         if ($nick eq $cur->{nick}) {
             cache_store(\@{$NICKNAMES_CACHE{$target}}, $nick, $cache_size);
-            return;
+            last;
         }
     }
 };
@@ -440,12 +461,17 @@ command_bind 'nicknames_search' => sub {
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
     my $own_nick = $wi->{ownnick}->{nick};
+    my @ignore_nicks = split(/\s+/, settings_get_str('matterircd_complete_nick_ignore'));
 
     @NICKNAMES_CACHE_SEARCH = ();
     foreach my $cur ($wi->nicks()) {
         my $nick = $cur->{nick};
         # Ignore our own nick.
         if ($nick eq $own_nick) {
+            next;
+        }
+        # Ignore nicks configured to be ignored such as bots.
+        elsif ($nick ~~ @ignore_nicks) {
             next;
         }
         push(@NICKNAMES_CACHE_SEARCH, $nick);
