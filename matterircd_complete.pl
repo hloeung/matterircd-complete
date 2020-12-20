@@ -84,6 +84,7 @@ settings_add_int('matterircd_complete', 'matterircd_complete_shorten_message_thr
 sub update_msgthreadid {
     my($server, $msg, $nick, $address, $target) = @_;
 
+    return unless settings_get_int('matterircd_complete_shorten_message_thread_id');
     my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
@@ -94,7 +95,7 @@ sub update_msgthreadid {
     return unless $msgthreadid;
 
     my $len = settings_get_int('matterircd_complete_shorten_message_thread_id');
-    if ($len) {
+    if ($len < 25) {
         # Shorten to length configured. We use unicode ellipsis (...)
         # here to both allow word selection to just select parts of
         # the message/thread ID when copying & pasting and save on
@@ -165,6 +166,7 @@ my $MSGTHREADID_CACHE_INDEX = 0;
 command_bind 'message_thread_id_search' => sub {
     my ($data, $server, $wi) = @_;
 
+    return unless settings_get_int('matterircd_complete_message_thread_id_cache_size');
     return unless ref $wi and ($wi->{type} eq 'CHANNEL' or $wi->{type} eq 'QUERY');
     return unless exists($MSGTHREADID_CACHE{$wi->{name}});
 
@@ -234,6 +236,7 @@ signal_add_last 'gui key pressed' => sub {
 signal_add_last 'complete word' => sub {
     my ($complist, $window, $word, $linestart, $want_space) = @_;
 
+    return unless settings_get_int('matterircd_complete_message_thread_id_cache_size');
     return unless substr($word, 0, 2) eq '@@';
     return unless $window->{active} and ($window->{active}->{type} eq 'CHANNEL' || $window->{active}->{type} eq 'QUERY');
     return unless exists($MSGTHREADID_CACHE{$window->{active}->{name}});
@@ -253,6 +256,7 @@ signal_add_last 'complete word' => sub {
 sub cache_msgthreadid {
     my($server, $msg, $nick, $address, $target) = @_;
 
+    return unless settings_get_int('matterircd_complete_message_thread_id_cache_size');
     my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
@@ -293,6 +297,7 @@ signal_add('message public', 'cache_msgthreadid');
 signal_add 'message own_public' => sub {
     my($server, $msg, $target) = @_;
 
+    return unless settings_get_int('matterircd_complete_message_thread_id_cache_size');
     my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
@@ -308,6 +313,7 @@ signal_add 'message own_public' => sub {
 signal_add 'message own_private' => sub {
     my($server, $msg, $target, $orig_target) = @_;
 
+    return unless settings_get_int('matterircd_complete_message_thread_id_cache_size');
     my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
@@ -409,6 +415,7 @@ signal_add 'complete word' => sub {
 sub cache_ircnick {
     my($server, $msg, $nick, $address, $target) = @_;
 
+    return unless settings_get_int('matterircd_complete_nick_cache_size');
     my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
@@ -426,6 +433,7 @@ signal_add('message public', 'cache_ircnick');
 signal_add_last 'message own_public' => sub {
     my($server, $msg, $target) = @_;
 
+    return unless settings_get_int('matterircd_complete_nick_cache_size');
     my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
