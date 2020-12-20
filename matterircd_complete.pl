@@ -30,7 +30,7 @@
 #   @ +TAB to tab auto-complete IRC nick. Active users appear first.
 #
 # By default, message/thread IDs are shortened from 26 characters to
-# first few (default 4). It is also grayed out to try reduce noise and
+# first few (default 5). It is also grayed out to try reduce noise and
 # make it easier to read conversations. To disable this use:
 #
 #   /set matterircd_complete_shorten_message_thread_id 0
@@ -80,7 +80,7 @@ settings_add_str('matterircd_complete', 'matterircd_complete_nick_ignore', '');
 
 # Rely on message/thread IDs stored in message cache so we can shorten
 # to save on screen real-estate.
-settings_add_int('matterircd_complete', 'matterircd_complete_shorten_message_thread_id', 4);
+settings_add_int('matterircd_complete', 'matterircd_complete_shorten_message_thread_id', 5);
 sub update_msgthreadid {
     my($server, $msg, $nick, $address, $target) = @_;
 
