@@ -205,8 +205,7 @@ signal_add_last 'gui key pressed' => sub {
         my $input = parse_special('$L');
 
         # Remove the Ctrl+C character.
-        my $keychr = chr($key);
-        $input =~ s/$keychr//;
+        $input =~ tr///d;
 
         my $pos = 0;
         if ($input =~ s/^(@@(?:[0-9a-z]{26}|[0-9a-f]{3}) )//) {
@@ -515,8 +514,7 @@ signal_add_last 'gui key pressed' => sub {
         my $input = parse_special('$L');
 
         # Remove the Ctrl+C character.
-        my $keychr = chr($key);
-        $input =~ s/$keychr//;
+        $input =~ tr///d;
 
         my $compl_char = settings_get_str('completion_char');
         my $pos = 0;
