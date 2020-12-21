@@ -56,7 +56,22 @@ use warnings;
 use experimental 'smartmatch';
 
 use Irssi::TextUI;
-use Irssi qw(command_bind gui_input_set gui_input_get_pos gui_input_set_pos parse_special settings_add_bool settings_add_int settings_get_bool settings_get_int settings_get_str settings_add_str signal_add signal_add_last signal_continue);
+use Irssi qw(
+    command_bind
+    gui_input_get_pos
+    gui_input_set
+    gui_input_set_pos
+    parse_special
+    settings_add_bool
+    settings_add_int
+    settings_add_str
+    settings_get_bool
+    settings_get_int
+    settings_get_str
+    signal_add
+    signal_add_last
+    signal_continue
+);
 
 # Enable for debugging purposes only.
 # use Data::Dumper;
