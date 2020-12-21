@@ -81,7 +81,7 @@ settings_add_str('matterircd_complete', 'matterircd_complete_nick_ignore', '');
 # Rely on message/thread IDs stored in message cache so we can shorten
 # to save on screen real-estate.
 settings_add_int('matterircd_complete',  'matterircd_complete_shorten_message_thread_id', 5);
-settings_add_bool('matterircd_complete', 'matterircd_complete_shorten_message_thread_id_hide_prefix', 0);
+settings_add_bool('matterircd_complete', 'matterircd_complete_shorten_message_thread_id_hide_prefix', 1);
 sub update_msgthreadid {
     my($server, $msg, $nick, $address, $target) = @_;
 
