@@ -414,7 +414,12 @@ signal_add 'complete word' => sub {
     }
     @tmp = sort @tmp;
     foreach my $nick (@tmp) {
-        push(@$complist, "\@${nick}${compl_char}");
+        # Only add completion character on line start.
+        if (not $linestart) {
+            push(@$complist, "\@${nick}${compl_char}");
+        } else {
+            push(@$complist, "\@${nick}");
+        }
     }
 
     return unless exists($NICKNAMES_CACHE{$window->{active}->{name}});
@@ -425,14 +430,25 @@ signal_add 'complete word' => sub {
     # want to make sure users are still in channel for those still in
     # the cache.
     foreach my $nick (reverse @{$NICKNAMES_CACHE{$window->{active}->{name}}}) {
-        my $nick_compl = "\@${nick}${compl_char}";
+        my $nick_compl;
+        # Only add completion character on line start.
+        if (not $linestart) {
+            $nick_compl = "\@${nick}${compl_char}";
+        } else {
+            $nick_compl = "\@${nick}";
+        }
         # Skip over if nick is already first in completion list.
         if ((scalar(@{$complist}) > 0) and ($nick_compl eq @{$complist}[0])) {
             next;
         }
         # Only add to completion list if user/nick is online and in channel.
         elsif (${nick} ~~ @tmp) {
-            unshift(@$complist, "\@${nick}${compl_char}");
+            # Only add completion character on line start.
+            if (not $linestart) {
+                unshift(@$complist, "\@${nick}${compl_char}");
+            } else {
+                unshift(@$complist, "\@${nick}");
+            }
         }
     }
 };
