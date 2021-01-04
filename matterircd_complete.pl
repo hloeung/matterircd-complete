@@ -122,6 +122,12 @@ sub update_msgthreadid {
     if (settings_get_bool('matterircd_complete_shorten_message_thread_id_hide_prefix')) {
         $prefix = '';
     }
+
+    # Show that message is reply to a thread.
+    if ($msg =~ /\(re \@.*\)/) {
+        $prefix = "↪${prefix}";
+    }
+
     $msg =~ s/\@\@PLACEHOLDER\@\@/\x0314[${prefix}${msgthreadid}]/;
 
     signal_continue($server, $msg, $nick, $address, $target);
