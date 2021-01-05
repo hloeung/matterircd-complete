@@ -631,6 +631,30 @@ signal_add_last 'gui key pressed' => sub {
 
 my %REPLIED_CACHE;
 settings_add_int('matterircd_complete', 'matterircd_complete_replied_cache_size', 20);
+command_bind 'matterircd_complete_replied_cache_dump' => sub {
+    my ($data, $server, $wi) = @_;
+
+    if (not $data) {
+        return unless ref $wi and $wi->{type} eq 'CHANNEL';
+    }
+
+    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
+    return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
+
+    my $channel = $data ? $data : $wi->{name};
+    # Remove leading and trailing whitespace.
+    $channel =~ tr/ 	//d;
+
+    if (not exists($REPLIED_CACHE{$channel})) {
+        Irssi::print("${channel}: Empty cache");
+        return;
+    }
+
+    foreach my $threadid (@{$REPLIED_CACHE{$channel}}) {
+        Irssi::print("${channel}: ${threadid}");
+    }
+};
+
 signal_add_last 'message own_public' => sub {
     my($server, $msg, $target) = @_;
 
