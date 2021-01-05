@@ -93,6 +93,9 @@ my $KEY_SPC    = 32;
 settings_add_str('matterircd_complete', 'matterircd_complete_networks', '');
 settings_add_str('matterircd_complete', 'matterircd_complete_nick_ignore', '');
 
+
+#==============================================================================
+
 # Rely on message/thread IDs stored in message cache so we can shorten
 # to save on screen real-estate.
 settings_add_int('matterircd_complete',  'matterircd_complete_shorten_message_thread_id', 5);
@@ -160,6 +163,8 @@ sub cache_store {
     }
 }
 
+
+#==============================================================================
 
 my %MSGTHREADID_CACHE;
 settings_add_int('matterircd_complete', 'matterircd_complete_message_thread_id_cache_size', 50);
@@ -357,6 +362,8 @@ signal_add 'message own_private' => sub {
     cache_store(\@{$MSGTHREADID_CACHE{$target}}, $msgid, $cache_size);
 };
 
+
+#==============================================================================
 
 my %NICKNAMES_CACHE;
 settings_add_int('matterircd_complete', 'matterircd_complete_nick_cache_size', 20);
@@ -617,4 +624,47 @@ signal_add_last 'gui key pressed' => sub {
         $NICKNAMES_CACHE_SEARCH_ENABLED = 0;
         @NICKNAMES_CACHE_SEARCH = ();
     }
+};
+
+
+#==============================================================================
+
+my %REPLIED_CACHE;
+settings_add_int('matterircd_complete', 'matterircd_complete_replied_cache_size', 20);
+signal_add_last 'message own_public' => sub {
+    my($server, $msg, $target) = @_;
+
+    return unless settings_get_int('matterircd_complete_replied_cache_size');
+    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
+    return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
+
+    if ($msg !~ /^@@((?:[0-9a-z]{26})|(?:[0-9a-f]{3}))/) {
+        return;
+    }
+    my $msgid = $1;
+
+    my $cache_size = settings_get_int('matterircd_complete_replied_cache_size');
+    cache_store(\@{$REPLIED_CACHE{$target}}, $msgid, $cache_size);
+};
+
+signal_add_last 'message public' => sub {
+    my($server, $msg, $nick, $address, $target) = @_;
+
+    return unless settings_get_int('matterircd_complete_replied_cache_size');
+    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
+    return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
+
+    # For '/me' actions, it has trailing space so we need to use
+    # \s* here.
+    $msg =~ /\[(?:->|↪)?\@\@([0-9a-z]{26})\]\s*$/;
+    my $msgthreadid = $1;
+    return unless $msgthreadid;
+
+    if ($msgthreadid ~~ @{$REPLIED_CACHE{$target}}) {
+        if ($msg !~ /\(re \@$server->{nick}: /) {
+            $msg =~ s/\(re (\@\S+): /(re \@$server->{nick}, $1: /;
+        }
+    }
+
+    signal_continue($server, $msg, $nick, $address, $target);
 };
