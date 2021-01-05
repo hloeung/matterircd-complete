@@ -685,7 +685,8 @@ signal_add_last 'message public' => sub {
     return unless $msgthreadid;
 
     if ($msgthreadid ~~ @{$REPLIED_CACHE{$target}}) {
-        if ($msg !~ /\(re \@$server->{nick}: /) {
+        # Add user's nick for hilighting if not in message.
+        if ($msg !~ /\@$server->{nick}/) {
             $msg =~ s/\(re (\@\S+): /(re \@$server->{nick}, $1: /;
         }
     }
