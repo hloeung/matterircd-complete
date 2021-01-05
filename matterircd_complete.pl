@@ -106,7 +106,7 @@ sub update_msgthreadid {
 
     # For '/me' actions, it has trailing space so we need to use
     # \s* here.
-    $msg =~ s/\[\@\@([0-9a-z]{26})\]\s*$/\@\@PLACEHOLDER\@\@/;
+    $msg =~ s/\[(?:->|↪)?\@\@([0-9a-z]{26})\]\s*$/\@\@PLACEHOLDER\@\@/;
     my $msgthreadid = $1;
     return unless $msgthreadid;
 
@@ -124,7 +124,7 @@ sub update_msgthreadid {
     }
 
     # Show that message is reply to a thread.
-    if ($msg =~ /\(re \@.*\)/) {
+    if ($msg =~ /\[(?:->|↪)?\@\@[0-9a-z]{26}\]|\(re \@.*\)/) {
         $prefix = "↪${prefix}";
     }
 
@@ -302,7 +302,7 @@ sub cache_msgthreadid {
     # For '/me' actions, it has trailing space so we need to use \s*
     # here. We use unicode ellipsis (...) here to both allow
     # Mattermost message/thread IDs.
-    if ($msg =~ /(?:^\[@@([0-9a-z]{26})\])|(?:\[@@([0-9a-z]{26})\]\s*$)/) {
+    if ($msg =~ /(?:^\[(?:->|↪)?@@([0-9a-z]{26})\])|(?:\[(?:->|↪)?@@([0-9a-z]{26})\]\s*$)/) {
         $msgid = $1 ? $1 : $2;
     }
     # matterircd generated 3-letter hexadecimal.
