@@ -510,7 +510,7 @@ my $NICKNAMES_CACHE_INDEX = 0;
 command_bind 'nicknames_search' => sub {
     my ($data, $server, $wi) = @_;
 
-    return unless ref $wi and ($wi->{type} eq 'CHANNEL' or $wi->{type} eq 'QUERY');
+    return unless ref $wi and $wi->{type} eq 'CHANNEL';
 
     my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
