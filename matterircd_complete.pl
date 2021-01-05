@@ -182,7 +182,7 @@ command_bind 'matterircd_complete_msgthreadid_cache_dump' => sub {
     # Remove leading and trailing whitespace.
     $channel =~ tr/ 	//d;
 
-    if (not exists($MSGTHREADID_CACHE{$channel})) {
+    if ((not exists($MSGTHREADID_CACHE{$channel})) || (scalar @{$MSGTHREADID_CACHE{$channel}} == 0)) {
         Irssi::print("${channel}: Empty cache");
         return;
     }
@@ -381,7 +381,7 @@ command_bind 'matterircd_complete_nick_cache_dump' => sub {
     # Remove leading and trailing whitespace.
     $channel =~ tr/ 	//d;
 
-    if (not exists($NICKNAMES_CACHE{$channel})) {
+    if ((not exists($NICKNAMES_CACHE{$channel})) || (scalar @{$NICKNAMES_CACHE{$channel}} == 0)) {
         Irssi::print("${channel}: Empty cache");
         return;
     }
@@ -645,7 +645,7 @@ command_bind 'matterircd_complete_replied_cache_dump' => sub {
     # Remove leading and trailing whitespace.
     $channel =~ tr/ 	//d;
 
-    if (not exists($REPLIED_CACHE{$channel})) {
+    if ((not exists($REPLIED_CACHE{$channel})) || (scalar @{$REPLIED_CACHE{$channel}} == 0)) {
         Irssi::print("${channel}: Empty cache");
         return;
     }
