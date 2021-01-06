@@ -109,9 +109,19 @@ sub update_msgthreadid {
 
     # For '/me' actions, it has trailing space so we need to use
     # \s* here.
-    $msg =~ s/\[(?:->|↪)?\@\@([0-9a-z]{26})\]\s*$/\@\@PLACEHOLDER\@\@/;
-    my $msgthreadid = $1;
+    $msg =~ s/\[(->|↪)?\@\@([0-9a-z]{26})\]\s*$/\@\@PLACEHOLDER\@\@/;
+    my $prefix = $1 ? $1 : '';
+    my $msgthreadid = $2;
     return unless $msgthreadid;
+
+    # Show that message is reply to a thread. (backwards compatibility when matterircd doesn't show reply)
+    if ((not $prefix) && ($msg =~ /\(re \@.*\)/)) {
+        $prefix = '↪';
+    }
+
+    if (not settings_get_bool('matterircd_complete_shorten_message_thread_id_hide_prefix')) {
+        $prefix = "${prefix}\@\@";
+    }
 
     my $len = settings_get_int('matterircd_complete_shorten_message_thread_id');
     if ($len < 25) {
@@ -121,16 +131,6 @@ sub update_msgthreadid {
         # screen real estate.
         $msgthreadid = substr($msgthreadid, 0, $len) . '…';
     }
-    my $prefix = '@@';
-    if (settings_get_bool('matterircd_complete_shorten_message_thread_id_hide_prefix')) {
-        $prefix = '';
-    }
-
-    # Show that message is reply to a thread.
-    if ($msg =~ /\[(?:->|↪)?\@\@[0-9a-z]{26}\]|\(re \@.*\)/) {
-        $prefix = "↪${prefix}";
-    }
-
     $msg =~ s/\@\@PLACEHOLDER\@\@/\x0314[${prefix}${msgthreadid}]/;
 
     signal_continue($server, $msg, $nick, $address, $target);
