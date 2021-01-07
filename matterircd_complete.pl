@@ -305,6 +305,12 @@ sub cache_msgthreadid {
         return;
     }
 
+    # We also want to ignore reactions as we can't reply to those
+    # directly if they're to a message in a thread.
+    if ($msg =~ /^(?:added|removed) reaction:/) {
+        return;
+    }
+
     # For '/me' actions, it has trailing space so we need to use \s*
     # here. We use unicode ellipsis (...) here to both allow
     # Mattermost message/thread IDs.
