@@ -1,6 +1,7 @@
 #
 # For the full matterircd_complete experience, your matterircd.toml
-# should have SuffixContext=true and ThreadContext="mattermost".
+# should have SuffixContext=true, ThreadContext="mattermost", and
+# Unicode=true.
 #
 # Add it to ~/.irssi/scripts/autorun, or:
 #
