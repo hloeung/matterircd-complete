@@ -87,6 +87,7 @@ our %IRSSI = (
 );
 
 my $KEY_CTRL_C = 3;
+my $KEY_CTRL_U = 21;
 my $KEY_ESC    = 27;
 my $KEY_RET    = 13;
 my $KEY_SPC    = 32;
@@ -233,7 +234,7 @@ signal_add_last 'gui key pressed' => sub {
     my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
-    if ($key == $KEY_RET) {
+    if (($key == $KEY_RET) || ($key == $KEY_CTRL_U)) {
         $MSGTHREADID_CACHE_INDEX = 0;
         $MSGTHREADID_CACHE_SEARCH_ENABLED = 0;
     }
@@ -598,7 +599,7 @@ signal_add_last 'gui key pressed' => sub {
     my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
-    if ($key == $KEY_RET) {
+    if (($key == $KEY_RET) || ($key == $KEY_CTRL_U)) {
         $NICKNAMES_CACHE_INDEX = 0;
         $NICKNAMES_CACHE_SEARCH_ENABLED = 0;
         @NICKNAMES_CACHE_SEARCH = ();
