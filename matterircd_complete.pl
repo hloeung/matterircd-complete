@@ -147,6 +147,12 @@ sub cache_store {
 
     return unless $item ne '';
 
+    my $changed = 0;
+    if (@$cache_ref[0] && @$cache_ref[0] eq $item) {
+        return $changed;
+    }
+    $changed = 1;
+
     # We want to reduce duplicates by removing them currently in the
     # per-channel cache. But as a trade off in favor of
     # speed/performance, rather than traverse the entire per-channel
@@ -163,6 +169,8 @@ sub cache_store {
     if (($cache_size > 0) && (scalar(@$cache_ref) > $cache_size)) {
         pop(@$cache_ref);
     }
+
+    return $changed;
 }
 
 
@@ -331,7 +339,9 @@ sub cache_msgthreadid {
     }
 
     my $cache_size = settings_get_int('matterircd_complete_message_thread_id_cache_size');
-    cache_store(\@{$MSGTHREADID_CACHE{$target}}, $msgid, $cache_size);
+    if (cache_store(\@{$MSGTHREADID_CACHE{$target}}, $msgid, $cache_size)) {
+        $MSGTHREADID_CACHE_INDEX = 0;
+    }
 }
 signal_add('message irc action', 'cache_msgthreadid');
 signal_add('message irc notice', 'cache_msgthreadid');
@@ -351,7 +361,9 @@ signal_add 'message own_public' => sub {
     my $msgid = $1;
 
     my $cache_size = settings_get_int('matterircd_complete_message_thread_id_cache_size');
-    cache_store(\@{$MSGTHREADID_CACHE{$target}}, $msgid, $cache_size);
+    if (cache_store(\@{$MSGTHREADID_CACHE{$target}}, $msgid, $cache_size)) {
+        $MSGTHREADID_CACHE_INDEX = 0;
+    }
 };
 
 signal_add 'message own_private' => sub {
@@ -367,7 +379,9 @@ signal_add 'message own_private' => sub {
     my $msgid = $1;
 
     my $cache_size = settings_get_int('matterircd_complete_message_thread_id_cache_size');
-    cache_store(\@{$MSGTHREADID_CACHE{$target}}, $msgid, $cache_size);
+    if (cache_store(\@{$MSGTHREADID_CACHE{$target}}, $msgid, $cache_size)) {
+        $MSGTHREADID_CACHE_INDEX = 0;
+    }
 };
 
 
