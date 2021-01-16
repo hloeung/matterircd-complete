@@ -365,15 +365,18 @@ signal_add 'message own_public' => sub {
         $MSGTHREADID_CACHE_INDEX = 0;
     }
 
+    my $msgthreadid = $1;
+
     my $len = settings_get_int('matterircd_complete_shorten_message_thread_id');
     if ($len < 25) {
         # Shorten to length configured. We use unicode ellipsis (...)
         # here to both allow word selection to just select parts of
         # the message/thread ID when copying & pasting and save on
         # screen real estate.
-        my $msgthreadid = "\x0314[↪" . substr($msgid, 0, $len) . "…]\x0f";
-        $msg =~ s/^@@[0-9a-z]{26}/${msgthreadid}/;
+        $msgthreadid = substr($msgid, 0, $len) . "…";
     }
+    $msg =~ s/^@@[0-9a-z]{26} //;
+    $msg =~ s/$/ \x0314[↪${msgthreadid}]\x0f/;
 
     signal_continue($server, $msg, $target);
 };
@@ -395,15 +398,18 @@ signal_add 'message own_private' => sub {
         $MSGTHREADID_CACHE_INDEX = 0;
     }
 
+    my $msgthreadid = $1;
+
     my $len = settings_get_int('matterircd_complete_shorten_message_thread_id');
     if ($len < 25) {
         # Shorten to length configured. We use unicode ellipsis (...)
         # here to both allow word selection to just select parts of
         # the message/thread ID when copying & pasting and save on
         # screen real estate.
-        my $msgthreadid = "\x0314[↪" . substr($msgid, 0, $len) . "…]\x0f";
-        $msg =~ s/^@@[0-9a-z]{26}/${msgthreadid}/;
+        $msgthreadid = substr($msgid, 0, $len) . "…";
     }
+    $msg =~ s/^@@[0-9a-z]{26} //;
+    $msg =~ s/$/ \x0314[↪${msgthreadid}]\x0f/;
 
     signal_continue($server, $msg, $target, $orig_target);
 };
