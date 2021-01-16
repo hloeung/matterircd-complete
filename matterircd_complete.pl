@@ -116,7 +116,8 @@ sub update_msgthreadid {
     my $msgthreadid = $2;
     return unless $msgthreadid;
 
-    # Show that message is reply to a thread. (backwards compatibility when matterircd doesn't show reply)
+    # Show that message is reply to a thread. (backwards compatibility
+    # when matterircd doesn't show reply)
     if ((not $prefix) && ($msg =~ /\(re \@.*\)/)) {
         $prefix = '↪';
     }
@@ -175,6 +176,11 @@ sub cache_store {
 
 
 #==============================================================================
+
+# Adds tab-complete or keybinding insertion of messages/threads
+# seen. This makes it easier for replying directly to threads in
+# Mattermost or creating new threads.
+
 
 my %MSGTHREADID_CACHE;
 settings_add_int('matterircd_complete', 'matterircd_complete_message_thread_id_cache_size', 50);
@@ -416,6 +422,11 @@ signal_add 'message own_private' => sub {
 
 
 #==============================================================================
+
+# Adds tab-complete or keybinding insertion of nicknames for users in
+# the current channel. Similar to irssi's builtin, recently active
+# users/nicks will be first in the completion list.
+
 
 my %NICKNAMES_CACHE;
 settings_add_int('matterircd_complete', 'matterircd_complete_nick_cache_size', 20);
@@ -680,6 +691,11 @@ signal_add_last 'gui key pressed' => sub {
 
 
 #==============================================================================
+
+# The replied cache keeps an index of messages/thread IDs that we've
+# replied to then when others reply to those, it will insert our nick
+# so that any further replies to these threads will be hilighted.
+
 
 my %REPLIED_CACHE;
 settings_add_int('matterircd_complete', 'matterircd_complete_replied_cache_size', 20);
