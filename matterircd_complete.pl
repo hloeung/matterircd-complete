@@ -198,6 +198,8 @@ command_bind 'matterircd_complete_msgthreadid_cache_dump' => sub {
     # Remove leading and trailing whitespace.
     $channel =~ tr/ 	//d;
 
+    Irssi::print("${channel}: Message/Thread ID cache");
+
     if ((not exists($MSGTHREADID_CACHE{$channel})) || (scalar @{$MSGTHREADID_CACHE{$channel}} == 0)) {
         Irssi::print("${channel}: Empty cache");
         return;
@@ -354,7 +356,7 @@ signal_add('message irc notice', 'cache_msgthreadid');
 signal_add('message private', 'cache_msgthreadid');
 signal_add('message public', 'cache_msgthreadid');
 
-signal_add 'message own_public' => sub {
+signal_add_last 'message own_public' => sub {
     my($server, $msg, $target) = @_;
 
     return unless settings_get_int('matterircd_complete_message_thread_id_cache_size');
@@ -443,6 +445,8 @@ command_bind 'matterircd_complete_nick_cache_dump' => sub {
     my $channel = $data ? $data : $wi->{name};
     # Remove leading and trailing whitespace.
     $channel =~ tr/ 	//d;
+
+    Irssi::print("${channel}: Nicknames cache");
 
     if ((not exists($NICKNAMES_CACHE{$channel})) || (scalar @{$NICKNAMES_CACHE{$channel}} == 0)) {
         Irssi::print("${channel}: Empty cache");
@@ -713,6 +717,8 @@ command_bind 'matterircd_complete_replied_cache_dump' => sub {
     # Remove leading and trailing whitespace.
     $channel =~ tr/ 	//d;
 
+    Irssi::print("${channel}: Replied cache");
+
     if ((not exists($REPLIED_CACHE{$channel})) || (scalar @{$REPLIED_CACHE{$channel}} == 0)) {
         Irssi::print("${channel}: Empty cache");
         return;
@@ -723,7 +729,7 @@ command_bind 'matterircd_complete_replied_cache_dump' => sub {
     }
 };
 
-signal_add_last 'message own_public' => sub {
+signal_add 'message own_public' => sub {
     my($server, $msg, $target) = @_;
 
     return unless settings_get_int('matterircd_complete_replied_cache_size');
