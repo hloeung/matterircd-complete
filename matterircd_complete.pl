@@ -356,6 +356,8 @@ signal_add('message irc notice', 'cache_msgthreadid');
 signal_add('message private', 'cache_msgthreadid');
 signal_add('message public', 'cache_msgthreadid');
 
+settings_add_bool('matterircd_complete', 'matterircd_complete_reply_msg_thread_id_at_start', 0);
+
 signal_add_last 'message own_public' => sub {
     my($server, $msg, $target) = @_;
 
@@ -383,8 +385,13 @@ signal_add_last 'message own_public' => sub {
         # screen real estate.
         $msgthreadid = substr($msgid, 0, $len) . "…";
     }
-    $msg =~ s/^@@[0-9a-z]{26} //;
-    $msg =~ s/$/ \x0314[↪${msgthreadid}]\x0f/;
+
+    if (settings_get_bool('matterircd_complete_reply_msg_thread_id_at_start')) {
+        $msg =~ s/^@@[0-9a-z]{26} /\x0314[↪${msgthreadid}]\x0f /;
+    } else {
+        $msg =~ s/^@@[0-9a-z]{26} //;
+        $msg =~ s/$/ \x0314[↪${msgthreadid}]\x0f/;
+    }
 
     signal_continue($server, $msg, $target);
 };
@@ -416,8 +423,13 @@ signal_add 'message own_private' => sub {
         # screen real estate.
         $msgthreadid = substr($msgid, 0, $len) . "…";
     }
-    $msg =~ s/^@@[0-9a-z]{26} //;
-    $msg =~ s/$/ \x0314[↪${msgthreadid}]\x0f/;
+
+    if (settings_get_bool('matterircd_complete_reply_msg_thread_id_at_start')) {
+        $msg =~ s/^@@[0-9a-z]{26} /\x0314[↪${msgthreadid}]\x0f /;
+    } else {
+        $msg =~ s/^@@[0-9a-z]{26} //;
+        $msg =~ s/$/ \x0314[↪${msgthreadid}]\x0f/;
+    }
 
     signal_continue($server, $msg, $target, $orig_target);
 };
