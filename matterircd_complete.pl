@@ -356,7 +356,7 @@ signal_add('message irc notice', 'cache_msgthreadid');
 signal_add('message private', 'cache_msgthreadid');
 signal_add('message public', 'cache_msgthreadid');
 
-settings_add_bool('matterircd_complete', 'matterircd_complete_reply_msg_thread_id_at_start', 0);
+settings_add_bool('matterircd_complete', 'matterircd_complete_reply_msg_thread_id_at_start', 1);
 
 signal_add_last 'message own_public' => sub {
     my($server, $msg, $target) = @_;
