@@ -332,7 +332,7 @@ sub cache_msgthreadid {
 
     # We also want to ignore reactions as we can't reply to those
     # directly if they're to a message in a thread.
-    if ($msg =~ /^(?:added|removed) reaction:/) {
+    if ($msg =~ /(?:added|removed) reaction:/) {
         return;
     }
 
