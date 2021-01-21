@@ -109,11 +109,19 @@ sub update_msgthreadid {
     my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
+    my $prefix = '';
+    my $msgthreadid = '';
+
     # For '/me' actions, it has trailing space so we need to use
     # \s* here.
-    $msg =~ s/\[(->|↪)?\@\@([0-9a-z]{26})\]\s*$/\@\@PLACEHOLDER\@\@/;
-    my $prefix = $1 ? $1 : '';
-    my $msgthreadid = $2;
+    if ($msg =~ s/\[(->|↪)?\@\@([0-9a-z]{26})\]\s*$/\@\@PLACEHOLDER\@\@/) {
+        $prefix = $1 ? $1 : '';
+        $msgthreadid = $2;
+    }
+    elsif ($msg =~ s/^\[(->|↪)?\@\@([0-9a-z]{26})\]/\@\@PLACEHOLDER\@\@/) {
+        $prefix = $1 ? $1 : '';
+        $msgthreadid = $2;
+    }
     return unless $msgthreadid;
 
     # Show that message is reply to a thread. (backwards compatibility
@@ -134,7 +142,7 @@ sub update_msgthreadid {
         # screen real estate.
         $msgthreadid = substr($msgthreadid, 0, $len) . '…';
     }
-    $msg =~ s/\@\@PLACEHOLDER\@\@/\x0314[${prefix}${msgthreadid}]/;
+    $msg =~ s/\@\@PLACEHOLDER\@\@/\x0314[${prefix}${msgthreadid}]\x0f/;
 
     signal_continue($server, $msg, $nick, $address, $target);
 }
