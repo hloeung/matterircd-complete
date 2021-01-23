@@ -118,7 +118,7 @@ sub update_msgthreadid {
         $prefix = $1 ? $1 : '';
         $msgthreadid = $2;
     }
-    elsif ($msg =~ s/^\[(->|↪)?\@\@([0-9a-z]{26})\]/\@\@PLACEHOLDER\@\@/) {
+    elsif ($msg =~ s/\[(->|↪)?\@\@([0-9a-z]{26})\]/\@\@PLACEHOLDER\@\@/) {
         $prefix = $1 ? $1 : '';
         $msgthreadid = $2;
     }
