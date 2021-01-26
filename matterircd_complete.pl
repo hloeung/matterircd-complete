@@ -332,7 +332,7 @@ sub cache_msgthreadid {
 
     # Mattermost message/thread IDs.
     if ($msg =~ /\[(?:->|↪)?\@\@([0-9a-z]{26})\]/) {
-        $msgid = $1 ? $1 : $2;
+        $msgid = $1;
     }
     # matterircd generated 3-letter hexadecimal.
     elsif ($msg =~ /(?:^\[([0-9a-f]{3})\])|(?:\[([0-9a-f]{3})\]\s*$)/) {
