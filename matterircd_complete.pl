@@ -203,13 +203,14 @@ command_bind 'matterircd_complete_msgthreadid_cache_dump' => sub {
     Irssi::print("${channel}: Message/Thread ID cache");
 
     if ((not exists($MSGTHREADID_CACHE{$channel})) || (scalar @{$MSGTHREADID_CACHE{$channel}} == 0)) {
-        Irssi::print("${channel}: Empty cache");
+        Irssi::print("${channel}: Empty");
         return;
     }
 
     foreach my $msgthread_id (@{$MSGTHREADID_CACHE{$channel}}) {
         Irssi::print("${channel}: ${msgthread_id}");
     }
+    Irssi::print("${channel}: Total: " . scalar @{$MSGTHREADID_CACHE{$channel}});
 };
 
 my $MSGTHREADID_CACHE_SEARCH_ENABLED = 0;
@@ -461,13 +462,14 @@ command_bind 'matterircd_complete_nick_cache_dump' => sub {
     Irssi::print("${channel}: Nicknames cache");
 
     if ((not exists($NICKNAMES_CACHE{$channel})) || (scalar @{$NICKNAMES_CACHE{$channel}} == 0)) {
-        Irssi::print("${channel}: Empty cache");
+        Irssi::print("${channel}: Empty");
         return;
     }
 
     foreach my $nick (@{$NICKNAMES_CACHE{$channel}}) {
         Irssi::print("${channel}: ${nick}");
     }
+    Irssi::print("${channel}: Total: " . scalar @{$NICKNAMES_CACHE{$channel}});
 };
 
 signal_add 'complete word' => sub {
@@ -714,7 +716,7 @@ signal_add_last 'gui key pressed' => sub {
 
 
 my %REPLIED_CACHE;
-settings_add_int('matterircd_complete', 'matterircd_complete_replied_cache_size', 20);
+settings_add_int('matterircd_complete', 'matterircd_complete_replied_cache_size', 50);
 command_bind 'matterircd_complete_replied_cache_dump' => sub {
     my ($data, $server, $wi) = @_;
 
@@ -732,13 +734,14 @@ command_bind 'matterircd_complete_replied_cache_dump' => sub {
     Irssi::print("${channel}: Replied cache");
 
     if ((not exists($REPLIED_CACHE{$channel})) || (scalar @{$REPLIED_CACHE{$channel}} == 0)) {
-        Irssi::print("${channel}: Empty cache");
+        Irssi::print("${channel}: Empty");
         return;
     }
 
     foreach my $threadid (@{$REPLIED_CACHE{$channel}}) {
         Irssi::print("${channel}: ${threadid}");
     }
+    Irssi::print("${channel}: Total: " . scalar @{$REPLIED_CACHE{$channel}});
 };
 
 signal_add 'message own_public' => sub {
