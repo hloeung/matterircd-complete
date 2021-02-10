@@ -760,7 +760,7 @@ signal_add 'message own_public' => sub {
     cache_store(\@{$REPLIED_CACHE{$target}}, $msgid, $cache_size);
 };
 
-signal_add_last 'message public' => sub {
+signal_add 'message public' => sub {
     my($server, $msg, $nick, $address, $target) = @_;
 
     return unless settings_get_int('matterircd_complete_replied_cache_size');
