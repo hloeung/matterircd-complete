@@ -397,7 +397,7 @@ signal_add_last 'message own_public' => sub {
     signal_continue($server, $msg, $target);
 };
 
-signal_add 'message own_private' => sub {
+signal_add_last 'message own_private' => sub {
     my($server, $msg, $target, $orig_target) = @_;
 
     return unless settings_get_int('matterircd_complete_message_thread_id_cache_size');
@@ -769,7 +769,7 @@ signal_add 'message public' => sub {
 
     # For '/me' actions, it has trailing space so we need to use
     # \s* here.
-    $msg =~ /\[(?:->|↪)?\@\@([0-9a-z]{26})\]\s*$/;
+    $msg =~ /\[(?:->|↪)?([0-9a-z]{26})\]/;
     my $msgthreadid = $1;
     return unless $msgthreadid;
 
