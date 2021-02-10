@@ -769,7 +769,7 @@ signal_add 'message public' => sub {
 
     # For '/me' actions, it has trailing space so we need to use
     # \s* here.
-    $msg =~ /\[(?:->|↪)?([0-9a-z]{26})\]/;
+    $msg =~ /\[(?:->|↪)?\@\@([0-9a-z]{26})\]/;
     my $msgthreadid = $1;
     return unless $msgthreadid;
 
