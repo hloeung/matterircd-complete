@@ -91,6 +91,8 @@ my $KEY_CTRL_U = 21;
 my $KEY_ESC    = 27;
 my $KEY_RET    = 13;
 my $KEY_SPC    = 32;
+my $KEY_B      = 66;
+my $KEY_O      = 79;
 
 settings_add_str('matterircd_complete', 'matterircd_complete_networks', '');
 settings_add_str('matterircd_complete', 'matterircd_complete_nick_ignore', '');
@@ -244,6 +246,8 @@ command_bind 'message_thread_id_search' => sub {
     }
 };
 
+my $ESC_PRESSED = 0;
+my $O_PRESSED   = 0;
 signal_add_last 'gui key pressed' => sub {
     my ($key) = @_;
 
@@ -256,6 +260,9 @@ signal_add_last 'gui key pressed' => sub {
     if (($key == $KEY_RET) || ($key == $KEY_CTRL_U)) {
         $MSGTHREADID_CACHE_INDEX = 0;
         $MSGTHREADID_CACHE_SEARCH_ENABLED = 0;
+
+        $ESC_PRESSED = 0;
+        $O_PRESSED = 0;
     }
 
     # Cancel/abort, so remove thread stuff.
@@ -282,6 +289,24 @@ signal_add_last 'gui key pressed' => sub {
 
         $MSGTHREADID_CACHE_INDEX = 0;
         $MSGTHREADID_CACHE_SEARCH_ENABLED = 0;
+
+        $ESC_PRESSED = 0;
+        $O_PRESSED = 0;
+    }
+
+    # For 'down arrow', it's a sequence of ESC + O + B.
+    elsif ($key == $KEY_ESC) {
+        $ESC_PRESSED = 1;
+    }
+    elsif ($key == $KEY_O) {
+        $O_PRESSED = 1;
+    }
+    elsif ($key == $KEY_B && $O_PRESSED && $ESC_PRESSED) {
+        $MSGTHREADID_CACHE_INDEX = 0;
+        $MSGTHREADID_CACHE_SEARCH_ENABLED = 0;
+
+        $ESC_PRESSED = 0;
+        $O_PRESSED = 0;
     }
 };
 
