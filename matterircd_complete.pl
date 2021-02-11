@@ -308,6 +308,11 @@ signal_add_last 'gui key pressed' => sub {
         $ESC_PRESSED = 0;
         $O_PRESSED = 0;
     }
+    # Reset sequence on any other keys pressed.
+    elsif ($O_PRESSED || $ESC_PRESSED) {
+        $ESC_PRESSED = 0;
+        $O_PRESSED = 0;
+    }
 };
 
 signal_add_last 'complete word' => sub {
