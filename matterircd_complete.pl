@@ -377,8 +377,17 @@ sub cache_msgthreadid {
         return;
     }
 
+    my $key;
+    if (substr($target, 0, 1) eq '#') {
+        # It's a channel, so use $target
+        $key = $target;
+    } else {
+        # It's a private query so use $nick
+        $key = $nick
+    }
+
     my $cache_size = settings_get_int('matterircd_complete_message_thread_id_cache_size');
-    if (cache_store(\@{$MSGTHREADID_CACHE{$target}}, $msgid, $cache_size)) {
+    if (cache_store(\@{$MSGTHREADID_CACHE{$key}}, $msgid, $cache_size)) {
         $MSGTHREADID_CACHE_INDEX = 0;
     }
 }
