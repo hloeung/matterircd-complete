@@ -783,6 +783,11 @@ command_bind 'matterircd_complete_replied_cache_dump' => sub {
     Irssi::print("${channel}: Total: " . scalar @{$REPLIED_CACHE{$channel}});
 };
 
+command_bind 'matterircd_complete_replied_cache_clear' => sub {
+    %REPLIED_CACHE = ();
+    Irssi::print("Replied cache cleared");
+};
+
 signal_add 'message own_public' => sub {
     my($server, $msg, $target) = @_;
 
