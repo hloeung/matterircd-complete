@@ -785,7 +785,17 @@ command_bind 'matterircd_complete_replied_cache_dump' => sub {
 
 command_bind 'matterircd_complete_replied_cache_clear' => sub {
     %REPLIED_CACHE = ();
-    Irssi::print("Replied cache cleared");
+    Irssi::print("matterircd_complete replied cache cleared");
+};
+
+settings_add_bool('matterircd_complete', 'matterircd_complete_clear_replied_cache_on_away', 0);
+signal_add 'away mode changed' => sub {
+    my ($server) = @_;
+
+    if (settings_get_bool('matterircd_complete_clear_replied_cache_on_away') && $server->{usermode_away}) {
+        %REPLIED_CACHE = ();
+        Irssi::print("matterircd_complete replied cache cleared");
+    }
 };
 
 signal_add 'message own_public' => sub {
