@@ -788,12 +788,20 @@ command_bind 'matterircd_complete_replied_cache_clear' => sub {
     Irssi::print("matterircd_complete replied cache cleared");
 };
 
+my $REPLIED_CACHE_CLEARED = 0;
 settings_add_bool('matterircd_complete', 'matterircd_complete_clear_replied_cache_on_away', 0);
 signal_add 'away mode changed' => sub {
     my ($server) = @_;
 
-    if (settings_get_bool('matterircd_complete_clear_replied_cache_on_away') && $server->{usermode_away}) {
+    # When you visit the web UI when marked away, it retriggers this
+    # event. Let's avoid that.
+    if (! $server->{usermode_away}) {
+        $REPLIED_CACHE_CLEARED = 0;
+    }
+
+    if (settings_get_bool('matterircd_complete_clear_replied_cache_on_away') && $server->{usermode_away} && (! $REPLIED_CACHE_CLEARED)) {
         %REPLIED_CACHE = ();
+        $REPLIED_CACHE_CLEARED = 1;
         Irssi::print("matterircd_complete replied cache cleared");
     }
 };
