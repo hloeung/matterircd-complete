@@ -784,6 +784,11 @@ command_bind 'matterircd_complete_replied_cache_dump' => sub {
 };
 
 command_bind 'matterircd_complete_replied_cache_clear' => sub {
+    my ($data, $server, $wi) = @_;
+
+    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
+    return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
+
     %REPLIED_CACHE = ();
     Irssi::print("matterircd_complete replied cache cleared");
 };
@@ -792,6 +797,9 @@ my $REPLIED_CACHE_CLEARED = 0;
 settings_add_bool('matterircd_complete', 'matterircd_complete_clear_replied_cache_on_away', 0);
 signal_add 'away mode changed' => sub {
     my ($server) = @_;
+
+    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
+    return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
     # When you visit the web UI when marked away, it retriggers this
     # event. Let's avoid that.
