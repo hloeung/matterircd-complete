@@ -100,6 +100,8 @@ settings_add_str('matterircd_complete', 'matterircd_complete_nick_ignore', '');
 
 #==============================================================================
 
+settings_add_int('matterircd_complete', 'matterircd_complete_reply_msg_thread_id_color', 10);
+
 # Rely on message/thread IDs stored in message cache so we can shorten
 # to save on screen real-estate.
 settings_add_int('matterircd_complete',  'matterircd_complete_shorten_message_thread_id', 5);
@@ -138,7 +140,8 @@ sub update_msgthreadid {
         # screen real estate.
         $msgthreadid = substr($msgthreadid, 0, $len) . '…';
     }
-    $msg =~ s/\@\@PLACEHOLDER\@\@/\x0314[${prefix}${msgthreadid}]\x0f/;
+    my $thread_color = settings_get_int('matterircd_complete_reply_msg_thread_id_color');
+    $msg =~ s/\@\@PLACEHOLDER\@\@/\x03${thread_color}[${prefix}${msgthreadid}]\x0f/;
 
     signal_continue($server, $msg, $nick, $address, $target);
 }
@@ -426,11 +429,12 @@ signal_add_last 'message own_public' => sub {
         $msgthreadid = substr($msgid, 0, $len) . "…";
     }
 
+    my $thread_color = settings_get_int('matterircd_complete_reply_msg_thread_id_color');
     if (settings_get_bool('matterircd_complete_reply_msg_thread_id_at_start')) {
-        $msg =~ s/^@@[0-9a-z]{26} /\x0314[↪${msgthreadid}]\x0f /;
+        $msg =~ s/^@@[0-9a-z]{26} /\x03${thread_color}[↪${msgthreadid}]\x0f /;
     } else {
         $msg =~ s/^@@[0-9a-z]{26} //;
-        $msg =~ s/$/ \x0314[↪${msgthreadid}]\x0f/;
+        $msg =~ s/$/ \x03${thread_color}[↪${msgthreadid}]\x0f/;
     }
 
     signal_continue($server, $msg, $target);
@@ -464,11 +468,12 @@ signal_add_last 'message own_private' => sub {
         $msgthreadid = substr($msgid, 0, $len) . "…";
     }
 
+    my $thread_color = settings_get_int('matterircd_complete_reply_msg_thread_id_color');
     if (settings_get_bool('matterircd_complete_reply_msg_thread_id_at_start')) {
-        $msg =~ s/^@@[0-9a-z]{26} /\x0314[↪${msgthreadid}]\x0f /;
+        $msg =~ s/^@@[0-9a-z]{26} /\x03${thread_color}[↪${msgthreadid}]\x0f /;
     } else {
         $msg =~ s/^@@[0-9a-z]{26} //;
-        $msg =~ s/$/ \x0314[↪${msgthreadid}]\x0f/;
+        $msg =~ s/$/ \x03${thread_color}[↪${msgthreadid}]\x0f/;
     }
 
     signal_continue($server, $msg, $target, $orig_target);
