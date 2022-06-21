@@ -96,6 +96,7 @@ my $KEY_O      = 79;
 
 settings_add_str('matterircd_complete', 'matterircd_complete_networks', '');
 settings_add_str('matterircd_complete', 'matterircd_complete_nick_ignore', '');
+settings_add_str('matterircd_complete', 'matterircd_complete_channel_dont_ignore', '');
 
 
 #==============================================================================
@@ -355,7 +356,11 @@ sub cache_msgthreadid {
     my @ignore_nicks = split(/\s+/, settings_get_str('matterircd_complete_nick_ignore'));
     # Ignore nicks configured to be ignored such as bots.
     if ($nick ~~ @ignore_nicks) {
-        return;
+        # But not if the channel is in matterircd_complete_channel_dont_ignore.
+        my @channel_dont_ignore = split(/\s+/, settings_get_str('matterircd_complete_channel_dont_ignore'));
+        if ($target !~ @channel_dont_ignore) {
+            return;
+        }
     }
 
     # We also want to ignore reactions as we can't reply to those
