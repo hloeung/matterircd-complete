@@ -116,10 +116,12 @@ sub update_msgthreadid {
 
     my $prefix = '';
     my $msgthreadid = '';
+    my $msgpostid = '';
 
-    if ($msg =~ s/\[(->|↪)?\@\@([0-9a-z]{26})\]/\@\@PLACEHOLDER\@\@/) {
+    if ($msg =~ s/\[(->|↪)?\@\@([0-9a-z]{26})(?:,\@\@([0-9a-z]{26}))?\]/\@\@PLACEHOLDER\@\@/) {
         $prefix = $1 ? $1 : '';
         $msgthreadid = $2;
+        $msgpostid = $3 ? $3 : '';
     }
     return unless $msgthreadid;
 
@@ -140,9 +142,16 @@ sub update_msgthreadid {
         # the message/thread ID when copying & pasting and save on
         # screen real estate.
         $msgthreadid = substr($msgthreadid, 0, $len) . '…';
+        if ($msgpostid ne '') {
+            $msgpostid = substr($msgpostid, 0, $len) . '…';
+        }
     }
     my $thread_color = settings_get_int('matterircd_complete_reply_msg_thread_id_color');
-    $msg =~ s/\@\@PLACEHOLDER\@\@/\x03${thread_color}[${prefix}${msgthreadid}]\x0f/;
+    if ($msgpostid eq '') {
+        $msg =~ s/\@\@PLACEHOLDER\@\@/\x03${thread_color}[${prefix}${msgthreadid}]\x0f/;
+    } else {
+        $msg =~ s/\@\@PLACEHOLDER\@\@/\x03${thread_color}[${prefix}${msgthreadid},${msgpostid}]\x0f/;
+    }
 
     signal_continue($server, $msg, $nick, $address, $target);
 }
@@ -351,7 +360,7 @@ sub cache_msgthreadid {
     my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
-    my $msgid = '';
+    my @msgids = ();
 
     my @ignore_nicks = split(/\s+/, settings_get_str('matterircd_complete_nick_ignore'));
     # Ignore nicks configured to be ignored such as bots.
@@ -370,16 +379,22 @@ sub cache_msgthreadid {
     }
 
     # Mattermost message/thread IDs.
-    if ($msg =~ /\[(?:->|↪)?\@\@([0-9a-z]{26})\]/) {
-        $msgid = $1;
+    if ($msg =~ /\[(?:->|↪)?\@\@([0-9a-z]{26})(?:,\@\@([0-9a-z]{26}))?\]/) {
+        my $msgthreadid = $1;
+        my $msgpostid = $2 ? $2 : '';
+
+        if ($msgpostid ne '') {
+            push(@msgids, $msgpostid);
+        }
+        push(@msgids, $msgthreadid);
     }
     # matterircd generated 3-letter hexadecimal.
     elsif ($msg =~ /(?:^\[([0-9a-f]{3})\])|(?:\[([0-9a-f]{3})\]\s*$)/) {
-        $msgid = $1 ? $1 : $2;
+        push(@msgids, $1 ? $1 : $2);
     }
     # matterircd generated 3-letter hexadecimal replying to threads.
     elsif ($msg =~ /(?:^\[[0-9a-f]{3}->([0-9a-f]{3})\])|(?:\[[0-9a-f]{3}->([0-9a-f]{3})\]\s*$)/) {
-        $msgid = $1 ? $1 : $2;
+        push(@msgids, $1 ? $1 : $2);
     }
     else {
         return;
@@ -395,8 +410,10 @@ sub cache_msgthreadid {
     }
 
     my $cache_size = settings_get_int('matterircd_complete_message_thread_id_cache_size');
-    if (cache_store(\@{$MSGTHREADID_CACHE{$key}}, $msgid, $cache_size)) {
-        $MSGTHREADID_CACHE_INDEX = 0;
+    for my $msgid (@msgids) {
+        if (cache_store(\@{$MSGTHREADID_CACHE{$key}}, $msgid, $cache_size)) {
+            $MSGTHREADID_CACHE_INDEX = 0;
+        }
     }
 }
 signal_add('message irc action', 'cache_msgthreadid');
@@ -844,7 +861,7 @@ signal_add 'message public' => sub {
 
     # For '/me' actions, it has trailing space so we need to use
     # \s* here.
-    $msg =~ /\[(?:->|↪)?\@\@([0-9a-z]{26})\]/;
+    $msg =~ /\[(?:->|↪)?\@\@([0-9a-z]{26})[\],]/;
     my $msgthreadid = $1;
     return unless $msgthreadid;
 
