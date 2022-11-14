@@ -1,0 +1,12 @@
+pipeline:
+  - lint
+
+jobs:
+  lint:
+    architectures: amd64
+    series: focal
+    packages:
+      - irssi
+      - perl-base
+    run: |
+      perl -Mstrict -Mdiagnostics -cw /build/lpcraft/project/matterircd_complete.pl
