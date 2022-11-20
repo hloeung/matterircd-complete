@@ -56,23 +56,8 @@ use strict;
 use warnings;
 use experimental 'smartmatch';
 
-use Irssi::TextUI;
-use Irssi qw(
-    command_bind
-    gui_input_get_pos
-    gui_input_set
-    gui_input_set_pos
-    parse_special
-    settings_add_bool
-    settings_add_int
-    settings_add_str
-    settings_get_bool
-    settings_get_int
-    settings_get_str
-    signal_add
-    signal_add_last
-    signal_continue
-);
+require Irssi::TextUI;
+require Irssi;
 
 # Enable for debugging purposes only.
 # use Data::Dumper;
@@ -94,24 +79,24 @@ my $KEY_SPC    = 32;
 my $KEY_B      = 66;
 my $KEY_O      = 79;
 
-settings_add_str('matterircd_complete', 'matterircd_complete_networks', '');
-settings_add_str('matterircd_complete', 'matterircd_complete_nick_ignore', '');
-settings_add_str('matterircd_complete', 'matterircd_complete_channel_dont_ignore', '');
+Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_networks', '');
+Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_nick_ignore', '');
+Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_channel_dont_ignore', '');
 
 
 #==============================================================================
 
-settings_add_int('matterircd_complete', 'matterircd_complete_reply_msg_thread_id_color', 10);
+Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_reply_msg_thread_id_color', 10);
 
 # Rely on message/thread IDs stored in message cache so we can shorten
 # to save on screen real-estate.
-settings_add_int('matterircd_complete',  'matterircd_complete_shorten_message_thread_id', 5);
-settings_add_bool('matterircd_complete', 'matterircd_complete_shorten_message_thread_id_hide_prefix', 1);
+Irssi::settings_add_int('matterircd_complete',  'matterircd_complete_shorten_message_thread_id', 5);
+Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_shorten_message_thread_id_hide_prefix', 1);
 sub update_msgthreadid {
     my($server, $msg, $nick, $address, $target) = @_;
 
-    return unless settings_get_int('matterircd_complete_shorten_message_thread_id');
-    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
+    return unless Irssi::settings_get_int('matterircd_complete_shorten_message_thread_id');
+    my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
     my $prefix = '';
@@ -131,11 +116,11 @@ sub update_msgthreadid {
         $prefix = '↪';
     }
 
-    if (not settings_get_bool('matterircd_complete_shorten_message_thread_id_hide_prefix')) {
+    if (not Irssi::settings_get_bool('matterircd_complete_shorten_message_thread_id_hide_prefix')) {
         $prefix = "${prefix}\@\@";
     }
 
-    my $len = settings_get_int('matterircd_complete_shorten_message_thread_id');
+    my $len = Irssi::settings_get_int('matterircd_complete_shorten_message_thread_id');
     if ($len < 25) {
         # Shorten to length configured. We use unicode ellipsis (...)
         # here to both allow word selection to just select parts of
@@ -146,19 +131,19 @@ sub update_msgthreadid {
             $msgpostid = substr($msgpostid, 0, $len) . '…';
         }
     }
-    my $thread_color = settings_get_int('matterircd_complete_reply_msg_thread_id_color');
+    my $thread_color = Irssi::settings_get_int('matterircd_complete_reply_msg_thread_id_color');
     if ($msgpostid eq '') {
         $msg =~ s/\@\@PLACEHOLDER\@\@/\x03${thread_color}[${prefix}${msgthreadid}]\x0f/;
     } else {
         $msg =~ s/\@\@PLACEHOLDER\@\@/\x03${thread_color}[${prefix}${msgthreadid},${msgpostid}]\x0f/;
     }
 
-    signal_continue($server, $msg, $nick, $address, $target);
+    Irssi::signal_continue($server, $msg, $nick, $address, $target);
 }
-signal_add_last('message irc action', 'update_msgthreadid');
-signal_add_last('message irc notice', 'update_msgthreadid');
-signal_add_last('message private', 'update_msgthreadid');
-signal_add_last('message public', 'update_msgthreadid');
+Irssi::signal_add_last('message irc action', 'update_msgthreadid');
+Irssi::signal_add_last('message irc notice', 'update_msgthreadid');
+Irssi::signal_add_last('message private', 'update_msgthreadid');
+Irssi::signal_add_last('message public', 'update_msgthreadid');
 
 sub cache_store {
     my ($cache_ref, $item, $cache_size) = @_;
@@ -200,15 +185,15 @@ sub cache_store {
 
 
 my %MSGTHREADID_CACHE;
-settings_add_int('matterircd_complete', 'matterircd_complete_message_thread_id_cache_size', 50);
-command_bind 'matterircd_complete_msgthreadid_cache_dump' => sub {
+Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_message_thread_id_cache_size', 50);
+sub cmd_matterircd_complete_msgthreadid_cache_dump {
     my ($data, $server, $wi) = @_;
 
     if (not $data) {
         return unless ref $wi and ($wi->{type} eq 'CHANNEL' or $wi->{type} eq 'QUERY');
     }
 
-    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
+    my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
     my $channel = $data ? $data : $wi->{name};
@@ -227,17 +212,18 @@ command_bind 'matterircd_complete_msgthreadid_cache_dump' => sub {
     }
     Irssi::print("${channel}: Total: " . scalar @{$MSGTHREADID_CACHE{$channel}});
 };
+Irssi::command_bind('matterircd_complete_msgthreadid_cache_dump', 'cmd_matterircd_complete_msgthreadid_cache_dump');
 
 my $MSGTHREADID_CACHE_SEARCH_ENABLED = 0;
 my $MSGTHREADID_CACHE_INDEX = 0;
-command_bind 'message_thread_id_search' => sub {
+sub cmd_message_thread_id_search {
     my ($data, $server, $wi) = @_;
 
-    return unless settings_get_int('matterircd_complete_message_thread_id_cache_size');
+    return unless Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
     return unless ref $wi and ($wi->{type} eq 'CHANNEL' or $wi->{type} eq 'QUERY');
     return unless exists($MSGTHREADID_CACHE{$wi->{name}});
 
-    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
+    my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
     $MSGTHREADID_CACHE_SEARCH_ENABLED = 1;
@@ -250,24 +236,25 @@ command_bind 'message_thread_id_search' => sub {
 
     if ($msgthreadid) {
         # Save input text.
-        my $input = parse_special('$L');
+        my $input = Irssi::parse_special('$L');
         # Remove existing thread.
         $input =~ s/^@@(?:[0-9a-z]{26}|[0-9a-f]{3}) //;
         # Insert message/thread ID from cache.
-        gui_input_set_pos(0);
-        gui_input_set("\@\@${msgthreadid} ${input}");
+        Irssi::gui_input_set_pos(0);
+        Irssi::gui_input_set("\@\@${msgthreadid} ${input}");
     }
 };
+Irssi::command_bind('message_thread_id_search', 'cmd_message_thread_id_search');
 
 my $ESC_PRESSED = 0;
 my $O_PRESSED   = 0;
-signal_add_last 'gui key pressed' => sub {
+sub signal_gui_key_pressed_msgthreadid {
     my ($key) = @_;
 
     return unless $MSGTHREADID_CACHE_SEARCH_ENABLED;
 
     my $server = Irssi::active_server();
-    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
+    my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
     if (($key == $KEY_RET) || ($key == $KEY_CTRL_U)) {
@@ -280,14 +267,14 @@ signal_add_last 'gui key pressed' => sub {
 
     # Cancel/abort, so remove thread stuff.
     elsif ($key == $KEY_CTRL_C) {
-        my $input = parse_special('$L');
+        my $input = Irssi::parse_special('$L');
 
         # Remove the Ctrl+C character.
         $input =~ tr///d;
 
         my $pos = 0;
         if ($input =~ s/^(@@(?:[0-9a-z]{26}|[0-9a-f]{3}) )//) {
-            $pos = gui_input_get_pos() - length($1);
+            $pos = Irssi::gui_input_get_pos() - length($1);
         }
 
         # We also want to move the input position back one for Ctrl+C
@@ -297,8 +284,8 @@ signal_add_last 'gui key pressed' => sub {
         # Replace the text in the input box with our modified version,
         # then move cursor positon to where it was without the
         # message/thread ID.
-        gui_input_set($input);
-        gui_input_set_pos($pos);
+        Irssi::gui_input_set($input);
+        Irssi::gui_input_set_pos($pos);
 
         $MSGTHREADID_CACHE_INDEX = 0;
         $MSGTHREADID_CACHE_SEARCH_ENABLED = 0;
@@ -327,19 +314,20 @@ signal_add_last 'gui key pressed' => sub {
         $O_PRESSED = 0;
     }
 };
+Irssi::signal_add_last('gui key pressed', 'signal_gui_key_pressed_msgthreadid');
 
-signal_add_last 'complete word' => sub {
+sub signal_complete_word_msgthread_id {
     my ($complist, $window, $word, $linestart, $want_space) = @_;
 
     # We only want to tab-complete message/thread if this is the first
     # word on the line.
     return if $linestart;
-    return unless settings_get_int('matterircd_complete_message_thread_id_cache_size');
+    return unless Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
     return if (substr($word, 0, 1) eq '@' and substr($word, 0, 2) ne '@@');
     return unless $window->{active} and ($window->{active}->{type} eq 'CHANNEL' || $window->{active}->{type} eq 'QUERY');
     return unless exists($MSGTHREADID_CACHE{$window->{active}->{name}});
 
-    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
+    my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$window->{active_server}->{chatnet}};
 
     if (substr($word, 0, 2) eq '@@') {
@@ -352,21 +340,22 @@ signal_add_last 'complete word' => sub {
         }
     }
 };
+Irssi::signal_add_last('complete word', 'signal_complete_word_msgthread_id');
 
 sub cache_msgthreadid {
     my($server, $msg, $nick, $address, $target) = @_;
 
-    return unless settings_get_int('matterircd_complete_message_thread_id_cache_size');
-    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
+    return unless Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
+    my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
     my @msgids = ();
 
-    my @ignore_nicks = split(/\s+/, settings_get_str('matterircd_complete_nick_ignore'));
+    my @ignore_nicks = split(/\s+/, Irssi::settings_get_str('matterircd_complete_nick_ignore'));
     # Ignore nicks configured to be ignored such as bots.
     if ($nick ~~ @ignore_nicks) {
         # But not if the channel is in matterircd_complete_channel_dont_ignore.
-        my @channel_dont_ignore = split(/\s+/, settings_get_str('matterircd_complete_channel_dont_ignore'));
+        my @channel_dont_ignore = split(/\s+/, Irssi::settings_get_str('matterircd_complete_channel_dont_ignore'));
         if ($target !~ @channel_dont_ignore) {
             return;
         }
@@ -409,25 +398,25 @@ sub cache_msgthreadid {
         $key = $nick
     }
 
-    my $cache_size = settings_get_int('matterircd_complete_message_thread_id_cache_size');
+    my $cache_size = Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
     for my $msgid (@msgids) {
         if (cache_store(\@{$MSGTHREADID_CACHE{$key}}, $msgid, $cache_size)) {
             $MSGTHREADID_CACHE_INDEX = 0;
         }
     }
 }
-signal_add('message irc action', 'cache_msgthreadid');
-signal_add('message irc notice', 'cache_msgthreadid');
-signal_add('message private', 'cache_msgthreadid');
-signal_add('message public', 'cache_msgthreadid');
+Irssi::signal_add('message irc action', 'cache_msgthreadid');
+Irssi::signal_add('message irc notice', 'cache_msgthreadid');
+Irssi::signal_add('message private', 'cache_msgthreadid');
+Irssi::signal_add('message public', 'cache_msgthreadid');
 
-settings_add_bool('matterircd_complete', 'matterircd_complete_reply_msg_thread_id_at_start', 1);
+Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_reply_msg_thread_id_at_start', 1);
 
-signal_add_last 'message own_public' => sub {
+sub signal_message_own_public_msgthreadid {
     my($server, $msg, $target) = @_;
 
-    return unless settings_get_int('matterircd_complete_message_thread_id_cache_size');
-    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
+    return unless Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
+    my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
     if ($msg !~ /^@@((?:[0-9a-z]{26})|(?:[0-9a-f]{3}))/) {
@@ -435,14 +424,14 @@ signal_add_last 'message own_public' => sub {
     }
     my $msgid = $1;
 
-    my $cache_size = settings_get_int('matterircd_complete_message_thread_id_cache_size');
+    my $cache_size = Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
     if (cache_store(\@{$MSGTHREADID_CACHE{$target}}, $msgid, $cache_size)) {
         $MSGTHREADID_CACHE_INDEX = 0;
     }
 
     my $msgthreadid = $1;
 
-    my $len = settings_get_int('matterircd_complete_shorten_message_thread_id');
+    my $len = Irssi::settings_get_int('matterircd_complete_shorten_message_thread_id');
     if ($len < 25) {
         # Shorten to length configured. We use unicode ellipsis (...)
         # here to both allow word selection to just select parts of
@@ -451,22 +440,23 @@ signal_add_last 'message own_public' => sub {
         $msgthreadid = substr($msgid, 0, $len) . "…";
     }
 
-    my $thread_color = settings_get_int('matterircd_complete_reply_msg_thread_id_color');
-    if (settings_get_bool('matterircd_complete_reply_msg_thread_id_at_start')) {
+    my $thread_color = Irssi::settings_get_int('matterircd_complete_reply_msg_thread_id_color');
+    if (Irssi::settings_get_bool('matterircd_complete_reply_msg_thread_id_at_start')) {
         $msg =~ s/^@@[0-9a-z]{26} /\x03${thread_color}[↪${msgthreadid}]\x0f /;
     } else {
         $msg =~ s/^@@[0-9a-z]{26} //;
         $msg =~ s/$/ \x03${thread_color}[↪${msgthreadid}]\x0f/;
     }
 
-    signal_continue($server, $msg, $target);
+    Irssi::signal_continue($server, $msg, $target);
 };
+Irssi::signal_add_last('message own_public', 'signal_message_own_public_msgthreadid');
 
-signal_add_last 'message own_private' => sub {
+sub signal_message_own_private {
     my($server, $msg, $target, $orig_target) = @_;
 
-    return unless settings_get_int('matterircd_complete_message_thread_id_cache_size');
-    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
+    return unless Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
+    my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
     if ($msg !~ /^@@((?:[0-9a-z]{26})|(?:[0-9a-f]{3}))/) {
@@ -474,14 +464,14 @@ signal_add_last 'message own_private' => sub {
     }
     my $msgid = $1;
 
-    my $cache_size = settings_get_int('matterircd_complete_message_thread_id_cache_size');
+    my $cache_size = Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
     if (cache_store(\@{$MSGTHREADID_CACHE{$target}}, $msgid, $cache_size)) {
         $MSGTHREADID_CACHE_INDEX = 0;
     }
 
     my $msgthreadid = $1;
 
-    my $len = settings_get_int('matterircd_complete_shorten_message_thread_id');
+    my $len = Irssi::settings_get_int('matterircd_complete_shorten_message_thread_id');
     if ($len < 25) {
         # Shorten to length configured. We use unicode ellipsis (...)
         # here to both allow word selection to just select parts of
@@ -490,16 +480,17 @@ signal_add_last 'message own_private' => sub {
         $msgthreadid = substr($msgid, 0, $len) . "…";
     }
 
-    my $thread_color = settings_get_int('matterircd_complete_reply_msg_thread_id_color');
-    if (settings_get_bool('matterircd_complete_reply_msg_thread_id_at_start')) {
+    my $thread_color = Irssi::settings_get_int('matterircd_complete_reply_msg_thread_id_color');
+    if (Irssi::settings_get_bool('matterircd_complete_reply_msg_thread_id_at_start')) {
         $msg =~ s/^@@[0-9a-z]{26} /\x03${thread_color}[↪${msgthreadid}]\x0f /;
     } else {
         $msg =~ s/^@@[0-9a-z]{26} //;
         $msg =~ s/$/ \x03${thread_color}[↪${msgthreadid}]\x0f/;
     }
 
-    signal_continue($server, $msg, $target, $orig_target);
+    Irssi::signal_continue($server, $msg, $target, $orig_target);
 };
+Irssi::signal_add_last('message own_private', 'signal_message_own_private');
 
 
 #==============================================================================
@@ -510,15 +501,15 @@ signal_add_last 'message own_private' => sub {
 
 
 my %NICKNAMES_CACHE;
-settings_add_int('matterircd_complete', 'matterircd_complete_nick_cache_size', 20);
-command_bind 'matterircd_complete_nick_cache_dump' => sub {
+Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_nick_cache_size', 20);
+sub cmd_matterircd_complete_nick_cache_dump {
     my ($data, $server, $wi) = @_;
 
     if (not $data) {
         return unless ref $wi and $wi->{type} eq 'CHANNEL';
     }
 
-    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
+    my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
     my $channel = $data ? $data : $wi->{name};
@@ -537,22 +528,23 @@ command_bind 'matterircd_complete_nick_cache_dump' => sub {
     }
     Irssi::print("${channel}: Total: " . scalar @{$NICKNAMES_CACHE{$channel}});
 };
+Irssi::command_bind('matterircd_complete_nick_cache_dump', 'cmd_matterircd_complete_nick_cache_dump');
 
-signal_add 'complete word' => sub {
+sub signal_complete_word_nicks {
     my ($complist, $window, $word, $linestart, $want_space) = @_;
 
     return if substr($word, 0, 2) eq '@@';
     return unless $window->{active} and $window->{active}->{type} eq 'CHANNEL';
 
-    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
+    my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$window->{active_server}->{chatnet}};
 
     if (substr($word, 0, 1) eq '@') {
         $word = substr($word, 1);
     }
-    my $compl_char = settings_get_str('completion_char');
+    my $compl_char = Irssi::settings_get_str('completion_char');
     my $own_nick = $window->{active}->{ownnick}->{nick};
-    my @ignore_nicks = split(/\s+/, settings_get_str('matterircd_complete_nick_ignore'));
+    my @ignore_nicks = split(/\s+/, Irssi::settings_get_str('matterircd_complete_nick_ignore'));
 
     # We need to store the results in a temporary array so we can
     # sort.
@@ -612,30 +604,31 @@ signal_add 'complete word' => sub {
         }
     }
 };
+Irssi::signal_add('complete word', 'signal_complete_word_nicks');
 
 sub cache_ircnick {
     my($server, $msg, $nick, $address, $target) = @_;
 
-    return unless settings_get_int('matterircd_complete_nick_cache_size');
-    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
+    return unless Irssi::settings_get_int('matterircd_complete_nick_cache_size');
+    my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
-    my $cache_size = settings_get_int('matterircd_complete_nick_cache_size');
-    my @ignore_nicks = split(/\s+/, settings_get_str('matterircd_complete_nick_ignore'));
+    my $cache_size = Irssi::settings_get_int('matterircd_complete_nick_cache_size');
+    my @ignore_nicks = split(/\s+/, Irssi::settings_get_str('matterircd_complete_nick_ignore'));
     # Ignore nicks configured to be ignored such as bots.
     if ($nick !~ @ignore_nicks) {
         cache_store(\@{$NICKNAMES_CACHE{$target}}, $nick, $cache_size);
     }
 }
-signal_add('message irc action', 'cache_ircnick');
-signal_add('message irc notice', 'cache_ircnick');
-signal_add('message public', 'cache_ircnick');
+Irssi::signal_add('message irc action', 'cache_ircnick');
+Irssi::signal_add('message irc notice', 'cache_ircnick');
+Irssi::signal_add('message public', 'cache_ircnick');
 
-signal_add_last 'message own_public' => sub {
+sub signal_message_own_public_nicks {
     my($server, $msg, $target) = @_;
 
-    return unless settings_get_int('matterircd_complete_nick_cache_size');
-    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
+    return unless Irssi::settings_get_int('matterircd_complete_nick_cache_size');
+    my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
     if ($msg !~ /^@([^@ \t:,\)]+)/) {
@@ -643,7 +636,7 @@ signal_add_last 'message own_public' => sub {
     }
     my $nick = $1;
 
-    my $cache_size = settings_get_int('matterircd_complete_nick_cache_size');
+    my $cache_size = Irssi::settings_get_int('matterircd_complete_nick_cache_size');
     # We want to make sure that the nick or user is still online and
     # in the channel.
     my $wi = Irssi::active_win()->{active};
@@ -657,20 +650,21 @@ signal_add_last 'message own_public' => sub {
         }
     }
 };
+Irssi::signal_add_last('message own_public', 'signal_message_own_public_nicks');
 
 my @NICKNAMES_CACHE_SEARCH;
 my $NICKNAMES_CACHE_SEARCH_ENABLED = 0;
 my $NICKNAMES_CACHE_INDEX = 0;
-command_bind 'nicknames_search' => sub {
+sub cmd_nicknames_search {
     my ($data, $server, $wi) = @_;
 
     return unless ref $wi and $wi->{type} eq 'CHANNEL';
 
-    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
+    my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
     my $own_nick = $wi->{ownnick}->{nick};
-    my @ignore_nicks = split(/\s+/, settings_get_str('matterircd_complete_nick_ignore'));
+    my @ignore_nicks = split(/\s+/, Irssi::settings_get_str('matterircd_complete_nick_ignore'));
 
     @NICKNAMES_CACHE_SEARCH = ();
     foreach my $cur ($wi->nicks()) {
@@ -716,26 +710,27 @@ command_bind 'nicknames_search' => sub {
 
     if ($nickname) {
         # Save input text.
-        my $input = parse_special('$L');
-        my $compl_char = settings_get_str('completion_char');
+        my $input = Irssi::parse_special('$L');
+        my $compl_char = Irssi::settings_get_str('completion_char');
         # Remove any existing nickname and insert one from the cache.
         my $msgid = "";
         if ($input =~ s/^(\@\@(?:[0-9a-z]{26}|[0-9a-f]{3}) )//) {
             $msgid = $1;
         }
         $input =~ s/^\@[^${compl_char}]+$compl_char //;
-        gui_input_set_pos(0);
-        gui_input_set("${msgid}\@${nickname}${compl_char} ${input}");
+        Irssi::gui_input_set_pos(0);
+        Irssi::gui_input_set("${msgid}\@${nickname}${compl_char} ${input}");
     }
 };
+Irssi::command_bind('nicknames_search', 'cmd_nicknames_search');
 
-signal_add_last 'gui key pressed' => sub {
+sub signal_gui_key_pressed_nicks {
     my ($key) = @_;
 
     return unless $NICKNAMES_CACHE_SEARCH_ENABLED;
 
     my $server = Irssi::active_server();
-    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
+    my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
     if (($key == $KEY_RET) || ($key == $KEY_CTRL_U)) {
@@ -746,15 +741,15 @@ signal_add_last 'gui key pressed' => sub {
 
     # Cancel/abort, so remove current nickname.
     elsif ($key == $KEY_CTRL_C) {
-        my $input = parse_special('$L');
+        my $input = Irssi::parse_special('$L');
 
         # Remove the Ctrl+C character.
         $input =~ tr///d;
 
-        my $compl_char = settings_get_str('completion_char');
+        my $compl_char = Irssi::settings_get_str('completion_char');
         my $pos = 0;
         if ($input =~ s/^(\@[^${compl_char}]+$compl_char )//) {
-            $pos = gui_input_get_pos() - length($1);
+            $pos = Irssi::gui_input_get_pos() - length($1);
         }
 
         # We also want to move the input position back one for Ctrl+C
@@ -764,14 +759,15 @@ signal_add_last 'gui key pressed' => sub {
         # Replace the text in the input box with our modified version,
         # then move cursor positon to where it was without the
         # current nickname.
-        gui_input_set($input);
-        gui_input_set_pos($pos);
+        Irssi::gui_input_set($input);
+        Irssi::gui_input_set_pos($pos);
 
         $NICKNAMES_CACHE_INDEX = 0;
         $NICKNAMES_CACHE_SEARCH_ENABLED = 0;
         @NICKNAMES_CACHE_SEARCH = ();
     }
 };
+Irssi::signal_add_last('gui key pressed', 'signal_gui_key_pressed_nicks');
 
 
 #==============================================================================
@@ -782,15 +778,15 @@ signal_add_last 'gui key pressed' => sub {
 
 
 my %REPLIED_CACHE;
-settings_add_int('matterircd_complete', 'matterircd_complete_replied_cache_size', 50);
-command_bind 'matterircd_complete_replied_cache_dump' => sub {
+Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_replied_cache_size', 50);
+sub cmd_matterircd_complete_replied_cache_dump {
     my ($data, $server, $wi) = @_;
 
     if (not $data) {
         return unless ref $wi and $wi->{type} eq 'CHANNEL';
     }
 
-    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
+    my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
     my $channel = $data ? $data : $wi->{name};
@@ -809,18 +805,20 @@ command_bind 'matterircd_complete_replied_cache_dump' => sub {
     }
     Irssi::print("${channel}: Total: " . scalar @{$REPLIED_CACHE{$channel}});
 };
+Irssi::command_bind('matterircd_complete_replied_cache_dump', 'cmd_matterircd_complete_replied_cache_dump');
 
-command_bind 'matterircd_complete_replied_cache_clear' => sub {
+sub cmd_matterircd_complete_replied_cache_clear {
     %REPLIED_CACHE = ();
     Irssi::print("matterircd_complete replied cache cleared");
 };
+Irssi::command_bind('matterircd_complete_replied_cache_clear', 'cmd_cmd_matterircd_complete_replied_cache_clear');
 
 my $REPLIED_CACHE_CLEARED = 0;
-settings_add_bool('matterircd_complete', 'matterircd_complete_clear_replied_cache_on_away', 0);
-signal_add 'away mode changed' => sub {
+Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_clear_replied_cache_on_away', 0);
+sub signal_away_mode_changed {
     my ($server) = @_;
 
-    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
+    my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
     # When you visit the web UI when marked away, it retriggers this
@@ -829,18 +827,19 @@ signal_add 'away mode changed' => sub {
         $REPLIED_CACHE_CLEARED = 0;
     }
 
-    if (settings_get_bool('matterircd_complete_clear_replied_cache_on_away') && $server->{usermode_away} && (! $REPLIED_CACHE_CLEARED)) {
+    if (Irssi::settings_get_bool('matterircd_complete_clear_replied_cache_on_away') && $server->{usermode_away} && (! $REPLIED_CACHE_CLEARED)) {
         %REPLIED_CACHE = ();
         $REPLIED_CACHE_CLEARED = 1;
         Irssi::print("matterircd_complete replied cache cleared");
     }
 };
+Irssi::signal_add('away mode changed', 'signal_away_mode_changed');
 
-signal_add 'message own_public' => sub {
+sub signal_message_own_public_replied {
     my($server, $msg, $target) = @_;
 
-    return unless settings_get_int('matterircd_complete_replied_cache_size');
-    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
+    return unless Irssi::settings_get_int('matterircd_complete_replied_cache_size');
+    my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
     if ($msg !~ /^@@((?:[0-9a-z]{26})|(?:[0-9a-f]{3}))/) {
@@ -848,15 +847,16 @@ signal_add 'message own_public' => sub {
     }
     my $msgid = $1;
 
-    my $cache_size = settings_get_int('matterircd_complete_replied_cache_size');
+    my $cache_size = Irssi::settings_get_int('matterircd_complete_replied_cache_size');
     cache_store(\@{$REPLIED_CACHE{$target}}, $msgid, $cache_size);
 };
+Irssi::signal_add('message own_public', 'signal_message_own_public_replied');
 
-signal_add 'message public' => sub {
+sub signal_message_public {
     my($server, $msg, $nick, $address, $target) = @_;
 
-    return unless settings_get_int('matterircd_complete_replied_cache_size');
-    my %chatnets = map { $_ => 1 } split(/\s+/, settings_get_str('matterircd_complete_networks'));
+    return unless Irssi::settings_get_int('matterircd_complete_replied_cache_size');
+    my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
     # For '/me' actions, it has trailing space so we need to use
@@ -873,5 +873,6 @@ signal_add 'message public' => sub {
         }
     }
 
-    signal_continue($server, $msg, $nick, $address, $target);
+    Irssi::signal_continue($server, $msg, $nick, $address, $target);
 };
+Irssi::signal_add('message public', 'signal_message_public');
