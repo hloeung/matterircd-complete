@@ -106,6 +106,7 @@ settings_add_int('matterircd_complete', 'matterircd_complete_reply_msg_thread_id
 # to save on screen real-estate.
 settings_add_int('matterircd_complete',  'matterircd_complete_shorten_message_thread_id', 5);
 settings_add_bool('matterircd_complete', 'matterircd_complete_shorten_message_thread_id_hide_prefix', 1);
+settings_add_str('matterircd_complete', 'matterircd_complete_override_reply_prefix', '↪');
 sub update_msgthreadid {
     my($server, $msg, $nick, $address, $target) = @_;
 
@@ -115,9 +116,10 @@ sub update_msgthreadid {
 
     my $prefix = '';
     my $msgthreadid = '';
+    my $reply_prefix = settings_get_str('matterircd_complete_override_reply_prefix');
 
     if ($msg =~ s/\[(->|↪)?\@\@([0-9a-z]{26})\]/\@\@PLACEHOLDER\@\@/) {
-        $prefix = $1 ? $1 : '';
+        $prefix = $reply_prefix ? $reply_prefix : $1 if $1;
         $msgthreadid = $2;
     }
     return unless $msgthreadid;
@@ -125,7 +127,7 @@ sub update_msgthreadid {
     # Show that message is reply to a thread. (backwards compatibility
     # when matterircd doesn't show reply)
     if ((not $prefix) && ($msg =~ /\(re \@.*\)/)) {
-        $prefix = '↪';
+        $prefix = $reply_prefix;
     }
 
     if (not settings_get_bool('matterircd_complete_shorten_message_thread_id_hide_prefix')) {
@@ -429,12 +431,13 @@ signal_add_last 'message own_public' => sub {
         $msgthreadid = substr($msgid, 0, $len) . "…";
     }
 
+    my $reply_prefix = settings_get_str('matterircd_complete_override_reply_prefix');
     my $thread_color = settings_get_int('matterircd_complete_reply_msg_thread_id_color');
     if (settings_get_bool('matterircd_complete_reply_msg_thread_id_at_start')) {
-        $msg =~ s/^@@[0-9a-z]{26} /\x03${thread_color}[↪${msgthreadid}]\x0f /;
+        $msg =~ s/^@@[0-9a-z]{26} /\x03${thread_color}[${reply_prefix}${msgthreadid}]\x0f /;
     } else {
         $msg =~ s/^@@[0-9a-z]{26} //;
-        $msg =~ s/$/ \x03${thread_color}[↪${msgthreadid}]\x0f/;
+        $msg =~ s/$/ \x03${thread_color}[${reply_prefix}${msgthreadid}]\x0f/;
     }
 
     signal_continue($server, $msg, $target);
@@ -469,11 +472,12 @@ signal_add_last 'message own_private' => sub {
     }
 
     my $thread_color = settings_get_int('matterircd_complete_reply_msg_thread_id_color');
+    my $reply_prefix = settings_get_str('matterircd_complete_override_reply_prefix');
     if (settings_get_bool('matterircd_complete_reply_msg_thread_id_at_start')) {
-        $msg =~ s/^@@[0-9a-z]{26} /\x03${thread_color}[↪${msgthreadid}]\x0f /;
+        $msg =~ s/^@@[0-9a-z]{26} /\x03${thread_color}[${reply_prefix}${msgthreadid}]\x0f /;
     } else {
         $msg =~ s/^@@[0-9a-z]{26} //;
-        $msg =~ s/$/ \x03${thread_color}[↪${msgthreadid}]\x0f/;
+        $msg =~ s/$/ \x03${thread_color}[${reply_prefix}${msgthreadid}]\x0f/;
     }
 
     signal_continue($server, $msg, $target, $orig_target);
