@@ -94,7 +94,7 @@ Irssi::settings_add_int('matterircd_complete',  'matterircd_complete_shorten_mes
 Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_shorten_message_thread_id_hide_prefix', 1);
 Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_override_reply_prefix', '↪');
 
-# Use X chars when generating thread colours.
+# Use X chars when generating thread colors.
 Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_reply_msg_thread_id_color_len', 10);
 sub thread_color {
     my ($str) = @_;
@@ -111,7 +111,8 @@ sub thread_color {
             last;
         }
     }
-    $n = $n % 14 + 2;
+    # 256-colors (really the 6*6*6 / 216 colors minus the black 16 and white 231).
+    $n = $n % 213 + 17;
     return $n;
 }
 
