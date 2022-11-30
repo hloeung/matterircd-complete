@@ -94,14 +94,22 @@ Irssi::settings_add_int('matterircd_complete',  'matterircd_complete_shorten_mes
 Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_shorten_message_thread_id_hide_prefix', 1);
 Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_override_reply_prefix', '↪');
 
+# Use X chars when generating thread colours.
+Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_reply_msg_thread_id_color_len', 10);
 sub thread_color {
     my ($str) = @_;
     my @nums = (0..9,'a'..'z','A'..'Z');
     my $chr=join('',@nums);
     my %nums = map { $nums[$_] => $_ } 0..$#nums;
     my $n = 0;
+    my $col_len = Irssi::settings_get_int('matterircd_complete_reply_msg_thread_id_color_len');
+    my $i = 0;
     foreach ($str =~ /[$chr]/g) {
         $n += $nums{$_} * 36;
+        $i += 1;
+        if ($i >= $col_len) {
+            last;
+        }
     }
     $n = $n % 14 + 2;
     return $n;
