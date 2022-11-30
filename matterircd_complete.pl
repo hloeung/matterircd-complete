@@ -92,6 +92,21 @@ Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_reply_msg_th
 # to save on screen real-estate.
 Irssi::settings_add_int('matterircd_complete',  'matterircd_complete_shorten_message_thread_id', 5);
 Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_shorten_message_thread_id_hide_prefix', 1);
+Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_override_reply_prefix', '↪');
+
+sub thread_color {
+    my ($str) = @_;
+    my @nums = (0..9,'a'..'z','A'..'Z');
+    my $chr=join('',@nums);
+    my %nums = map { $nums[$_] => $_ } 0..$#nums;
+    my $n = 0;
+    foreach ($str =~ /[$chr]/g) {
+        $n += $nums{$_} * 36;
+    }
+    $n = $n % 14 + 2;
+    return $n;
+}
+
 sub update_msgthreadid {
     my($server, $msg, $nick, $address, $target) = @_;
 
@@ -102,9 +117,10 @@ sub update_msgthreadid {
     my $prefix = '';
     my $msgthreadid = '';
     my $msgpostid = '';
+    my $reply_prefix = Irssi::settings_get_str('matterircd_complete_override_reply_prefix');
 
     if ($msg =~ s/\[(->|↪)?\@\@([0-9a-z]{26})(?:,\@\@([0-9a-z]{26}))?\]/\@\@PLACEHOLDER\@\@/) {
-        $prefix = $1 ? $1 : '';
+        $prefix = $reply_prefix ? $reply_prefix : $1 if $1;
         $msgthreadid = $2;
         $msgpostid = $3 ? $3 : '';
     }
@@ -113,7 +129,7 @@ sub update_msgthreadid {
     # Show that message is reply to a thread. (backwards compatibility
     # when matterircd doesn't show reply)
     if ((not $prefix) && ($msg =~ /\(re \@.*\)/)) {
-        $prefix = '↪';
+        $prefix = $reply_prefix;
     }
 
     if (not Irssi::settings_get_bool('matterircd_complete_shorten_message_thread_id_hide_prefix')) {
@@ -132,6 +148,9 @@ sub update_msgthreadid {
         }
     }
     my $thread_color = Irssi::settings_get_int('matterircd_complete_reply_msg_thread_id_color');
+    if ($thread_color == -1) {
+        $thread_color = thread_color($msgthreadid);
+    }
     if ($msgpostid eq '') {
         $msg =~ s/\@\@PLACEHOLDER\@\@/\x03${thread_color}[${prefix}${msgthreadid}]\x0f/;
     } else {
@@ -440,12 +459,16 @@ sub signal_message_own_public_msgthreadid {
         $msgthreadid = substr($msgid, 0, $len) . "…";
     }
 
+    my $reply_prefix = Irssi::settings_get_str('matterircd_complete_override_reply_prefix');
     my $thread_color = Irssi::settings_get_int('matterircd_complete_reply_msg_thread_id_color');
+    if ($thread_color == -1) {
+        $thread_color = thread_color($msgthreadid);
+    }
     if (Irssi::settings_get_bool('matterircd_complete_reply_msg_thread_id_at_start')) {
-        $msg =~ s/^@@[0-9a-z]{26} /\x03${thread_color}[↪${msgthreadid}]\x0f /;
+        $msg =~ s/^@@[0-9a-z]{26} /\x03${thread_color}[${reply_prefix}${msgthreadid}]\x0f /;
     } else {
         $msg =~ s/^@@[0-9a-z]{26} //;
-        $msg =~ s/$/ \x03${thread_color}[↪${msgthreadid}]\x0f/;
+        $msg =~ s/$/ \x03${thread_color}[${reply_prefix}${msgthreadid}]\x0f/;
     }
 
     Irssi::signal_continue($server, $msg, $target);
@@ -481,11 +504,12 @@ sub signal_message_own_private {
     }
 
     my $thread_color = Irssi::settings_get_int('matterircd_complete_reply_msg_thread_id_color');
+    my $reply_prefix = Irssi::settings_get_str('matterircd_complete_override_reply_prefix');
     if (Irssi::settings_get_bool('matterircd_complete_reply_msg_thread_id_at_start')) {
-        $msg =~ s/^@@[0-9a-z]{26} /\x03${thread_color}[↪${msgthreadid}]\x0f /;
+        $msg =~ s/^@@[0-9a-z]{26} /\x03${thread_color}[${reply_prefix}${msgthreadid}]\x0f /;
     } else {
         $msg =~ s/^@@[0-9a-z]{26} //;
-        $msg =~ s/$/ \x03${thread_color}[↪${msgthreadid}]\x0f/;
+        $msg =~ s/$/ \x03${thread_color}[${reply_prefix}${msgthreadid}]\x0f/;
     }
 
     Irssi::signal_continue($server, $msg, $target, $orig_target);
