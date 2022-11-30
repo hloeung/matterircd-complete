@@ -107,6 +107,20 @@ settings_add_int('matterircd_complete', 'matterircd_complete_reply_msg_thread_id
 settings_add_int('matterircd_complete',  'matterircd_complete_shorten_message_thread_id', 5);
 settings_add_bool('matterircd_complete', 'matterircd_complete_shorten_message_thread_id_hide_prefix', 1);
 settings_add_str('matterircd_complete', 'matterircd_complete_override_reply_prefix', '↪');
+
+sub thread_color {
+    my ($str) = @_;
+    my @nums = (0..9,'a'..'z','A'..'Z');
+    my $chr=join('',@nums);
+    my %nums = map { $nums[$_] => $_ } 0..$#nums;
+    my $n = 0;
+    foreach ($str =~ /[$chr]/g) {
+        $n += $nums{$_} * 36;
+    }
+    $n = $n % 14 + 2;
+    return $n;
+}
+
 sub update_msgthreadid {
     my($server, $msg, $nick, $address, $target) = @_;
 
@@ -143,6 +157,9 @@ sub update_msgthreadid {
         $msgthreadid = substr($msgthreadid, 0, $len) . '…';
     }
     my $thread_color = settings_get_int('matterircd_complete_reply_msg_thread_id_color');
+    if ($thread_color == -1) {
+        $thread_color = thread_color($msgthreadid);
+    }
     $msg =~ s/\@\@PLACEHOLDER\@\@/\x03${thread_color}[${prefix}${msgthreadid}]\x0f/;
 
     signal_continue($server, $msg, $nick, $address, $target);
@@ -433,6 +450,9 @@ signal_add_last 'message own_public' => sub {
 
     my $reply_prefix = settings_get_str('matterircd_complete_override_reply_prefix');
     my $thread_color = settings_get_int('matterircd_complete_reply_msg_thread_id_color');
+    if ($thread_color == -1) {
+        $thread_color = thread_color($msgthreadid);
+    }
     if (settings_get_bool('matterircd_complete_reply_msg_thread_id_at_start')) {
         $msg =~ s/^@@[0-9a-z]{26} /\x03${thread_color}[${reply_prefix}${msgthreadid}]\x0f /;
     } else {
