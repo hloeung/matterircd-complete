@@ -111,8 +111,8 @@ sub thread_color {
             last;
         }
     }
-    # 256-colors (really the 6*6*6 / 216 colors minus the black 16 and white 231).
-    $n = $n % 213 + 17;
+    # Use mIRC extended colors but from 2 - 87 only (no grayscale).
+    $n = $n % 86 + 2;
     return $n;
 }
 
