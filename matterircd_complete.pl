@@ -90,6 +90,7 @@ Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_reply_msg_th
 Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_reply_msg_thread_id_allow_bold', 0);
 Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_reply_msg_thread_id_allow_italic', 0);
 Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_reply_msg_thread_id_allow_underline', 0);
+# This can be a list of 20 30 40 50 5F colors, or without spaces 203040505F
 Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_reply_msg_thread_id_allowed_colors', '');
 
 # Rely on message/thread IDs stored in message cache so we can shorten
@@ -144,6 +145,8 @@ sub thread_color {
     my @colors;
     if ($allowed_colors =~ /^[0-9A-Z]{2}( [0-9A-Z]{2})*$/) {
         @colors = split(' ', $allowed_colors);
+    } elsif ($allowed_colors =~ /^[0-9A-Z]{2}([0-9A-Z]{2})*$/ and length($allowed_colors) % 2 eq 0) {
+        @colors = ( $allowed_colors =~ m/../g );
     } else {
         # Taken from nickcolor_expando irssi script
         @colors = (
