@@ -126,7 +126,7 @@ sub xcolor_to_irssi {
     }
 }
 
-sub thread_color {
+sub get_thread_format {
     my ($str) = @_;
     my @nums = (0..9,'a'..'z','A'..'Z');
     my $chr=join('',@nums);
@@ -191,13 +191,24 @@ sub thread_color {
         $n -= $color_count;
         $prepend = $classes_prepend[0];
     }
+    $n = $colors[$n-1];
+    return $n, $prepend;
+}
+
+sub thread_color {
+    my ($str) = @_;
+    my ($n, $prepend) = get_thread_format($str);
     # Pick the color in the allowed_color list.
     # n should be comprised between 1 and the array length.
-    my $n2 = $colors[$n];
-    $n = xcolor_to_irssi($colors[$n-1]);
+    $n = xcolor_to_irssi($n);
     $n = "$prepend\x03$n";
     return $n;
 }
+sub cmd_matterircd_complete_msgthreadid_get_color {
+    my ($color, $prepend) = get_thread_format($_[0]);
+    Irssi::print("Thread color for $_[0] is $color");
+}
+Irssi::command_bind('matterircd_complete_msgthreadid_get_color', 'cmd_matterircd_complete_msgthreadid_get_color');
 
 sub update_msgthreadid {
     my($server, $msg, $nick, $address, $target) = @_;
