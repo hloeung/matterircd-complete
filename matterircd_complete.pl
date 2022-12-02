@@ -555,6 +555,11 @@ sub signal_message_own_public_msgthreadid {
 
     my $msgthreadid = $1;
 
+    my $thread_color = Irssi::settings_get_int('matterircd_complete_reply_msg_thread_id_color');
+    if ($thread_color == -1) {
+        $thread_color = thread_color($msgthreadid);
+    }
+
     my $len = Irssi::settings_get_int('matterircd_complete_shorten_message_thread_id');
     if ($len < 25) {
         # Shorten to length configured. We use unicode ellipsis (...)
@@ -565,10 +570,6 @@ sub signal_message_own_public_msgthreadid {
     }
 
     my $reply_prefix = Irssi::settings_get_str('matterircd_complete_override_reply_prefix');
-    my $thread_color = Irssi::settings_get_int('matterircd_complete_reply_msg_thread_id_color');
-    if ($thread_color == -1) {
-        $thread_color = thread_color($msgthreadid);
-    }
     if (Irssi::settings_get_bool('matterircd_complete_reply_msg_thread_id_at_start')) {
         $msg =~ s/^@@[0-9a-z]{26} /${thread_color}[${reply_prefix}${msgthreadid}]\x0f /;
     } else {
@@ -599,6 +600,11 @@ sub signal_message_own_private {
 
     my $msgthreadid = $1;
 
+    my $thread_color = Irssi::settings_get_int('matterircd_complete_reply_msg_thread_id_color');
+    if ($thread_color == -1) {
+        $thread_color = thread_color($msgthreadid);
+    }
+
     my $len = Irssi::settings_get_int('matterircd_complete_shorten_message_thread_id');
     if ($len < 25) {
         # Shorten to length configured. We use unicode ellipsis (...)
@@ -608,10 +614,6 @@ sub signal_message_own_private {
         $msgthreadid = substr($msgid, 0, $len) . "…";
     }
 
-    my $thread_color = Irssi::settings_get_int('matterircd_complete_reply_msg_thread_id_color');
-    if ($thread_color == -1) {
-        $thread_color = thread_color($msgthreadid);
-    }
     my $reply_prefix = Irssi::settings_get_str('matterircd_complete_override_reply_prefix');
     if (Irssi::settings_get_bool('matterircd_complete_reply_msg_thread_id_at_start')) {
         $msg =~ s/^@@[0-9a-z]{26} /${thread_color}[${reply_prefix}${msgthreadid}]\x0f /;
