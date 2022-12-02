@@ -87,6 +87,7 @@ Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_channel_dont
 #==============================================================================
 
 Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_reply_msg_thread_id_color', 10);
+Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_reply_msg_thread_id_color_scheme', 'dark');
 Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_reply_msg_thread_id_allow_bold', 0);
 Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_reply_msg_thread_id_allow_italic', 0);
 Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_reply_msg_thread_id_allow_underline', 0);
@@ -148,6 +149,7 @@ sub get_thread_format {
     } elsif ($allowed_colors =~ /^[0-9A-Z]{2}([0-9A-Z]{2})*$/ and length($allowed_colors) % 2 eq 0) {
         @colors = ( $allowed_colors =~ m/../g );
     } else {
+        my $color_theme = Irssi::settings_get_str('matterircd_complete_reply_msg_thread_id_color_scheme');
         # Taken from nickcolor_expando irssi script
         @colors = (
             qw[20 30 40 50 04 66 0C 61 60 67 6L], # RED
@@ -158,14 +160,25 @@ sub get_thread_format {
             qw[1D 1J 1Q 1W 1X 2Y 2S 2R 3Y 3Z 3S 3R 2K 3K 4S 5Z 5Y 4R 3Q 2Q 2X 2W 3X 3W 2P 4Y], # GREEN-TURQUOIS
             qw[17 1E 1L 1K 1R 1S 03 1M 1N 1T 0B 1Y 1Z 2Z 4Z], # TURQUOIS
             qw[28 2E 18 1F 19 1G 1A 1B 1H 2N 2H 09 3H 3N 2T 3T 2M 2G 2A 2F 2L 3L 3F 4M 3M 3G 29 4T 5T], # LIGHT-BLUE
-            qw[11 12 23 25 24 13 14 01 15 2B 4N], # DARK-BLUE
             qw[22 33 44 0D 45 5B 6A 5A 5H 3B 4H 3A 4G 39 4F 6S 6T 5L 5N], # VIOLET
             qw[21 32 42 53 63 52 43 34 35 55 65 6B 4B 4A 48 5G 6H 5M 6M 6N], # PINK
             qw[38 31 05 64 54 41 51 62 69 68 59 5F 6F 58 49 6G], # ROSE
+        );
+        my @light = (
+            qw[11 12 23 25 24 13 14 01 15 2B 4N], # DARK-BLUE
             qw[7A 00 10 7B 7C 7D 7E 7G 7F], # DARK-GRAY
             qw[7H 7I 27 7K 7J 08 7L 3E 7O 7Q 7N 7M 7P], # GRAY
             qw[7S 7T 7R 4L 7W 7U 7V 5S 07 7X 6Z 0F], # LIGHT-GRAY
         );
+        my @dark = ();
+
+        if ($color_theme eq 'dark') {
+            @colors = (@colors, @dark);
+        } elsif ($color_theme eq 'light') {
+            @colors = (@colors, @light);
+        } else {
+            @colors = (@colors, @dark, @light);
+        }
     }
     my $color_count = @colors;
 
