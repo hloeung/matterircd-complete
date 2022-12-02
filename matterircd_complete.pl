@@ -607,6 +607,9 @@ sub signal_message_own_private {
     }
 
     my $thread_color = Irssi::settings_get_int('matterircd_complete_reply_msg_thread_id_color');
+    if ($thread_color == -1) {
+        $thread_color = thread_color($msgthreadid);
+    }
     my $reply_prefix = Irssi::settings_get_str('matterircd_complete_override_reply_prefix');
     if (Irssi::settings_get_bool('matterircd_complete_reply_msg_thread_id_at_start')) {
         $msg =~ s/^@@[0-9a-z]{26} /${thread_color}[${reply_prefix}${msgthreadid}]\x0f /;
