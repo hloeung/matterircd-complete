@@ -86,13 +86,15 @@ Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_channel_dont
 
 #==============================================================================
 
-Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_reply_msg_thread_id_color', 10);
-Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_reply_msg_thread_id_color_scheme', 'dark');
-Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_reply_msg_thread_id_allow_bold', 0);
-Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_reply_msg_thread_id_allow_italic', 0);
-Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_reply_msg_thread_id_allow_underline', 0);
-# This can be a list of 20 30 40 50 5F colors, or without spaces 203040505F
-Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_reply_msg_thread_id_allowed_colors', '');
+Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_thread_id_color', 10);
+# Default color theme to none, so we use all available colors.
+Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_thread_id_color_theme', '');
+Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_thread_id_allow_bold', 0);
+Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_thread_id_allow_italic', 0);
+Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_thread_id_allow_underline', 0);
+# Allowed colors will be applied first
+# These can be a list of 20 30 40 50 5F colors, or without spaces 203040505F
+Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_thread_id_allowed_colors', '');
 
 # Rely on message/thread IDs stored in message cache so we can shorten
 # to save on screen real-estate.
@@ -135,14 +137,14 @@ sub get_thread_format {
     foreach ($str =~ /[$chr]/g) {
         $n += $nums{$_} * 36;
     }
-    my $allowed_colors = Irssi::settings_get_str('matterircd_complete_reply_msg_thread_id_allowed_colors');
+    my $allowed_colors = Irssi::settings_get_str('matterircd_complete_thread_id_allowed_colors');
     my @colors;
     if ($allowed_colors =~ /^[0-9A-Z]{2}( [0-9A-Z]{2})*$/) {
         @colors = split(' ', $allowed_colors);
     } elsif ($allowed_colors =~ /^[0-9A-Z]{2}([0-9A-Z]{2})*$/ and length($allowed_colors) % 2 eq 0) {
         @colors = ( $allowed_colors =~ m/../g );
     } else {
-        my $color_theme = Irssi::settings_get_str('matterircd_complete_reply_msg_thread_id_color_scheme');
+        my $color_theme = Irssi::settings_get_str('matterircd_complete_thread_id_color_scheme');
         # Taken from nickcolor_expando irssi script
         @colors = (
             qw[20 30 40 50 04 66 0C 61 60 67 6L], # RED
@@ -176,9 +178,9 @@ sub get_thread_format {
     my $color_count = @colors;
 
     # We have normal, bold, italic, underline
-    my $allow_bold = Irssi::settings_get_bool('matterircd_complete_reply_msg_thread_id_allow_bold');
-    my $allow_italic = Irssi::settings_get_bool('matterircd_complete_reply_msg_thread_id_allow_italic');
-    my $allow_underline = Irssi::settings_get_bool('matterircd_complete_reply_msg_thread_id_allow_underline');
+    my $allow_bold = Irssi::settings_get_bool('matterircd_complete_thread_id_allow_bold');
+    my $allow_italic = Irssi::settings_get_bool('matterircd_complete_thread_id_allow_italic');
+    my $allow_underline = Irssi::settings_get_bool('matterircd_complete_thread_id_allow_underline');
     my @classes_prepend;
     push @classes_prepend, "\x02" if $allow_bold;
     push @classes_prepend, "\x1d" if $allow_italic;
@@ -210,12 +212,12 @@ sub thread_color {
     $n = "$prepend\x03$n";
     return $n;
 }
-sub cmd_matterircd_complete_msgthreadid_get_color {
+sub cmd_matterircd_complete_thread_id_get_color {
     my ($color, $prepend) = get_thread_format($_[0]);
     my $n = xcolor_to_irssi($color);
     Irssi::print("Thread color for $prepend\x03$n$_[0]\x0f is $color");
 }
-Irssi::command_bind('matterircd_complete_msgthreadid_get_color', 'cmd_matterircd_complete_msgthreadid_get_color');
+Irssi::command_bind('matterircd_complete_thread_id_get_color', 'cmd_matterircd_complete_thread_id_get_color');
 
 sub update_msgthreadid {
     my($server, $msg, $nick, $address, $target) = @_;
@@ -236,7 +238,7 @@ sub update_msgthreadid {
     }
     return unless $msgthreadid;
 
-    my $thread_color = Irssi::settings_get_int('matterircd_complete_reply_msg_thread_id_color');
+    my $thread_color = Irssi::settings_get_int('matterircd_complete_thread_id_color');
     if ($thread_color == -1) {
         $thread_color = thread_color($msgthreadid);
     }
@@ -555,7 +557,7 @@ sub signal_message_own_public_msgthreadid {
 
     my $msgthreadid = $1;
 
-    my $thread_color = Irssi::settings_get_int('matterircd_complete_reply_msg_thread_id_color');
+    my $thread_color = Irssi::settings_get_int('matterircd_complete_thread_id_color');
     if ($thread_color == -1) {
         $thread_color = thread_color($msgthreadid);
     }
