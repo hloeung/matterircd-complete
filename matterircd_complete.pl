@@ -100,8 +100,6 @@ Irssi::settings_add_int('matterircd_complete',  'matterircd_complete_shorten_mes
 Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_shorten_message_thread_id_hide_prefix', 1);
 Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_override_reply_prefix', '↪');
 
-# Use X chars when generating thread colors.
-Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_reply_msg_thread_id_color_len', 10);
 # Taken from nickcolor_expando irssi script and adapted for our use
 sub xcolor_to_irssi {
     # Set to foreground xcolor
@@ -133,8 +131,6 @@ sub get_thread_format {
     my $chr=join('',@nums);
     my %nums = map { $nums[$_] => $_ } 0..$#nums;
     my $n = 0;
-    my $col_len = Irssi::settings_get_int('matterircd_complete_reply_msg_thread_id_color_len');
-    my $i = 0;
     $str = lc $str;
     foreach ($str =~ /[$chr]/g) {
         $n += $nums{$_} * 36;
@@ -240,6 +236,11 @@ sub update_msgthreadid {
     }
     return unless $msgthreadid;
 
+    my $thread_color = Irssi::settings_get_int('matterircd_complete_reply_msg_thread_id_color');
+    if ($thread_color == -1) {
+        $thread_color = thread_color($msgthreadid);
+    }
+
     # Show that message is reply to a thread. (backwards compatibility
     # when matterircd doesn't show reply)
     if ((not $prefix) && ($msg =~ /\(re \@.*\)/)) {
@@ -260,10 +261,6 @@ sub update_msgthreadid {
         if ($msgpostid ne '') {
             $msgpostid = substr($msgpostid, 0, $len) . '…';
         }
-    }
-    my $thread_color = Irssi::settings_get_int('matterircd_complete_reply_msg_thread_id_color');
-    if ($thread_color == -1) {
-        $thread_color = thread_color($msgthreadid);
     }
     if ($msgpostid eq '') {
         $msg =~ s/\@\@PLACEHOLDER\@\@/${thread_color}[${prefix}${msgthreadid}]\x0f/;
