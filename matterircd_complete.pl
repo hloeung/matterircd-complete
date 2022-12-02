@@ -129,18 +129,15 @@ sub xcolor_to_irssi {
 
 sub get_thread_format {
     my ($str) = @_;
-    my @nums = (0..9,'a'..'z','A'..'Z');
+    my @nums = (0..9,'a'..'z');
     my $chr=join('',@nums);
     my %nums = map { $nums[$_] => $_ } 0..$#nums;
     my $n = 0;
     my $col_len = Irssi::settings_get_int('matterircd_complete_reply_msg_thread_id_color_len');
     my $i = 0;
+    $str = lc $str;
     foreach ($str =~ /[$chr]/g) {
         $n += $nums{$_} * 36;
-        $i += 1;
-        if ($i >= $col_len) {
-            last;
-        }
     }
     my $allowed_colors = Irssi::settings_get_str('matterircd_complete_reply_msg_thread_id_allowed_colors');
     my @colors;
@@ -219,7 +216,8 @@ sub thread_color {
 }
 sub cmd_matterircd_complete_msgthreadid_get_color {
     my ($color, $prepend) = get_thread_format($_[0]);
-    Irssi::print("Thread color for $_[0] is $color");
+    my $n = xcolor_to_irssi($color);
+    Irssi::print("Thread color for $prepend\x03$n$_[0]\x0f is $color");
 }
 Irssi::command_bind('matterircd_complete_msgthreadid_get_color', 'cmd_matterircd_complete_msgthreadid_get_color');
 
