@@ -131,8 +131,10 @@ Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_thread_id_a
 # Allowed colors will be applied first
 # These can be a list of 20 30 40 50 5F colors, or without spaces 203040505F
 Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_thread_id_allowed_colors', '');
+Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_thread_id_unwanted_colors', '');
 $config{'color_theme'} = '';
 $config{'allowed_colors'} = '';
+$config{'unwanted_colors'} = '';
 # Initialize
 my @thread_id_selected_colors = ();
 
@@ -1017,6 +1019,23 @@ sub signal_message_public {
 };
 Irssi::signal_add('message public', 'signal_message_public');
 
+# Remove an array's elements per their values
+sub array_splice_values {
+    my ($ar_ref, $uw_ref) = @_;
+    my @array = @{$ar_ref};
+    my @unwanted = @{$uw_ref};
+    my %removals = map { $_ => 1 } @unwanted;
+    my @keys = keys %removals;
+    my @indices = grep { exists($removals{$array[$_]}) } 0..$#array;
+    # Each time we remove index from @arr, the next correct index to delete will be reduced of $o
+    my $o = 0;
+    for (@indices) {
+        splice(@array, $_-$o, 1);
+        $o++;
+    }
+    return @array;
+}
+
 sub setup_colors {
     glob %config;
     glob @thread_id_selected_colors;
@@ -1030,6 +1049,8 @@ sub setup_colors {
 
     my $allowed_colors = Irssi::settings_get_str('matterircd_complete_thread_id_allowed_colors');
     $allowed_colors = uc $allowed_colors;
+    my $unwanted_colors = Irssi::settings_get_str('matterircd_complete_thread_id_unwanted_colors');
+    $unwanted_colors = uc $unwanted_colors;
     my $color_theme = Irssi::settings_get_str('matterircd_complete_thread_id_color_theme');
     $color_theme = lc $color_theme;
     my @colors;
@@ -1047,11 +1068,38 @@ sub setup_colors {
         @colors = @all_colors;
     }
 
+    if (length($color_theme) ne 0) {
+        if ($color_theme eq "dark") {
+            Irssi::print("[matterircd_complete] Removing colors incompatible with dark theme");
+            @colors = array_splice_values(\@colors, \@dark_theme_unwanted);
+        } elsif ($color_theme eq 'solarized-light') {
+            Irssi::print("[matterircd_complete] Removing colors incompatible with solarized-light theme");
+            @colors = array_splice_values(\@colors, \@solarized_light_theme_unwanted);
+        } else {
+            Irssi::print("[matterircd_complete] Ignoring unknown color theme $color_theme");
+            Irssi::print("[matterircd_complete] Valid themes are dark, solarized-light");
+        }
+    }
+
+    if ($unwanted_colors =~ /^[0-9A-Z]{2}( [0-9A-Z]{2})*$/) {
+        my @unwanted = split(' ', $unwanted_colors);
+        Irssi::print("[matterircd_complete] Removing unwanted colors");
+        @colors = array_splice_values(\@colors, \@unwanted);
+    } elsif ($unwanted_colors =~ /^[0-9A-Z]{2}([0-9A-Z]{2})*$/ and length($unwanted_colors) % 2 eq 0) {
+        my @unwanted = ($unwanted_colors =~ m/../g);
+        Irssi::print("[matterircd_complete] Removing unwanted colors");
+        @colors = array_splice_values(\@colors, \@unwanted);
+    } elsif (length($unwanted_colors)) {
+        Irssi::print("[matterircd_complete] Ignoring matterircd_complete_thread_id_unwanted_colors: invalid format ($unwanted_colors)");
+    }
+
     if (@thread_id_selected_colors) {
         Irssi::print("[matterircd_complete] Config changed, existing threads might change colors!")
             if $allowed_colors ne $config{"allowed_colors"}
+                    or $unwanted_colors ne $config{"unwanted_colors"}
                     or $color_theme ne $config{"color_theme"};
         $config{"allowed_colors"} = $allowed_colors;
+        $config{"unwanted_colors"} = $unwanted_colors;
         $config{"color_theme"} = $color_theme;
     } else {
         Irssi::print("[matterircd_complete] Thread colors have been set per your config");
