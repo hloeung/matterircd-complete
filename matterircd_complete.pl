@@ -1050,7 +1050,7 @@ sub setup_colors {
     glob @solarized_light_theme_unwanted;
 
     # Skip colors setup if we're using a fixed color
-    my $fixed_color = Irssi::settings_get_str('matterircd_complete_thread_id_color');
+    my $fixed_color = Irssi::settings_get_int('matterircd_complete_thread_id_color');
     return if $fixed_color ne -1;
 
     my $allowed_colors = Irssi::settings_get_str('matterircd_complete_thread_id_allowed_colors');
@@ -1115,11 +1115,12 @@ sub setup_colors {
 }
 Irssi::signal_add('setup changed', 'setup_colors');
 Irssi::signal_add('setup reread', 'setup_colors');
+
 sub cmd_matterircd_complete_thread_id_get_colors {
     glob @thread_id_selected_colors;
 
     # Display a warning if we're using a fixed color
-    my $fixed_color = Irssi::settings_get_str('matterircd_complete_thread_id_color');
+    my $fixed_color = Irssi::settings_get_int('matterircd_complete_thread_id_color');
     if ($fixed_color ne -1) {
         Irssi::print("[matterircd_complete] thread_id_color is not set to -1");
         Irssi::print("[matterircd_complete] threads will always take \x03${fixed_color}this color\x0f");
@@ -1135,5 +1136,6 @@ sub cmd_matterircd_complete_thread_id_get_colors {
     Irssi::print($colors_text);
 }
 Irssi::command_bind('matterircd_complete_thread_id_get_colors', 'cmd_matterircd_complete_thread_id_get_colors');
+
 # Set up on load!
 setup_colors();
