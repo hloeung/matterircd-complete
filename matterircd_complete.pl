@@ -79,20 +79,64 @@ my $KEY_SPC    = 32;
 my $KEY_B      = 66;
 my $KEY_O      = 79;
 
+# Config hash to store important configuration
+my %config;
+
 Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_networks', '');
 Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_nick_ignore', '');
 Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_channel_dont_ignore', '');
 
 
 #==============================================================================
+# Taken from nickcolor_expando irssi script
+# These are all the colors, sorted by main color class
+# To display and select colors you want/want to avoid based on your background, use /cubes_text from cubes.pl
+my @all_colors = (
+    qw[20 30 40 50 04 66 0C 61 60 67 6L], # RED
+    qw[37 3D 36 4C 46 5C 56 6C 6J 47 5D 6K 6D 57 6E 5E 4E 4K 4J 5J 4D 5K 6R], # ORANGE
+    qw[3C 4I 5I 6O 6I 06 4O 5O 3U 0E 5U 6U 6V 6P 6Q 6W 5P 4P 4V 4W 5W 4Q 5Q 5R 6Y 6X], # YELLOW
+    qw[26 2D 2C 3I 3O 4U 5V 2J 3V 3P 3J 5X], # YELLOW-GREEN
+    qw[16 1C 2I 2U 2O 1I 1O 1V 1P 02 0A 1U 2V 4X], # GREEN
+    qw[1D 1J 1Q 1W 1X 2Y 2S 2R 3Y 3Z 3S 3R 2K 3K 4S 5Z 5Y 4R 3Q 2Q 2X 2W 3X 3W 2P 4Y], # GREEN-TURQUOIS
+    qw[17 1E 1L 1K 1R 1S 03 1M 1N 1T 0B 1Y 1Z 2Z 4Z], # TURQUOIS
+    qw[28 2E 18 1F 19 1G 1A 1B 1H 2N 2H 09 3H 3N 2T 3T 2M 2G 2A 2F 2L 3L 3F 4M 3M 3G 29 4T 5T], # LIGHT-BLUE
+    qw[22 33 44 0D 45 5B 6A 5A 5H 3B 4H 3A 4G 39 4F 6S 6T 5L 5N], # VIOLET
+    qw[21 32 42 53 63 52 43 34 35 55 65 6B 4B 4A 48 5G 6H 5M 6M 6N], # PINK
+    qw[38 31 05 64 54 41 51 62 69 68 59 5F 6F 58 49 6G], # ROSE
+    qw[11 12 23 25 24 13 14 01 15 2B 4N], # DARK-BLUE
+    qw[7A 00 10 7B 7C 7D 7E 7G 7F], # DARK-GRAY
+    qw[7H 7I 27 7K 7J 08 7L 3E 7O 7Q 7N 7M 7P], # GRAY
+    qw[7S 7T 7R 4L 7W 7U 7V 5S 07 7X 6Z 0F], # LIGHT-GRAY
+);
+# These are the colors unwanted with a dark theme
+my @dark_theme_unwanted = (
+    qw[11 12 23 25 24 13 14 01 15 2B 4N], # DARK-BLUE
+    qw[7A 00 10 7B 7C 7D 7E 7G 7F], # DARK-GRAY
+    qw[7H 7I 27 7K 7J 08 7L 3E 7O 7Q 7N 7M 7P], # GRAY
+    qw[7S 7T 7R 4L 7W 7U 7V 5S 07 7X 6Z 0F], # LIGHT-GRAY
+);
+# These are the colors unwanted with a light theme
+my @solarized_light_theme_unwanted = (
+    qw[4U 4V 4W 4X 4Y 4Z 5U 5V 5W 5X 5Y 5Z 6U 6V 6W 6X 6Y 6Z 6O 6P 6Q 6R 6S 6T], # too light flashy colors
+    qw[7T 7U 7V 7W 7X 07 7R 7S 7T 7U 7V 7W 7X 7B 7C 7D 7E 7F 7H 7I 7J 7K 7M 7N 7O 7P], # too light grayscales
+    qw[5S 4L 7Q 5T 4T 4M 5M 6M 6N 1Z 2Z 1Y 2X 2W 3X 3W 1U 2V 1X 2Y 3V 3Z 3Y 2U], # hand picked too light + redundant
+);
 
-Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_reply_msg_thread_id_color', 10);
-Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_reply_msg_thread_id_color_scheme', 'dark');
-Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_reply_msg_thread_id_allow_bold', 0);
-Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_reply_msg_thread_id_allow_italic', 0);
-Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_reply_msg_thread_id_allow_underline', 0);
-# This can be a list of 20 30 40 50 5F colors, or without spaces 203040505F
-Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_reply_msg_thread_id_allowed_colors', '');
+Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_thread_id_color', 10);
+# Default color theme to none, so we use all available colors.
+Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_thread_id_color_theme', '');
+Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_thread_id_allow_bold', 0);
+Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_thread_id_allow_italic', 0);
+Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_thread_id_allow_underline', 0);
+# Allowed colors will be applied first
+# These can be a list of 20 30 40 50 5F colors, or without spaces 203040505F
+Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_thread_id_allowed_colors', '');
+Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_thread_id_unwanted_colors', '');
+$config{'color_theme'} = '';
+$config{'allowed_colors'} = '';
+$config{'unwanted_colors'} = '';
+# Initialize
+my @thread_id_selected_colors = ();
 
 # Rely on message/thread IDs stored in message cache so we can shorten
 # to save on screen real-estate.
@@ -126,6 +170,7 @@ sub xcolor_to_irssi {
 }
 
 sub get_thread_format {
+    glob @thread_id_selected_colors;
     my ($str) = @_;
     my @nums = (0..9,'a'..'z');
     my $chr=join('',@nums);
@@ -135,50 +180,13 @@ sub get_thread_format {
     foreach ($str =~ /[$chr]/g) {
         $n += $nums{$_} * 36;
     }
-    my $allowed_colors = Irssi::settings_get_str('matterircd_complete_reply_msg_thread_id_allowed_colors');
-    my @colors;
-    if ($allowed_colors =~ /^[0-9A-Z]{2}( [0-9A-Z]{2})*$/) {
-        @colors = split(' ', $allowed_colors);
-    } elsif ($allowed_colors =~ /^[0-9A-Z]{2}([0-9A-Z]{2})*$/ and length($allowed_colors) % 2 eq 0) {
-        @colors = ( $allowed_colors =~ m/../g );
-    } else {
-        my $color_theme = Irssi::settings_get_str('matterircd_complete_reply_msg_thread_id_color_scheme');
-        # Taken from nickcolor_expando irssi script
-        @colors = (
-            qw[20 30 40 50 04 66 0C 61 60 67 6L], # RED
-            qw[37 3D 36 4C 46 5C 56 6C 6J 47 5D 6K 6D 57 6E 5E 4E 4K 4J 5J 4D 5K 6R], # ORANGE
-            qw[3C 4I 5I 6O 6I 06 4O 5O 3U 0E 5U 6U 6V 6P 6Q 6W 5P 4P 4V 4W 5W 4Q 5Q 5R 6Y 6X], # YELLOW
-            qw[26 2D 2C 3I 3O 4U 5V 2J 3V 3P 3J 5X], # YELLOW-GREEN
-            qw[16 1C 2I 2U 2O 1I 1O 1V 1P 02 0A 1U 2V 4X], # GREEN
-            qw[1D 1J 1Q 1W 1X 2Y 2S 2R 3Y 3Z 3S 3R 2K 3K 4S 5Z 5Y 4R 3Q 2Q 2X 2W 3X 3W 2P 4Y], # GREEN-TURQUOIS
-            qw[17 1E 1L 1K 1R 1S 03 1M 1N 1T 0B 1Y 1Z 2Z 4Z], # TURQUOIS
-            qw[28 2E 18 1F 19 1G 1A 1B 1H 2N 2H 09 3H 3N 2T 3T 2M 2G 2A 2F 2L 3L 3F 4M 3M 3G 29 4T 5T], # LIGHT-BLUE
-            qw[22 33 44 0D 45 5B 6A 5A 5H 3B 4H 3A 4G 39 4F 6S 6T 5L 5N], # VIOLET
-            qw[21 32 42 53 63 52 43 34 35 55 65 6B 4B 4A 48 5G 6H 5M 6M 6N], # PINK
-            qw[38 31 05 64 54 41 51 62 69 68 59 5F 6F 58 49 6G], # ROSE
-        );
-        my @light = (
-            qw[11 12 23 25 24 13 14 01 15 2B 4N], # DARK-BLUE
-            qw[7A 00 10 7B 7C 7D 7E 7G 7F], # DARK-GRAY
-            qw[7H 7I 27 7K 7J 08 7L 3E 7O 7Q 7N 7M 7P], # GRAY
-            qw[7S 7T 7R 4L 7W 7U 7V 5S 07 7X 6Z 0F], # LIGHT-GRAY
-        );
-        my @dark = ();
-
-        if ($color_theme eq 'dark') {
-            @colors = (@colors, @dark);
-        } elsif ($color_theme eq 'light') {
-            @colors = (@colors, @light);
-        } else {
-            @colors = (@colors, @dark, @light);
-        }
-    }
+    my @colors = @thread_id_selected_colors;
     my $color_count = @colors;
 
     # We have normal, bold, italic, underline
-    my $allow_bold = Irssi::settings_get_bool('matterircd_complete_reply_msg_thread_id_allow_bold');
-    my $allow_italic = Irssi::settings_get_bool('matterircd_complete_reply_msg_thread_id_allow_italic');
-    my $allow_underline = Irssi::settings_get_bool('matterircd_complete_reply_msg_thread_id_allow_underline');
+    my $allow_bold = Irssi::settings_get_bool('matterircd_complete_thread_id_allow_bold');
+    my $allow_italic = Irssi::settings_get_bool('matterircd_complete_thread_id_allow_italic');
+    my $allow_underline = Irssi::settings_get_bool('matterircd_complete_thread_id_allow_underline');
     my @classes_prepend;
     push @classes_prepend, "\x02" if $allow_bold;
     push @classes_prepend, "\x1d" if $allow_italic;
@@ -210,12 +218,12 @@ sub thread_color {
     $n = "$prepend\x03$n";
     return $n;
 }
-sub cmd_matterircd_complete_msgthreadid_get_color {
+sub cmd_matterircd_complete_thread_id_get_color {
     my ($color, $prepend) = get_thread_format($_[0]);
     my $n = xcolor_to_irssi($color);
     Irssi::print("Thread color for $prepend\x03$n$_[0]\x0f is $color");
 }
-Irssi::command_bind('matterircd_complete_msgthreadid_get_color', 'cmd_matterircd_complete_msgthreadid_get_color');
+Irssi::command_bind('matterircd_complete_thread_id_get_color', 'cmd_matterircd_complete_thread_id_get_color');
 
 sub update_msgthreadid {
     my($server, $msg, $nick, $address, $target) = @_;
@@ -236,7 +244,7 @@ sub update_msgthreadid {
     }
     return unless $msgthreadid;
 
-    my $thread_color = Irssi::settings_get_int('matterircd_complete_reply_msg_thread_id_color');
+    my $thread_color = Irssi::settings_get_int('matterircd_complete_thread_id_color');
     if ($thread_color == -1) {
         $thread_color = thread_color($msgthreadid);
     }
@@ -555,7 +563,7 @@ sub signal_message_own_public_msgthreadid {
 
     my $msgthreadid = $1;
 
-    my $thread_color = Irssi::settings_get_int('matterircd_complete_reply_msg_thread_id_color');
+    my $thread_color = Irssi::settings_get_int('matterircd_complete_thread_id_color');
     if ($thread_color == -1) {
         $thread_color = thread_color($msgthreadid);
     }
@@ -1010,3 +1018,116 @@ sub signal_message_public {
     Irssi::signal_continue($server, $msg, $nick, $address, $target);
 };
 Irssi::signal_add('message public', 'signal_message_public');
+
+# Remove an array's elements per their values
+sub array_splice_values {
+    my ($ar_ref, $uw_ref) = @_;
+    my @array = @{$ar_ref};
+    my @unwanted = @{$uw_ref};
+    my %removals = map { $_ => 1 } @unwanted;
+    my @keys = keys %removals;
+    my @indices = grep { exists($removals{$array[$_]}) } 0..$#array;
+    # Each time we remove index from @arr, the next correct index to delete will be reduced of $o
+    my $o = 0;
+    for (@indices) {
+        splice(@array, $_-$o, 1);
+        $o++;
+    }
+    return @array;
+}
+
+sub setup_colors {
+    glob %config;
+    glob @thread_id_selected_colors;
+    glob @all_colors;
+    glob @dark_theme_unwanted;
+    glob @solarized_light_theme_unwanted;
+
+    # Skip colors setup if we're using a fixed color
+    my $fixed_color = Irssi::settings_get_str('matterircd_complete_thread_id_color');
+    return if $fixed_color ne -1;
+
+    my $allowed_colors = Irssi::settings_get_str('matterircd_complete_thread_id_allowed_colors');
+    $allowed_colors = uc $allowed_colors;
+    my $unwanted_colors = Irssi::settings_get_str('matterircd_complete_thread_id_unwanted_colors');
+    $unwanted_colors = uc $unwanted_colors;
+    my $color_theme = Irssi::settings_get_str('matterircd_complete_thread_id_color_theme');
+    $color_theme = lc $color_theme;
+    my @colors;
+
+    if ($allowed_colors =~ /^[0-9A-Z]{2}( [0-9A-Z]{2})*$/) {
+        @colors = split(' ', $allowed_colors);
+        Irssi::print("[matterircd_complete] Setting allowed colors: @colors");
+    } elsif ($allowed_colors =~ /^[0-9A-Z]{2}([0-9A-Z]{2})*$/ and length($allowed_colors) % 2 eq 0) {
+        @colors = ( $allowed_colors =~ m/../g );
+        Irssi::print("[matterircd_complete] Setting allowed colors: @colors");
+    } elsif (length($allowed_colors) ne 0) {
+        Irssi::print("[matterircd_complete] Ignoring matterircd_complete_thread_id_allowed_colors: invalid format ($allowed_colors)");
+    } else {
+        Irssi::print("[matterircd_complete] Setting allowed colors to all colors");
+        @colors = @all_colors;
+    }
+
+    if (length($color_theme) ne 0) {
+        if ($color_theme eq "dark") {
+            Irssi::print("[matterircd_complete] Removing colors incompatible with dark theme");
+            @colors = array_splice_values(\@colors, \@dark_theme_unwanted);
+        } elsif ($color_theme eq 'solarized-light') {
+            Irssi::print("[matterircd_complete] Removing colors incompatible with solarized-light theme");
+            @colors = array_splice_values(\@colors, \@solarized_light_theme_unwanted);
+        } else {
+            Irssi::print("[matterircd_complete] Ignoring unknown color theme $color_theme");
+            Irssi::print("[matterircd_complete] Valid themes are dark, solarized-light");
+        }
+    }
+
+    if ($unwanted_colors =~ /^[0-9A-Z]{2}( [0-9A-Z]{2})*$/) {
+        my @unwanted = split(' ', $unwanted_colors);
+        Irssi::print("[matterircd_complete] Removing unwanted colors");
+        @colors = array_splice_values(\@colors, \@unwanted);
+    } elsif ($unwanted_colors =~ /^[0-9A-Z]{2}([0-9A-Z]{2})*$/ and length($unwanted_colors) % 2 eq 0) {
+        my @unwanted = ($unwanted_colors =~ m/../g);
+        Irssi::print("[matterircd_complete] Removing unwanted colors");
+        @colors = array_splice_values(\@colors, \@unwanted);
+    } elsif (length($unwanted_colors)) {
+        Irssi::print("[matterircd_complete] Ignoring matterircd_complete_thread_id_unwanted_colors: invalid format ($unwanted_colors)");
+    }
+
+    if (@thread_id_selected_colors) {
+        Irssi::print("[matterircd_complete] Config changed, existing threads might change colors!")
+            if $allowed_colors ne $config{"allowed_colors"}
+                    or $unwanted_colors ne $config{"unwanted_colors"}
+                    or $color_theme ne $config{"color_theme"};
+        $config{"allowed_colors"} = $allowed_colors;
+        $config{"unwanted_colors"} = $unwanted_colors;
+        $config{"color_theme"} = $color_theme;
+    } else {
+        Irssi::print("[matterircd_complete] Thread colors have been set per your config");
+    }
+    Irssi::print("[matterircd_complete] You can check colors in use with /matterircd_complete_thread_id_get_colors");
+    @thread_id_selected_colors = @colors;
+}
+Irssi::signal_add('setup changed', 'setup_colors');
+Irssi::signal_add('setup reread', 'setup_colors');
+sub cmd_matterircd_complete_thread_id_get_colors {
+    glob @thread_id_selected_colors;
+
+    # Display a warning if we're using a fixed color
+    my $fixed_color = Irssi::settings_get_str('matterircd_complete_thread_id_color');
+    if ($fixed_color ne -1) {
+        Irssi::print("[matterircd_complete] thread_id_color is not set to -1");
+        Irssi::print("[matterircd_complete] threads will always take \x03${fixed_color}this color\x0f");
+        return;
+    }
+
+    my $colors_text = "[matterircd_complete] Selected colors: ";
+    foreach (@thread_id_selected_colors) {
+        my $n = xcolor_to_irssi($_);
+        $colors_text .= "\x03$n$_";
+    }
+    $colors_text .= "\x0f";
+    Irssi::print($colors_text);
+}
+Irssi::command_bind('matterircd_complete_thread_id_get_colors', 'cmd_matterircd_complete_thread_id_get_colors');
+# Set up on load!
+setup_colors();
