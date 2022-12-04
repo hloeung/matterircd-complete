@@ -959,7 +959,7 @@ sub cmd_matterircd_complete_replied_cache_clear {
     %REPLIED_CACHE = ();
     Irssi::print("matterircd_complete replied cache cleared");
 };
-Irssi::command_bind('matterircd_complete_replied_cache_clear', 'cmd_cmd_matterircd_complete_replied_cache_clear');
+Irssi::command_bind('matterircd_complete_replied_cache_clear', 'cmd_matterircd_complete_replied_cache_clear');
 
 my $REPLIED_CACHE_CLEARED = 0;
 Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_clear_replied_cache_on_away', 0);
@@ -1137,5 +1137,65 @@ sub cmd_matterircd_complete_thread_id_get_colors {
 }
 Irssi::command_bind('matterircd_complete_thread_id_get_colors', 'cmd_matterircd_complete_thread_id_get_colors');
 
+my $CACHE_FILE = Irssi::get_irssi_dir() . '/matterircd_complete.cache';
+my $exited;
+sub save_cache {
+    open(FH, '>', $CACHE_FILE) or do {
+        Irssi::print("[matterircd_complete] \x03%RError saving matterircd_complete cache: $!")
+            unless $exited;
+        return;
+    };
+
+    my %cache = (
+        'MSGTHREADID' => \%MSGTHREADID_CACHE,
+        'NICKNAMES' => \%NICKNAMES_CACHE,
+        'REPLIED' => \%REPLIED_CACHE,
+        );
+
+    foreach my $key (keys %cache) {
+        foreach my $channel (keys %{$cache{$key}}) {
+            my $d = $cache{$key}->{$channel};
+            my $entries = join(',', @{$d});
+            print(FH "${key} ${channel} ${entries}\n");
+        }
+    }
+    close(FH);
+
+    Irssi::print("[matterircd_complete] \x03%GSaved matterircd_complete cache…");
+}
+Irssi::command_bind('matterircd_complete_cache_save', 'save_cache');
+
+sub load_cache {
+    open(FH, '<', $CACHE_FILE) or return;
+
+    my %cache = (
+        'MSGTHREADID' => \%MSGTHREADID_CACHE,
+        'NICKNAMES' => \%NICKNAMES_CACHE,
+        'REPLIED' => \%REPLIED_CACHE,
+        );
+
+    while(<FH>) {
+        chomp;
+        my ($key, $channel, $entries) = split;
+        my @d = split(',', $entries);
+        $cache{$key}->{$channel} = \@d;
+    }
+    close(FH);
+
+    Irssi::print("[matterircd_complete] \x03%GLoaded matterircd_complete cache…");
+}
+
+sub UNLOAD {
+    return if $exited;
+    exit_save();
+}
+
+sub exit_save {
+    $exited = 1;
+    save_cache()
+}
+Irssi::signal_add('gui exit', 'exit_save');
+
 # Set up on load!
 setup_colors();
+load_cache();
