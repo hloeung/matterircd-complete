@@ -122,7 +122,7 @@ my @solarized_light_theme_unwanted = (
     qw[5S 4L 7Q 5T 4T 4M 5M 6M 6N 1Z 2Z 1Y 2X 2W 3X 3W 1U 2V 1X 2Y 3V 3Z 3Y 2U], # hand picked too light + redundant
 );
 
-Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_thread_id_color', 10);
+Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_thread_id_color', -1);
 # Default color theme to none, so we use all available colors.
 Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_thread_id_color_theme', '');
 Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_thread_id_allow_bold', 0);
@@ -247,6 +247,8 @@ sub update_msgthreadid {
     my $thread_color = Irssi::settings_get_int('matterircd_complete_thread_id_color');
     if ($thread_color == -1) {
         $thread_color = thread_color($msgthreadid);
+    } else {
+        $thread_color = "\x03${thread_color}";
     }
 
     # Show that message is reply to a thread. (backwards compatibility
@@ -566,6 +568,8 @@ sub signal_message_own_public_msgthreadid {
     my $thread_color = Irssi::settings_get_int('matterircd_complete_thread_id_color');
     if ($thread_color == -1) {
         $thread_color = thread_color($msgthreadid);
+    } else {
+        $thread_color = "\x03${thread_color}";
     }
 
     my $len = Irssi::settings_get_int('matterircd_complete_shorten_message_thread_id');
@@ -611,6 +615,8 @@ sub signal_message_own_private {
     my $thread_color = Irssi::settings_get_int('matterircd_complete_reply_msg_thread_id_color');
     if ($thread_color == -1) {
         $thread_color = thread_color($msgthreadid);
+    } else {
+        $thread_color = "\x03${thread_color}";
     }
 
     my $len = Irssi::settings_get_int('matterircd_complete_shorten_message_thread_id');
