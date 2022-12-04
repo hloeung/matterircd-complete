@@ -87,6 +87,16 @@ Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_nick_ignore'
 Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_channel_dont_ignore', '');
 
 
+sub _wi_print {
+    my ($wi, $msg) = @_;
+
+    if ($wi) {
+        $wi->print($msg);
+    } else {
+        Irssi::print($msg);
+    }
+}
+
 #==============================================================================
 # Taken from nickcolor_expando irssi script
 # These are all the colors, sorted by main color class
@@ -222,7 +232,7 @@ sub cmd_matterircd_complete_thread_id_get_color {
     my ($data, $server, $wi) = @_;
     my ($color, $prepend) = get_thread_format($_[0]);
     my $n = xcolor_to_irssi($color);
-    $wi->print("Thread color for $prepend\x03$n$_[0]\x0f is $color");
+    _wi_print($wi, "Thread color for $prepend\x03$n$_[0]\x0f is $color");
 }
 Irssi::command_bind('matterircd_complete_thread_id_get_color', 'cmd_matterircd_complete_thread_id_get_color');
 
@@ -341,17 +351,17 @@ sub cmd_matterircd_complete_msgthreadid_cache_dump {
     # Remove leading and trailing whitespace.
     $channel =~ tr/ 	//d;
 
-    $wi->print("${channel}: Message/Thread ID cache");
+    _wi_print($wi, "${channel}: Message/Thread ID cache");
 
     if ((not exists($MSGTHREADID_CACHE{$channel})) || (scalar @{$MSGTHREADID_CACHE{$channel}} == 0)) {
-        $wi->print("${channel}: Empty");
+        _wi_print($wi, "${channel}: Empty");
         return;
     }
 
     foreach my $msgthread_id (@{$MSGTHREADID_CACHE{$channel}}) {
-        $wi->print("${channel}: ${msgthread_id}");
+        _wi_print($wi, "${channel}: ${msgthread_id}");
     }
-    $wi->print("${channel}: Total: " . scalar @{$MSGTHREADID_CACHE{$channel}});
+    _wi_print($wi, "${channel}: Total: " . scalar @{$MSGTHREADID_CACHE{$channel}});
 };
 Irssi::command_bind('matterircd_complete_msgthreadid_cache_dump', 'cmd_matterircd_complete_msgthreadid_cache_dump');
 
@@ -665,17 +675,17 @@ sub cmd_matterircd_complete_nick_cache_dump {
     # Remove leading and trailing whitespace.
     $channel =~ tr/ 	//d;
 
-    $wi->print("${channel}: Nicknames cache");
+    _wi_print($wi, "${channel}: Nicknames cache");
 
     if ((not exists($NICKNAMES_CACHE{$channel})) || (scalar @{$NICKNAMES_CACHE{$channel}} == 0)) {
-        $wi->print("${channel}: Empty");
+        _wi_print($wi,"${channel}: Empty");
         return;
     }
 
     foreach my $nick (@{$NICKNAMES_CACHE{$channel}}) {
-        $wi->print("${channel}: ${nick}");
+        _wi_print($wi, "${channel}: ${nick}");
     }
-    $wi->print("${channel}: Total: " . scalar @{$NICKNAMES_CACHE{$channel}});
+    _wi_print($wi, "${channel}: Total: " . scalar @{$NICKNAMES_CACHE{$channel}});
 };
 Irssi::command_bind('matterircd_complete_nick_cache_dump', 'cmd_matterircd_complete_nick_cache_dump');
 
@@ -942,24 +952,34 @@ sub cmd_matterircd_complete_replied_cache_dump {
     # Remove leading and trailing whitespace.
     $channel =~ tr/ 	//d;
 
-    $wi->print("${channel}: Replied cache");
+    _wi_print($wi, "${channel}: Replied cache");
 
     if ((not exists($REPLIED_CACHE{$channel})) || (scalar @{$REPLIED_CACHE{$channel}} == 0)) {
-        $wi->print("${channel}: Empty");
+        _wi_print($wi, "${channel}: Empty");
         return;
     }
 
     foreach my $threadid (@{$REPLIED_CACHE{$channel}}) {
-        $wi->print("${channel}: ${threadid}");
+        _wi_print($wi, "${channel}: ${threadid}");
     }
-    $wi->print("${channel}: Total: " . scalar @{$REPLIED_CACHE{$channel}});
+    _wi_print($wi, "${channel}: Total: " . scalar @{$REPLIED_CACHE{$channel}});
 };
 Irssi::command_bind('matterircd_complete_replied_cache_dump', 'cmd_matterircd_complete_replied_cache_dump');
 
 sub cmd_matterircd_complete_replied_cache_clear {
     my ($data, $server, $wi) = @_;
-    %REPLIED_CACHE = ();
-    $wi->print("matterircd_complete replied cache cleared");
+
+    my $channel = $data ? $data : $wi->{name};
+    # Remove leading and trailing whitespace.
+    $channel =~ tr/ 	//d;
+
+    if ($channel eq '*') {
+        %REPLIED_CACHE = ();
+    } else {
+        @{$REPLIED_CACHE{$channel}} = ();
+    }
+
+    _wi_print($wi, "matterircd_complete replied cache cleared");
 };
 Irssi::command_bind('matterircd_complete_replied_cache_clear', 'cmd_matterircd_complete_replied_cache_clear');
 
@@ -1125,8 +1145,8 @@ sub cmd_matterircd_complete_thread_id_get_colors {
     # Display a warning if we're using a fixed color
     my $fixed_color = Irssi::settings_get_int('matterircd_complete_thread_id_color');
     if ($fixed_color ne -1) {
-        $wi->print("Thread_id_color is not set to -1");
-        $wi->print("Threads will always take \x03${fixed_color}this color\x0f");
+        _wi_print($wi, "Thread_id_color is not set to -1");
+        _wi_print($wi, "Threads will always take \x03${fixed_color}this color\x0f");
         return;
     }
 
@@ -1136,7 +1156,7 @@ sub cmd_matterircd_complete_thread_id_get_colors {
         $colors_text .= "\x03$n$_";
     }
     $colors_text .= "\x0f";
-    $wi->print($colors_text);
+    _wi_print($wi, $colors_text);
 }
 Irssi::command_bind('matterircd_complete_thread_id_get_colors', 'cmd_matterircd_complete_thread_id_get_colors');
 
