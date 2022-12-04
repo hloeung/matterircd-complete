@@ -781,7 +781,7 @@ sub signal_message_own_public_nicks {
     my $cache_size = Irssi::settings_get_int('matterircd_complete_nick_cache_size');
     # We want to make sure that the nick or user is still online and
     # in the channel.
-    my $wi = Irssi::active_win()->{active};
+    my $wi = $server->window_item_find($target);
     if (not defined $wi) {
         return;
     }
