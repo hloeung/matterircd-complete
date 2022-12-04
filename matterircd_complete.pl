@@ -655,7 +655,7 @@ sub cmd_matterircd_complete_nick_cache_dump {
     my ($data, $server, $wi) = @_;
 
     if (not $data) {
-        return unless ref $wi and $wi->{type} eq 'CHANNEL';
+        return unless ref $wi and ($wi->{type} eq 'CHANNEL' or $wi->{type} eq 'QUERY');
     }
 
     my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
@@ -932,7 +932,7 @@ sub cmd_matterircd_complete_replied_cache_dump {
     my ($data, $server, $wi) = @_;
 
     if (not $data) {
-        return unless ref $wi and $wi->{type} eq 'CHANNEL';
+        return unless ref $wi and ($wi->{type} eq 'CHANNEL' or $wi->{type} eq 'QUERY');
     }
 
     my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
