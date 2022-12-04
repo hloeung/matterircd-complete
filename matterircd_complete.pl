@@ -613,7 +613,7 @@ sub signal_message_own_private {
 
     my $msgthreadid = $1;
 
-    my $thread_color = Irssi::settings_get_int('matterircd_complete_reply_msg_thread_id_color');
+    my $thread_color = Irssi::settings_get_int('matterircd_complete_thread_id_color');
     if ($thread_color == -1) {
         $thread_color = thread_color($msgthreadid);
     } else {
