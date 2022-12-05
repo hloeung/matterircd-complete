@@ -62,7 +62,7 @@ require Irssi;
 # Enable for debugging purposes only.
 # use Data::Dumper;
 
-our $VERSION = '1.00';
+our $VERSION = '2.00';  # 0db0537f7a35c998
 our %IRSSI = (
     name        => 'Matterircd Tab Auto Complete',
     description => 'Adds tab completion for Matterircd message threads',
