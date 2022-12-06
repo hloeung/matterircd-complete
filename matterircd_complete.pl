@@ -1198,6 +1198,9 @@ sub save_cache {
         foreach my $channel (keys %{$cache{$key}}) {
             my $d = $cache{$key}->{$channel};
             my $entries = join(',', @{$d});
+            if (scalar(@{$d}) == 0) {
+                next;
+            }
             print(FH "${key} ${channel} ${entries}\n");
         }
     }
