@@ -513,6 +513,12 @@ sub cache_msgthreadid {
         }
     }
 
+    # We also want to ignore reactions as we can't reply to those
+    # directly if they're to a message in a thread.
+    if ($msg =~ /(?:added|removed) reaction:/) {
+        return;
+    }
+
     # Mattermost message/thread IDs.
     if ($msg =~ /\[(?:->|↪)?\@\@([0-9a-z]{26})(?:,\@\@([0-9a-z]{26}))?\]/) {
         my $msgthreadid = $1;
