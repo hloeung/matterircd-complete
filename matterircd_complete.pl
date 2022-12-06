@@ -969,17 +969,36 @@ Irssi::command_bind('matterircd_complete_replied_cache_dump', 'cmd_matterircd_co
 sub cmd_matterircd_complete_replied_cache_clear {
     my ($data, $server, $wi) = @_;
 
-    my $channel = $data ? $data : $wi->{name};
-    # Remove leading and trailing whitespace.
-    $channel =~ tr/ 	//d;
+    my $channel;
+    my @msgids = ();
+    if ($data) {
+        my @d = split(/\s+/, $data);
+        $channel = shift(@d);
+        @msgids = @d;
+    } else {
+        $channel = $wi->{name};
+    }
+    $wi->print("channel ${channel}");
 
     if ($channel eq '*') {
         %REPLIED_CACHE = ();
+        _wi_print($wi, "matterircd_complete replied cache cleared");
+    } elsif (scalar(@msgids) > 0) {
+        foreach my $id (@msgids) {
+            my $i = 0;
+            foreach my $msgid (@{$REPLIED_CACHE{$channel}}) {
+                if ($id eq $msgid) {
+                    splice(@{$REPLIED_CACHE{$channel}}, $i, 1);
+                    _wi_print($wi, "matterircd_complete replied cache removed ${id} from ${channel} cache");
+                    last;
+                }
+                $i += 1;
+            }
+        }
     } else {
         @{$REPLIED_CACHE{$channel}} = ();
+        _wi_print($wi, "matterircd_complete replied cache cleared for channel ${channel}");
     }
-
-    _wi_print($wi, "matterircd_complete replied cache cleared");
 };
 Irssi::command_bind('matterircd_complete_replied_cache_clear', 'cmd_matterircd_complete_replied_cache_clear');
 
