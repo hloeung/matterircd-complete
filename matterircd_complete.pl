@@ -1194,8 +1194,8 @@ sub save_cache {
         'REPLIED' => \%REPLIED_CACHE,
         );
 
-    foreach my $key (keys %cache) {
-        foreach my $channel (keys %{$cache{$key}}) {
+    foreach my $key (sort keys %cache) {
+        foreach my $channel (sort keys %{$cache{$key}}) {
             my $d = $cache{$key}->{$channel};
             my $entries = join(',', @{$d});
             if (scalar(@{$d}) == 0) {
