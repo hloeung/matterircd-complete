@@ -302,7 +302,7 @@ sub cache_store {
     return unless $item ne '';
 
     my $changed = 0;
-    if (@$cache_ref[0] && @$cache_ref[0] eq $item) {
+    if ((@$cache_ref[0]) && (@$cache_ref[0] eq $item)) {
         return $changed;
     }
     $changed = 1;
@@ -311,7 +311,7 @@ sub cache_store {
     # per-channel cache. But as a trade off in favor of
     # speed/performance, rather than traverse the entire per-channel
     # cache, we cap/limit it.
-    my $limit = 8;
+    my $limit = 16;
     my $max = ($#$cache_ref < $limit)? $#$cache_ref : $limit;
     for my $i (0 .. $max) {
         if ((@$cache_ref[$i]) && (@$cache_ref[$i] eq $item)) {
@@ -493,6 +493,7 @@ sub signal_complete_word_msgthread_id {
 };
 Irssi::signal_add_last('complete word', 'signal_complete_word_msgthread_id');
 
+my $MSGTHREADID_CACHE_STATS = 0;
 sub cache_msgthreadid {
     my($server, $msg, $nick, $address, $target) = @_;
 
@@ -547,6 +548,7 @@ sub cache_msgthreadid {
     for my $msgid (@msgids) {
         if (cache_store(\@{$MSGTHREADID_CACHE{$key}}, $msgid, $cache_size)) {
             $MSGTHREADID_CACHE_INDEX = 0;
+            stats_increment(\$MSGTHREADID_CACHE_STATS);
         }
     }
 }
@@ -572,6 +574,7 @@ sub signal_message_own_public_msgthreadid {
     my $cache_size = Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
     if (cache_store(\@{$MSGTHREADID_CACHE{$target}}, $msgid, $cache_size)) {
         $MSGTHREADID_CACHE_INDEX = 0;
+        stats_increment(\$MSGTHREADID_CACHE_STATS);
     }
 
     my $msgthreadid = $1;
@@ -619,6 +622,7 @@ sub signal_message_own_private {
     my $cache_size = Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
     if (cache_store(\@{$MSGTHREADID_CACHE{$target}}, $msgid, $cache_size)) {
         $MSGTHREADID_CACHE_INDEX = 0;
+        stats_increment(\$MSGTHREADID_CACHE_STATS);
     }
 
     my $msgthreadid = $1;
@@ -765,6 +769,7 @@ sub signal_complete_word_nicks {
 };
 Irssi::signal_add('complete word', 'signal_complete_word_nicks');
 
+my $NICKNAMES_CACHE_STATS = 0;
 sub cache_ircnick {
     my($server, $msg, $nick, $address, $target) = @_;
 
@@ -776,7 +781,9 @@ sub cache_ircnick {
     my @ignore_nicks = split(/\s+/, Irssi::settings_get_str('matterircd_complete_nick_ignore'));
     # Ignore nicks configured to be ignored such as bots.
     if ($nick !~ @ignore_nicks) {
-        cache_store(\@{$NICKNAMES_CACHE{$target}}, $nick, $cache_size);
+        if (cache_store(\@{$NICKNAMES_CACHE{$target}}, $nick, $cache_size)) {
+            stats_increment(\$NICKNAMES_CACHE_STATS);
+        }
     }
 }
 Irssi::signal_add('message irc action', 'cache_ircnick');
@@ -804,7 +811,9 @@ sub signal_message_own_public_nicks {
     }
     foreach my $cur ($wi->nicks()) {
         if ($nick eq $cur->{nick}) {
-            cache_store(\@{$NICKNAMES_CACHE{$target}}, $nick, $cache_size);
+            if (cache_store(\@{$NICKNAMES_CACHE{$target}}, $nick, $cache_size, 1)) {
+                stats_increment(\$NICKNAMES_CACHE_STATS);
+            }
             last;
         }
     }
@@ -1024,6 +1033,7 @@ sub signal_away_mode_changed {
 };
 Irssi::signal_add('away mode changed', 'signal_away_mode_changed');
 
+my $REPLIED_CACHE_STATS = 0;
 sub signal_message_own_public_replied {
     my($server, $msg, $target) = @_;
 
@@ -1037,7 +1047,9 @@ sub signal_message_own_public_replied {
     my $msgid = $1;
 
     my $cache_size = Irssi::settings_get_int('matterircd_complete_replied_cache_size');
-    cache_store(\@{$REPLIED_CACHE{$target}}, $msgid, $cache_size);
+    if (cache_store(\@{$REPLIED_CACHE{$target}}, $msgid, $cache_size)) {
+        stats_increment(\$REPLIED_CACHE_STATS);
+    }
 };
 Irssi::signal_add('message own_public', 'signal_message_own_public_replied');
 
@@ -1178,6 +1190,24 @@ sub cmd_matterircd_complete_thread_id_get_colors {
     _wi_print($wi, $colors_text);
 }
 Irssi::command_bind('matterircd_complete_thread_id_get_colors', 'cmd_matterircd_complete_thread_id_get_colors');
+
+sub stats_increment {
+    my ($stats_ref) = @_;
+
+    $$stats_ref += 1;
+
+    # autosave.
+    if (($$stats_ref % 100) == 0) {
+        save_cache();
+    }
+}
+
+sub stats_show {
+    Irssi::print("[matterircd_complete] ${MSGTHREADID_CACHE_STATS} cache updates for msg/thread IDs");
+    Irssi::print("[matterircd_complete] ${NICKNAMES_CACHE_STATS} cache updates for nicknames");
+    Irssi::print("[matterircd_complete] ${REPLIED_CACHE_STATS} cache updates for replied msgs/posts");
+}
+Irssi::command_bind('matterircd_complete_stats', 'stats_show');
 
 my $CACHE_FILE = Irssi::get_irssi_dir() . '/matterircd_complete.cache';
 my $exited;
