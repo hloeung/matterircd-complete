@@ -1208,7 +1208,9 @@ sub stats_increment {
     }
 }
 
+my $STARTUP_DATE = localtime();
 sub stats_show {
+    Irssi::print("[matterircd_complete] Started / loaded since ${STARTUP_DATE}");
     Irssi::print("[matterircd_complete] ${MSGTHREADID_CACHE_STATS} cache updates for msg/thread IDs");
     Irssi::print("[matterircd_complete] ${NICKNAMES_CACHE_STATS} cache updates for nicknames");
     Irssi::print("[matterircd_complete] ${REPLIED_CACHE_STATS} cache updates for replied msgs/posts");
@@ -1230,6 +1232,13 @@ sub save_cache {
         'REPLIED' => \%REPLIED_CACHE,
         );
 
+    my %stats = (
+        'MSGTHREADID' => 0,
+        'NICKNAMES' => 0,
+        'REPLIED' => 0,
+        );
+    my $total = 0;
+
     foreach my $key (sort keys %cache) {
         foreach my $channel (sort keys %{$cache{$key}}) {
             my $d = $cache{$key}->{$channel};
@@ -1238,11 +1247,25 @@ sub save_cache {
                 next;
             }
             print(FH "${key} ${channel} ${entries}\n");
+            $stats{$key} += scalar(@{$d});
         }
+        $total += $stats{$key};
     }
     close(FH);
 
-    Irssi::print("[matterircd_complete] \x03%GSaved matterircd_complete cache…");
+    my $entries = $stats{'MSGTHREADID'};
+    my $channels = keys %{$cache{'MSGTHREADID'}};
+    Irssi::print("[matterircd_complete] ${entries} entries across ${channels} channels for msg/thread IDs cache");
+
+    $entries = $stats{'NICKNAMES'};
+    $channels = keys %{$cache{'NICKNAMES'}};
+    Irssi::print("[matterircd_complete] ${entries} entries across ${channels} channels for nicknames cache");
+
+    $entries = $stats{'REPLIED'};
+    $channels = keys %{$cache{'REPLIED'}};
+    Irssi::print("[matterircd_complete] ${entries} entries across ${channels} channels for threads replied to cache");
+
+    Irssi::print("[matterircd_complete] \x03%GSaved total of ${total} entries in the cache…");
 }
 Irssi::command_bind('matterircd_complete_cache_save', 'save_cache');
 
@@ -1255,15 +1278,17 @@ sub load_cache {
         'REPLIED' => \%REPLIED_CACHE,
         );
 
+    my $total = 0;
     while(<FH>) {
         chomp;
         my ($key, $channel, $entries) = split;
         my @d = split(',', $entries);
         $cache{$key}->{$channel} = \@d;
+        $total += scalar(@d);
     }
     close(FH);
 
-    Irssi::print("[matterircd_complete] \x03%GLoaded matterircd_complete cache…");
+    Irssi::print("[matterircd_complete] \x03%GLoaded total of ${total} entries from disk cache…");
 }
 
 sub UNLOAD {
