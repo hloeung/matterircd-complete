@@ -981,29 +981,45 @@ sub cmd_matterircd_complete_replied_cache_dump {
 };
 Irssi::command_bind('matterircd_complete_replied_cache_dump', 'cmd_matterircd_complete_replied_cache_dump');
 
+my $REPLIED_CACHE_STATS = 0;
 sub cmd_matterircd_complete_replied_cache_clear {
     my ($data, $server, $wi) = @_;
 
     my $channel;
     my @msgids = ();
+    my @args = ();
     if ($data) {
-        my @d = split(/\s+/, $data);
-        $channel = shift(@d);
-        @msgids = @d;
-    } else {
-        $channel = $wi->{name};
+        @args = split(/\s+/, $data);
     }
-    $wi->print("channel ${channel}");
 
-    if ($channel eq '*') {
-        %REPLIED_CACHE = ();
+    if (scalar(@args) == 0 || $args[0] eq '*') {
+        stats_increment(\$REPLIED_CACHE_STATS);
         _wi_print($wi, "matterircd_complete replied cache cleared");
-    } elsif (scalar(@msgids) > 0) {
+        return;
+    }
+
+    if (exists($REPLIED_CACHE{$args[0]}) || exists($REPLIED_CACHE{"#${args[0]}"})) {
+        $channel = shift(@args);
+        if (rindex($channel, "#", 0) == -1) {
+            $channel = "#${channel}";
+        }
+    } elsif ($wi->{name}) {
+        $channel = $wi->{name};
+    } else {
+        return;
+    }
+    @msgids = @args;
+
+    if (scalar(@msgids) > 0) {
         foreach my $id (@msgids) {
             my $i = 0;
+            if (rindex($id, "@@", 0) == 0) {
+                $id = substr($id, 2);
+            }
             foreach my $msgid (@{$REPLIED_CACHE{$channel}}) {
                 if ($id eq $msgid) {
                     splice(@{$REPLIED_CACHE{$channel}}, $i, 1);
+                    stats_increment(\$REPLIED_CACHE_STATS);
                     _wi_print($wi, "matterircd_complete replied cache removed ${id} from ${channel} cache");
                     last;
                 }
@@ -1012,6 +1028,7 @@ sub cmd_matterircd_complete_replied_cache_clear {
         }
     } else {
         @{$REPLIED_CACHE{$channel}} = ();
+        stats_increment(\$REPLIED_CACHE_STATS);
         _wi_print($wi, "matterircd_complete replied cache cleared for channel ${channel}");
     }
 };
@@ -1039,7 +1056,6 @@ sub signal_away_mode_changed {
 };
 Irssi::signal_add('away mode changed', 'signal_away_mode_changed');
 
-my $REPLIED_CACHE_STATS = 0;
 sub signal_message_own_public_replied {
     my($server, $msg, $target) = @_;
 
@@ -1197,6 +1213,7 @@ sub cmd_matterircd_complete_thread_id_get_colors {
 }
 Irssi::command_bind('matterircd_complete_thread_id_get_colors', 'cmd_matterircd_complete_thread_id_get_colors');
 
+Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_stats_output', 0);
 sub stats_increment {
     my ($stats_ref) = @_;
 
@@ -1204,27 +1221,18 @@ sub stats_increment {
 
     # autosave.
     if (($$stats_ref % 100) == 0) {
-        save_cache();
+        my $output = Irssi::settings_get_bool('matterircd_complete_stats_output');
+        save_cache($output);
     }
 }
 
 my $STARTUP_DATE = localtime();
 sub stats_show {
     Irssi::print("[matterircd_complete] Started / loaded since ${STARTUP_DATE}");
-    Irssi::print("[matterircd_complete] ${MSGTHREADID_CACHE_STATS} cache updates for msg/thread IDs");
-    Irssi::print("[matterircd_complete] ${NICKNAMES_CACHE_STATS} cache updates for nicknames");
-    Irssi::print("[matterircd_complete] ${REPLIED_CACHE_STATS} cache updates for replied msgs/posts");
-}
-Irssi::command_bind('matterircd_complete_stats', 'stats_show');
 
-my $CACHE_FILE = Irssi::get_irssi_dir() . '/matterircd_complete.cache';
-my $exited;
-sub save_cache {
-    open(FH, '>', $CACHE_FILE) or do {
-        Irssi::print("[matterircd_complete] \x03%RError saving matterircd_complete cache: $!")
-            unless $exited;
-        return;
-    };
+    my $total = 0;
+    my $entries;
+    my $channels;
 
     my %cache = (
         'MSGTHREADID' => \%MSGTHREADID_CACHE,
@@ -1237,7 +1245,50 @@ sub save_cache {
         'NICKNAMES' => 0,
         'REPLIED' => 0,
         );
-    my $total = 0;
+    foreach my $key (sort keys %cache) {
+        foreach my $channel (sort keys %{$cache{$key}}) {
+            my $d = $cache{$key}->{$channel};
+            if (scalar(@{$d}) == 0) {
+                next;
+            }
+            $stats{$key} += scalar(@{$d});
+        }
+        $total += $stats{$key};
+    }
+
+    $entries = $stats{'MSGTHREADID'};
+    $channels = keys %{$cache{'MSGTHREADID'}};
+    Irssi::print("[matterircd_complete] ${entries} entries across ${channels} channels for msg/thread IDs cache (${MSGTHREADID_CACHE_STATS} updates)");
+
+    $entries = $stats{'NICKNAMES'};
+    $channels = keys %{$cache{'NICKNAMES'}};
+    Irssi::print("[matterircd_complete] ${entries} entries across ${channels} channels for nicknames cache (${NICKNAMES_CACHE_STATS} updates)");
+
+    $entries = $stats{'REPLIED'};
+    $channels = keys %{$cache{'REPLIED'}};
+    Irssi::print("[matterircd_complete] ${entries} entries across ${channels} channels for threads replied to cache (${REPLIED_CACHE_STATS} updates)");
+
+    my $total_updates = $MSGTHREADID_CACHE_STATS + $NICKNAMES_CACHE_STATS + $REPLIED_CACHE_STATS;
+    Irssi::print("[matterircd_complete] \x03%GSaved total of ${total} entries in the cache (${total_updates} total updates)…");
+}
+Irssi::command_bind('matterircd_complete_stats', 'stats_show');
+
+my $CACHE_FILE = Irssi::get_irssi_dir() . '/matterircd_complete.cache';
+my $exited;
+sub save_cache {
+    my ($output_stats) = @_;
+
+    open(FH, '>', $CACHE_FILE) or do {
+        Irssi::print("[matterircd_complete] \x03%RError saving matterircd_complete cache: $!")
+            unless $exited;
+        return;
+    };
+
+    my %cache = (
+        'MSGTHREADID' => \%MSGTHREADID_CACHE,
+        'NICKNAMES' => \%NICKNAMES_CACHE,
+        'REPLIED' => \%REPLIED_CACHE,
+        );
 
     foreach my $key (sort keys %cache) {
         foreach my $channel (sort keys %{$cache{$key}}) {
@@ -1247,25 +1298,15 @@ sub save_cache {
                 next;
             }
             print(FH "${key} ${channel} ${entries}\n");
-            $stats{$key} += scalar(@{$d});
         }
-        $total += $stats{$key};
     }
     close(FH);
 
-    my $entries = $stats{'MSGTHREADID'};
-    my $channels = keys %{$cache{'MSGTHREADID'}};
-    Irssi::print("[matterircd_complete] ${entries} entries across ${channels} channels for msg/thread IDs cache");
+    if ($output_stats eq 0) {
+        return;
+    }
 
-    $entries = $stats{'NICKNAMES'};
-    $channels = keys %{$cache{'NICKNAMES'}};
-    Irssi::print("[matterircd_complete] ${entries} entries across ${channels} channels for nicknames cache");
-
-    $entries = $stats{'REPLIED'};
-    $channels = keys %{$cache{'REPLIED'}};
-    Irssi::print("[matterircd_complete] ${entries} entries across ${channels} channels for threads replied to cache");
-
-    Irssi::print("[matterircd_complete] \x03%GSaved total of ${total} entries in the cache…");
+    stats_show();
 }
 Irssi::command_bind('matterircd_complete_cache_save', 'save_cache');
 
@@ -1298,7 +1339,7 @@ sub UNLOAD {
 
 sub exit_save {
     $exited = 1;
-    save_cache()
+    save_cache(1)
 }
 Irssi::signal_add('gui exit', 'exit_save');
 
