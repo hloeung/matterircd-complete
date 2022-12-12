@@ -203,7 +203,7 @@ sub get_thread_format {
     $n = $n % $color_count*$classes;
     my $random = $n;
     my $prepend = "";
-    if ($classes eq 4 and $n >= $color_count*3) {
+    if ($classes == 4 and $n >= $color_count*3) {
         $n -= $color_count*3;
         $prepend = $classes_prepend[2];
     } elsif ($classes ge 3 and $n >= $color_count*2) {
@@ -1131,17 +1131,17 @@ sub setup_colors {
     if ($allowed_colors =~ /^[0-9A-Z]{2}( [0-9A-Z]{2})*$/) {
         @colors = split(' ', $allowed_colors);
         Irssi::print("[matterircd_complete] Setting allowed colors: @colors");
-    } elsif ($allowed_colors =~ /^[0-9A-Z]{2}([0-9A-Z]{2})*$/ and length($allowed_colors) % 2 eq 0) {
+    } elsif ($allowed_colors =~ /^[0-9A-Z]{2}([0-9A-Z]{2})*$/ and length($allowed_colors) % 2 == 0) {
         @colors = ( $allowed_colors =~ m/../g );
         Irssi::print("[matterircd_complete] Setting allowed colors: @colors");
-    } elsif (length($allowed_colors) ne 0) {
+    } elsif (length($allowed_colors) != 0) {
         Irssi::print("[matterircd_complete] Ignoring matterircd_complete_thread_id_allowed_colors: invalid format ($allowed_colors)");
     } else {
         Irssi::print("[matterircd_complete] Setting allowed colors to all colors");
         @colors = @all_colors;
     }
 
-    if (length($color_theme) ne 0) {
+    if (length($color_theme) != 0) {
         if ($color_theme eq "dark") {
             Irssi::print("[matterircd_complete] Removing colors incompatible with dark theme");
             @colors = array_splice_values(\@colors, \@dark_theme_unwanted);
@@ -1158,7 +1158,7 @@ sub setup_colors {
         my @unwanted = split(' ', $unwanted_colors);
         Irssi::print("[matterircd_complete] Removing unwanted colors");
         @colors = array_splice_values(\@colors, \@unwanted);
-    } elsif ($unwanted_colors =~ /^[0-9A-Z]{2}([0-9A-Z]{2})*$/ and length($unwanted_colors) % 2 eq 0) {
+    } elsif ($unwanted_colors =~ /^[0-9A-Z]{2}([0-9A-Z]{2})*$/ and length($unwanted_colors) % 2 == 0) {
         my @unwanted = ($unwanted_colors =~ m/../g);
         Irssi::print("[matterircd_complete] Removing unwanted colors");
         @colors = array_splice_values(\@colors, \@unwanted);
@@ -1293,7 +1293,7 @@ sub save_cache {
     }
     close(FH);
 
-    if ($output_stats eq 0) {
+    if ($output_stats == 0) {
         return;
     }
 
