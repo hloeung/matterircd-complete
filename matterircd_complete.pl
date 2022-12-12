@@ -79,9 +79,6 @@ my $KEY_SPC    = 32;
 my $KEY_B      = 66;
 my $KEY_O      = 79;
 
-# Config hash to store important configuration
-my %config;
-
 Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_networks', '');
 Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_nick_ignore', '');
 Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_channel_dont_ignore', '');
@@ -98,6 +95,8 @@ sub _wi_print {
 }
 
 #==============================================================================
+my %color_config;
+
 # Taken from nickcolor_expando irssi script
 # These are all the colors, sorted by main color class
 # To display and select colors you want/want to avoid based on your background, use /cubes_text from cubes.pl
@@ -142,9 +141,9 @@ Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_thread_id_a
 # These can be a list of 20 30 40 50 5F colors, or without spaces 203040505F
 Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_thread_id_allowed_colors', '');
 Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_thread_id_unwanted_colors', '');
-$config{'color_theme'} = '';
-$config{'allowed_colors'} = '';
-$config{'unwanted_colors'} = '';
+$color_config{'color_theme'} = '';
+$color_config{'allowed_colors'} = '';
+$color_config{'unwanted_colors'} = '';
 # Initialize
 my @thread_id_selected_colors = ();
 
@@ -180,7 +179,6 @@ sub xcolor_to_irssi {
 }
 
 sub get_thread_format {
-    glob @thread_id_selected_colors;
     my ($str) = @_;
     my @nums = (0..9,'a'..'z');
     my $chr=join('',@nums);
@@ -1118,12 +1116,6 @@ sub array_splice_values {
 }
 
 sub setup_colors {
-    glob %config;
-    glob @thread_id_selected_colors;
-    glob @all_colors;
-    glob @dark_theme_unwanted;
-    glob @solarized_light_theme_unwanted;
-
     # Skip colors setup if we're using a fixed color
     my $fixed_color = Irssi::settings_get_int('matterircd_complete_thread_id_color');
     return if $fixed_color ne -1;
@@ -1176,12 +1168,12 @@ sub setup_colors {
 
     if (@thread_id_selected_colors) {
         Irssi::print("[matterircd_complete] Config changed, existing threads might change colors!")
-            if $allowed_colors ne $config{"allowed_colors"}
-                    or $unwanted_colors ne $config{"unwanted_colors"}
-                    or $color_theme ne $config{"color_theme"};
-        $config{"allowed_colors"} = $allowed_colors;
-        $config{"unwanted_colors"} = $unwanted_colors;
-        $config{"color_theme"} = $color_theme;
+            if $allowed_colors ne $color_config{"allowed_colors"}
+                    or $unwanted_colors ne $color_config{"unwanted_colors"}
+                    or $color_theme ne $color_config{"color_theme"};
+        $color_config{"allowed_colors"} = $allowed_colors;
+        $color_config{"unwanted_colors"} = $unwanted_colors;
+        $color_config{"color_theme"} = $color_theme;
     } else {
         Irssi::print("[matterircd_complete] Thread colors have been set per your config");
     }
@@ -1193,7 +1185,6 @@ Irssi::signal_add('setup reread', 'setup_colors');
 
 sub cmd_matterircd_complete_thread_id_get_colors {
     my ($data, $server, $wi) = @_;
-    glob @thread_id_selected_colors;
 
     # Display a warning if we're using a fixed color
     my $fixed_color = Irssi::settings_get_int('matterircd_complete_thread_id_color');
