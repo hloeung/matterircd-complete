@@ -1212,7 +1212,7 @@ sub stats_increment {
 
     # autosave.
     if (($$stats_ref % 100) == 0) {
-        my $output_stats = Irssi::settings_get_bool('matterircd_complete_stats_output') ? "true" : '';
+        my $output_stats = Irssi::settings_get_bool('matterircd_complete_stats_output') ? "true" : "false";
         save_cache($output_stats);
     }
 }
@@ -1292,11 +1292,10 @@ sub save_cache {
     }
     close(FH);
 
-    if ($output_stats ne "true") {
-        return;
+    # eq "" so show stats on /matterircd_complete_cache_save command.
+    if ($output_stats eq "true" || $output_stats eq "") {
+        stats_show();
     }
-
-    stats_show();
 }
 Irssi::command_bind('matterircd_complete_cache_save', 'save_cache');
 
