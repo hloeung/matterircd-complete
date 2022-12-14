@@ -1212,8 +1212,8 @@ sub stats_increment {
 
     # autosave.
     if (($$stats_ref % 100) == 0) {
-        my $output = Irssi::settings_get_bool('matterircd_complete_stats_output');
-        save_cache($output);
+        my $output_stats = Irssi::settings_get_bool('matterircd_complete_stats_output') ? "true" : '';
+        save_cache($output_stats);
     }
 }
 
@@ -1293,7 +1293,7 @@ sub save_cache {
     }
     close(FH);
 
-    if ($output_stats == 0) {
+    if ($output_stats ne "true") {
         return;
     }
 
@@ -1330,7 +1330,7 @@ sub UNLOAD {
 
 sub exit_save {
     $exited = 1;
-    save_cache(1)
+    save_cache("true")
 }
 Irssi::signal_add('gui exit', 'exit_save');
 
