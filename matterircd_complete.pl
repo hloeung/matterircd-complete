@@ -1277,7 +1277,6 @@ sub save_cache {
 
     my %cache = (
         'MSGTHREADID' => \%MSGTHREADID_CACHE,
-        'NICKNAMES' => \%NICKNAMES_CACHE,
         'REPLIED' => \%REPLIED_CACHE,
         );
 
@@ -1306,7 +1305,6 @@ sub load_cache {
 
     my %cache = (
         'MSGTHREADID' => \%MSGTHREADID_CACHE,
-        'NICKNAMES' => \%NICKNAMES_CACHE,
         'REPLIED' => \%REPLIED_CACHE,
         );
 
