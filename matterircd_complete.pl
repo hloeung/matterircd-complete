@@ -334,7 +334,7 @@ sub cache_store {
 
 
 my %MSGTHREADID_CACHE;
-Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_message_thread_id_cache_size', 50);
+Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_message_thread_id_cache_size', 32);
 sub cmd_matterircd_complete_msgthreadid_cache_dump {
     my ($data, $server, $wi) = @_;
 
@@ -668,7 +668,7 @@ Irssi::signal_add_last('message own_private', 'signal_message_own_private');
 
 
 my %NICKNAMES_CACHE;
-Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_nick_cache_size', 20);
+Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_nick_cache_size', 16);
 sub cmd_matterircd_complete_nick_cache_dump {
     my ($data, $server, $wi) = @_;
 
@@ -950,7 +950,7 @@ Irssi::signal_add_last('gui key pressed', 'signal_gui_key_pressed_nicks');
 
 
 my %REPLIED_CACHE;
-Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_replied_cache_size', 50);
+Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_replied_cache_size', 32);
 sub cmd_matterircd_complete_replied_cache_dump {
     my ($data, $server, $wi) = @_;
 
