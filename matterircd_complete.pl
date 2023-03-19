@@ -254,8 +254,12 @@ sub update_msgthreadid {
     return unless $msgthreadid;
 
     my $thread_color = Irssi::settings_get_int('matterircd_complete_thread_id_color');
+    my $post_color = '';
     if ($thread_color == -1) {
         $thread_color = thread_color($msgthreadid);
+        if ($msgpostid ne '') {
+            $post_color = thread_color($msgpostid);
+        }
     } else {
         $thread_color = "\x03${thread_color}";
     }
@@ -283,6 +287,8 @@ sub update_msgthreadid {
     }
     if ($msgpostid eq '') {
         $msg =~ s/\@\@PLACEHOLDER\@\@/${thread_color}[${prefix}${msgthreadid}]\x0f/;
+    } elsif ($post_color ne '') {
+        $msg =~ s/\@\@PLACEHOLDER\@\@/${thread_color}[${prefix}${msgthreadid},${post_color}${msgpostid}${thread_color}]\x0f/;
     } else {
         $msg =~ s/\@\@PLACEHOLDER\@\@/${thread_color}[${prefix}${msgthreadid},${msgpostid}]\x0f/;
     }
