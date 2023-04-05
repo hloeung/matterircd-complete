@@ -311,19 +311,23 @@ sub cache_store {
     }
     $changed = 1;
 
+    # Insert item in cache early to ensure there isn't a read then
+    # update/modify race where the item doesn't currently exist in the
+    # cache.
+    unshift(@$cache_ref, $item);
+
     # We want to reduce duplicates by removing them currently in the
     # per-channel cache. But as a trade off in favor of
     # speed/performance, rather than traverse the entire per-channel
     # cache, we cap/limit it.
     my $limit = 16;
     my $max = ($#$cache_ref < $limit)? $#$cache_ref : $limit;
-    for my $i (0 .. $max) {
+    for my $i (1 .. $max) {
         if ((@$cache_ref[$i]) && (@$cache_ref[$i] eq $item)) {
             splice(@$cache_ref, $i, 1);
         }
     }
 
-    unshift(@$cache_ref, $item);
     if (($cache_size > 0) && (scalar(@$cache_ref) > $cache_size)) {
         pop(@$cache_ref);
     }
