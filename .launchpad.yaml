@@ -9,4 +9,4 @@ jobs:
       - irssi
       - perl-base
     run: |
-      perl -Mstrict -Mdiagnostics -cw /build/lpcraft/project/matterircd_complete.pl
+      perl -Mstrict -Mdiagnostics -cw matterircd_complete.pl
