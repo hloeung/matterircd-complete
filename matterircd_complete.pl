@@ -245,11 +245,17 @@ sub update_msgthreadid {
     my $msgthreadid = '';
     my $msgpostid = '';
     my $reply_prefix = Irssi::settings_get_str('matterircd_complete_override_reply_prefix');
+    my $thread_m_style = 0;
 
     if ($msg =~ s/\[(->|↪)?\@\@([0-9a-z]{26})(?:,\@\@([0-9a-z]{26}))?\]/\@\@PLACEHOLDER\@\@/) {
         $prefix = $reply_prefix ? $reply_prefix : $1 if $1;
         $msgthreadid = $2;
         $msgpostid = $3 ? $3 : '';
+    } elsif ($msg =~ s/\[(->|↪)?([0-9a-f]{3})(?:,([0-9a-f]{3}))?\]/\@\@PLACEHOLDER\@\@/) {
+        $prefix = $reply_prefix ? $reply_prefix : $1 if $1;
+        $msgthreadid = $2;
+        $msgpostid = $3 ? $3 : '';
+        $thread_m_style = 1;
     }
     return unless $msgthreadid;
 
@@ -275,7 +281,7 @@ sub update_msgthreadid {
     }
 
     my $len = Irssi::settings_get_int('matterircd_complete_shorten_message_thread_id');
-    if (($len < 25) && ($nick ne 'mattermost')) {
+    if (($len < 25) && ($nick ne 'mattermost') && ($thread_m_style != 1)) {
         # Shorten to length configured. We use unicode ellipsis (...)
         # here to both allow word selection to just select parts of
         # the message/thread ID when copying & pasting and save on
@@ -532,10 +538,20 @@ sub cache_msgthreadid {
         push(@msgids, $msgthreadid);
     }
     # matterircd generated 3-letter hexadecimal.
-    elsif ($msg =~ /(?:^\[([0-9a-f]{3})\])|(?:\[([0-9a-f]{3})\]\s*$)/) {
+    elsif ($msg =~ /(?:^\[(?:->|↪)?([0-9a-f]{3})\])|(?:\[(?:->|↪)?([0-9a-f]{3})\]\s*$)/) {
         push(@msgids, $1 ? $1 : $2);
     }
     # matterircd generated 3-letter hexadecimal replying to threads.
+    elsif ($msg =~ /\[(?:->|↪)?([0-9a-f]{3})(?:,([0-9a-f]{3}))?\]/) {
+        my $msgthreadid = $1;
+        my $msgpostid = $2 ? $2 : '';
+
+        if ($msgpostid ne '') {
+            push(@msgids, $msgpostid);
+        }
+        push(@msgids, $msgthreadid);
+    }
+    # matterircd generated 3-letter hexadecimal replying to threads (legacy).
     elsif ($msg =~ /(?:^\[[0-9a-f]{3}->([0-9a-f]{3})\])|(?:\[[0-9a-f]{3}->([0-9a-f]{3})\]\s*$)/) {
         push(@msgids, $1 ? $1 : $2);
     }
@@ -606,8 +622,10 @@ sub signal_message_own_public_msgthreadid {
     my $reply_prefix = Irssi::settings_get_str('matterircd_complete_override_reply_prefix');
     if (Irssi::settings_get_bool('matterircd_complete_reply_msg_thread_id_at_start')) {
         $msg =~ s/^@@[0-9a-z]{26} /${thread_color}[${reply_prefix}${msgthreadid}]\x0f /;
+        $msg =~ s/^@@[0-9a-f]{3} /${thread_color}[${reply_prefix}${msgthreadid}]\x0f /;
     } else {
         $msg =~ s/^@@[0-9a-z]{26} //;
+        $msg =~ s/^@@[0-9a-f]{3} //;
         $msg =~ s/$/ ${thread_color}[${reply_prefix}${msgthreadid}]\x0f/;
     }
 
@@ -654,8 +672,10 @@ sub signal_message_own_private {
     my $reply_prefix = Irssi::settings_get_str('matterircd_complete_override_reply_prefix');
     if (Irssi::settings_get_bool('matterircd_complete_reply_msg_thread_id_at_start')) {
         $msg =~ s/^@@[0-9a-z]{26} /${thread_color}[${reply_prefix}${msgthreadid}]\x0f /;
+        $msg =~ s/^@@[0-9a-f]{3} /${thread_color}[${reply_prefix}${msgthreadid}]\x0f /;
     } else {
         $msg =~ s/^@@[0-9a-z]{26} //;
+        $msg =~ s/^@@[0-9a-f]{3} //;
         $msg =~ s/$/ ${thread_color}[${reply_prefix}${msgthreadid}]\x0f/;
     }
 
@@ -1087,6 +1107,7 @@ sub signal_message_public {
     # For '/me' actions, it has trailing space so we need to use
     # \s* here.
     $msg =~ /\[(?:->|↪)?\@\@([0-9a-z]{26})[\],]/;
+    $msg =~ /\[(?:->|↪)?([0-9a-f]{3})[\],]/;
     my $msgthreadid = $1;
     return unless $msgthreadid;
 
