@@ -593,15 +593,19 @@ sub signal_message_own_public_msgthreadid {
     if ($msg !~ /^@@((?:[0-9a-z]{26})|(?:[0-9a-f]{3}))/) {
         return;
     }
-    my $msgid = $1;
+    my $msgthreadid = $1;
+
+    # matterircd generated 3-letter hexadecimal.
+    my $thread_m_style = 0;
+    if ($msg =~ /^@@(?:[0-9a-f]{3})/) {
+        $thread_m_style = 1;
+    }
 
     my $cache_size = Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
-    if (cache_store(\@{$MSGTHREADID_CACHE{$target}}, $msgid, $cache_size)) {
+    if (cache_store(\@{$MSGTHREADID_CACHE{$target}}, $msgthreadid, $cache_size)) {
         $MSGTHREADID_CACHE_INDEX = 0;
         stats_increment(\$MSGTHREADID_CACHE_STATS);
     }
-
-    my $msgthreadid = $1;
 
     my $thread_color = Irssi::settings_get_int('matterircd_complete_thread_id_color');
     if ($thread_color == -1) {
@@ -611,12 +615,12 @@ sub signal_message_own_public_msgthreadid {
     }
 
     my $len = Irssi::settings_get_int('matterircd_complete_shorten_message_thread_id');
-    if ($len < 25) {
+    if (($len < 25) && ($thread_m_style != 1)) {
         # Shorten to length configured. We use unicode ellipsis (...)
         # here to both allow word selection to just select parts of
         # the message/thread ID when copying & pasting and save on
         # screen real estate.
-        $msgthreadid = substr($msgid, 0, $len) . "…";
+        $msgthreadid = substr($msgthreadid, 0, $len) . "…";
     }
 
     my $reply_prefix = Irssi::settings_get_str('matterircd_complete_override_reply_prefix');
@@ -643,15 +647,19 @@ sub signal_message_own_private {
     if ($msg !~ /^@@((?:[0-9a-z]{26})|(?:[0-9a-f]{3}))/) {
         return;
     }
-    my $msgid = $1;
+    my $msgthreadid = $1;
+
+    # matterircd generated 3-letter hexadecimal.
+    my $thread_m_style = 0;
+    if ($msg =~ /^@@(?:[0-9a-f]{3})/) {
+        $thread_m_style = 1;
+    }
 
     my $cache_size = Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
-    if (cache_store(\@{$MSGTHREADID_CACHE{$target}}, $msgid, $cache_size)) {
+    if (cache_store(\@{$MSGTHREADID_CACHE{$target}}, $msgthreadid, $cache_size)) {
         $MSGTHREADID_CACHE_INDEX = 0;
         stats_increment(\$MSGTHREADID_CACHE_STATS);
     }
-
-    my $msgthreadid = $1;
 
     my $thread_color = Irssi::settings_get_int('matterircd_complete_thread_id_color');
     if ($thread_color == -1) {
@@ -661,12 +669,12 @@ sub signal_message_own_private {
     }
 
     my $len = Irssi::settings_get_int('matterircd_complete_shorten_message_thread_id');
-    if ($len < 25) {
+    if (($len < 25) && ($thread_m_style != 1)) {
         # Shorten to length configured. We use unicode ellipsis (...)
         # here to both allow word selection to just select parts of
         # the message/thread ID when copying & pasting and save on
         # screen real estate.
-        $msgthreadid = substr($msgid, 0, $len) . "…";
+        $msgthreadid = substr($msgthreadid, 0, $len) . "…";
     }
 
     my $reply_prefix = Irssi::settings_get_str('matterircd_complete_override_reply_prefix');
