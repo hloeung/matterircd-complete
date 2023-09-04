@@ -1105,6 +1105,8 @@ sub signal_message_own_public_replied {
 };
 Irssi::signal_add('message own_public', 'signal_message_own_public_replied');
 
+Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_add_nick_replied', 1);
+
 sub signal_message_public {
     my($server, $msg, $nick, $address, $target) = @_;
 
@@ -1118,6 +1120,8 @@ sub signal_message_public {
     $msg =~ /\[(?:->|↪)?([0-9a-f]{3})[\],]/;
     my $msgthreadid = $1;
     return unless $msgthreadid;
+
+    return unless Irssi::settings_get_bool('matterircd_complete_add_nick_replied');
 
     if ($msgthreadid ~~ @{$REPLIED_CACHE{$target}}) {
         # Add user's (or our own) nick for hilighting if not in
