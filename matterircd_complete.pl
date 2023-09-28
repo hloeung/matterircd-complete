@@ -299,6 +299,10 @@ sub update_msgthreadid {
         $msg =~ s/\@\@PLACEHOLDER\@\@/${thread_color}[${prefix}${msgthreadid},${msgpostid}]\x0f/;
     }
 
+    # Replace tabs with spaces.
+    # https://github.com/irssi/irssi/issues/1499
+    $msg =~ s/\t/        /g;
+
     Irssi::signal_continue($server, $msg, $nick, $address, $target);
 }
 Irssi::signal_add_last('message irc action', 'update_msgthreadid');
