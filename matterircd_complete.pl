@@ -597,7 +597,7 @@ sub signal_message_own_public_msgthreadid {
 
     # matterircd generated 3-letter hexadecimal.
     my $thread_m_style = 0;
-    if ($msg =~ /^@@(?:[0-9a-f]{3})/) {
+    if ($msg =~ /^@@(?:[0-9a-f]{3}) /) {
         $thread_m_style = 1;
     }
 
@@ -651,7 +651,7 @@ sub signal_message_own_private {
 
     # matterircd generated 3-letter hexadecimal.
     my $thread_m_style = 0;
-    if ($msg =~ /^@@(?:[0-9a-f]{3})/) {
+    if ($msg =~ /^@@(?:[0-9a-f]{3}) /) {
         $thread_m_style = 1;
     }
 
