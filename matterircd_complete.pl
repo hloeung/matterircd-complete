@@ -241,6 +241,10 @@ sub update_msgthreadid {
     my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
+    # Replace tabs with spaces.
+    # https://github.com/irssi/irssi/issues/1499
+    $msg =~ s/\t/        /g;
+
     my $prefix = '';
     my $msgthreadid = '';
     my $msgpostid = '';
@@ -257,7 +261,10 @@ sub update_msgthreadid {
         $msgpostid = $3 ? $3 : '';
         $thread_m_style = 1;
     }
-    return unless $msgthreadid;
+    if (not $msgthreadid) {
+        Irssi::signal_continue($server, $msg, $nick, $address, $target);
+        return
+    }
 
     my $thread_color = Irssi::settings_get_int('matterircd_complete_thread_id_color');
     my $post_color = '';
@@ -298,10 +305,6 @@ sub update_msgthreadid {
     } else {
         $msg =~ s/\@\@PLACEHOLDER\@\@/${thread_color}[${prefix}${msgthreadid},${msgpostid}]\x0f/;
     }
-
-    # Replace tabs with spaces.
-    # https://github.com/irssi/irssi/issues/1499
-    $msg =~ s/\t/        /g;
 
     Irssi::signal_continue($server, $msg, $nick, $address, $target);
 }
