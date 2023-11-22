@@ -491,9 +491,6 @@ Irssi::signal_add_last('gui key pressed', 'signal_gui_key_pressed_msgthreadid');
 sub signal_complete_word_msgthread_id {
     my ($complist, $window, $word, $linestart, $want_space) = @_;
 
-    # We only want to tab-complete message/thread if this is the first
-    # word on the line.
-    return if $linestart;
     return unless Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
     return if (substr($word, 0, 1) eq '@' and substr($word, 0, 2) ne '@@');
     return unless $window->{active} and ($window->{active}->{type} eq 'CHANNEL' || $window->{active}->{type} eq 'QUERY');
