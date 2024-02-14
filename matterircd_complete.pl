@@ -1139,6 +1139,76 @@ sub signal_message_public {
 };
 Irssi::signal_add('message public', 'signal_message_public');
 
+
+#==============================================================================
+
+# The reactions cache keeps commonly used reactions.
+
+
+# Default list of reactions.
+my @REACTIONS_CACHE = ('+:+1:', '+:thumbsup:', '+:rolling_on_the_floor_laughing');
+Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_reactions_cache_size', 32);
+sub cmd_matterircd_complete_reactions_cache_dump {
+    my ($data, $server, $wi) = @_;
+
+    my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
+    return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
+
+    _wi_print($wi, "Reactions cache");
+
+    if (scalar @REACTIONS_CACHE == 0) {
+        _wi_print($wi, "Empty");
+        return;
+    }
+
+    foreach my $reaction (@REACTIONS_CACHE) {
+        _wi_print($wi, "${reaction}");
+    }
+    _wi_print($wi, "Total: " . scalar @REACTIONS_CACHE);
+};
+Irssi::command_bind('matterircd_complete_reactions_cache_dump', 'cmd_matterircd_complete_reactions_cache_dump');
+
+my $REACTIONS_CACHE_STATS = 0;
+sub signal_message_own_public_reactions {
+    my($server, $msg, $target) = @_;
+
+    return unless Irssi::settings_get_int('matterircd_complete_reactions_cache_size');
+    my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
+    return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
+
+    if ($msg !~ /^@@((?:[0-9a-z]{26})|(?:[0-9a-f]{3}))\s*(\+:.*:\s*)/) {
+        return;
+    }
+    my $reaction = $2;
+
+    my $cache_size = Irssi::settings_get_int('matterircd_complete_reactions_cache_size');
+    if (cache_store(\@REACTIONS_CACHE, $reaction, $cache_size)) {
+        stats_increment(\$REACTIONS_CACHE_STATS);
+    }
+};
+Irssi::signal_add('message own_public', 'signal_message_own_public_reactions');
+
+sub signal_complete_word_reaction {
+    my ($complist, $window, $word, $linestart, $want_space) = @_;
+
+    return unless Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
+    return if (substr($word, 0, 1) eq '+' and substr($word, 0, 2) ne '+:');
+    return unless $window->{active} and ($window->{active}->{type} eq 'CHANNEL' || $window->{active}->{type} eq 'QUERY');
+
+    my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
+    return unless exists $chatnets{'*'} || exists $chatnets{$window->{active_server}->{chatnet}};
+
+    foreach my $reaction (@REACTIONS_CACHE) {
+        if ($reaction =~ /^\Q$word\E/) {
+            push(@$complist, $reaction);
+        }
+    }
+};
+Irssi::signal_add_last('complete word', 'signal_complete_word_reaction');
+
+
+#==============================================================================
+
 # Remove an array's elements per their values
 sub array_splice_values {
     my ($ar_ref, $uw_ref) = @_;
