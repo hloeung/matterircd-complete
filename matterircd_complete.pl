@@ -1146,7 +1146,7 @@ Irssi::signal_add('message public', 'signal_message_public');
 
 
 # Default list of reactions.
-my @REACTIONS_CACHE = ('+:+1:', '+:thumbsup:', '+:rolling_on_the_floor_laughing');
+my @REACTIONS_CACHE = ('+:+1:', '+:thumbsup:', '+:rolling_on_the_floor_laughing:');
 Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_reactions_cache_size', 32);
 sub cmd_matterircd_complete_reactions_cache_dump {
     my ($data, $server, $wi) = @_;
