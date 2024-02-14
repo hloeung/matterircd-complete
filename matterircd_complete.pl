@@ -1146,7 +1146,12 @@ Irssi::signal_add('message public', 'signal_message_public');
 
 
 # Default list of reactions.
-my @REACTIONS_CACHE = ('+:+1:', '+:thumbsup:', '+:rolling_on_the_floor_laughing:');
+Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_reactions', '+1 thumbsup laughing crossed_fingers pray wave rolling_on_the_floor_laughing astonished cry eyes party-rofl tada');
+
+# Now convert the default set.
+my $REACTIONS_DEFAULT = Irssi::settings_get_str('matterircd_complete_reactions');
+
+my @REACTIONS_CACHE = split /\s+/, $REACTIONS_DEFAULT;
 Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_reactions_cache_size', 32);
 sub cmd_matterircd_complete_reactions_cache_dump {
     my ($data, $server, $wi) = @_;
@@ -1176,7 +1181,7 @@ sub signal_message_own_public_reactions {
     my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
-    if ($msg !~ /^@@((?:[0-9a-z]{26})|(?:[0-9a-f]{3}))\s*(\+:.*:\s*)/) {
+    if ($msg !~ /^@@((?:[0-9a-z]{26})|(?:[0-9a-f]{3}))\s*\+:(.*):\s*/) {
         return;
     }
     my $reaction = $2;
@@ -1198,9 +1203,13 @@ sub signal_complete_word_reaction {
     my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$window->{active_server}->{chatnet}};
 
+    if (substr($word, 0, 2) eq '+:') {
+        $word = substr($word, 2);
+    }
+
     foreach my $reaction (@REACTIONS_CACHE) {
         if ($reaction =~ /^\Q$word\E/) {
-            push(@$complist, $reaction);
+            push(@$complist, "+:${reaction}:");
         }
     }
 };
