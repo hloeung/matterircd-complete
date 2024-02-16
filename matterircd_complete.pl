@@ -1151,7 +1151,7 @@ Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_reactions', 
 # Now convert the default set.
 my $REACTIONS_DEFAULT = Irssi::settings_get_str('matterircd_complete_reactions');
 
-my @REACTIONS_CACHE = split /\s+/, $REACTIONS_DEFAULT;
+my @REACTIONS_CACHE;
 Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_reactions_cache_size', 32);
 sub cmd_matterircd_complete_reactions_cache_dump {
     my ($data, $server, $wi) = @_;
@@ -1161,15 +1161,21 @@ sub cmd_matterircd_complete_reactions_cache_dump {
 
     _wi_print($wi, "Reactions cache");
 
+    my $count = 0;
     if (scalar @REACTIONS_CACHE == 0) {
-        _wi_print($wi, "Empty");
-        return;
+        _wi_print($wi, "Empty cache");
+    } else {
+        foreach my $reaction (@REACTIONS_CACHE) {
+            _wi_print($wi, "${reaction}");
+            $count += 1;
+        }
     }
-
-    foreach my $reaction (@REACTIONS_CACHE) {
+    _wi_print($wi, "Default Reactions");
+    foreach my $reaction (split /\s+/, $REACTIONS_DEFAULT) {
         _wi_print($wi, "${reaction}");
+        $count += 1;
     }
-    _wi_print($wi, "Total: " . scalar @REACTIONS_CACHE);
+    _wi_print($wi, "Total: " . $count);
 };
 Irssi::command_bind('matterircd_complete_reactions_cache_dump', 'cmd_matterircd_complete_reactions_cache_dump');
 
@@ -1207,7 +1213,8 @@ sub signal_complete_word_reaction {
         $word = substr($word, 2);
     }
 
-    foreach my $reaction (@REACTIONS_CACHE) {
+    my @reactions_cache = (@REACTIONS_CACHE, split /\s+/, $REACTIONS_DEFAULT);
+    foreach my $reaction (@reactions_cache) {
         if ($reaction =~ /^\Q$word\E/) {
             push(@$complist, "+:${reaction}:");
         }
