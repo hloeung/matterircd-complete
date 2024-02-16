@@ -523,7 +523,7 @@ sub cache_msgthreadid {
 
     my @ignore_nicks = split(/\s+/, Irssi::settings_get_str('matterircd_complete_nick_ignore'));
     # Ignore nicks configured to be ignored such as bots.
-    if ($nick ~~ @ignore_nicks) {
+    if (grep(/^$nick$/, @ignore_nicks)) {
         # But not if the channel is in matterircd_complete_channel_dont_ignore.
         my @channel_dont_ignore = split(/\s+/, Irssi::settings_get_str('matterircd_complete_channel_dont_ignore'));
         if ($target !~ @channel_dont_ignore) {
@@ -759,7 +759,7 @@ sub signal_complete_word_nicks {
             next;
         }
         # Ignore nicks configured to be ignored such as bots.
-        elsif ($nick ~~ @ignore_nicks) {
+        elsif (grep(/^$nick$/, @ignore_nicks)) {
             next;
         }
         # Only those matching partial word.
@@ -797,7 +797,7 @@ sub signal_complete_word_nicks {
             next;
         }
         # Only add to completion list if user/nick is online and in channel.
-        elsif (${nick} ~~ @tmp) {
+        elsif (grep(/^$nick$/, @tmp)) {
             # Only add completion character on line start.
             if (not $linestart) {
                 unshift(@$complist, "\@${nick}${compl_char}");
@@ -882,7 +882,7 @@ sub cmd_nicknames_search {
             next;
         }
         # Ignore nicks configured to be ignored such as bots.
-        elsif ($nick ~~ @ignore_nicks) {
+        elsif (grep(/^$nick$/, @ignore_nicks)) {
             next;
         }
         push(@NICKNAMES_CACHE_SEARCH, $nick);
@@ -902,7 +902,7 @@ sub cmd_nicknames_search {
             }
             # Only add to completion list if user/nick is online and
             # in channel.
-            elsif ($nick ~~ @NICKNAMES_CACHE_SEARCH) {
+            elsif (grep(/^$nick$/, @NICKNAMES_CACHE_SEARCH)) {
                 unshift(@NICKNAMES_CACHE_SEARCH, $nick);
             }
         }
@@ -1127,7 +1127,7 @@ sub signal_message_public {
 
     return unless Irssi::settings_get_bool('matterircd_complete_add_nick_replied');
 
-    if ($msgthreadid ~~ @{$REPLIED_CACHE{$target}}) {
+    if (grep(/^$msgthreadid$/, @{$REPLIED_CACHE{$target}})) {
         # Add user's (or our own) nick for hilighting if not in
         # message and message not from us.
         if (($nick ne $server->{nick}) && ($msg !~ /\@$server->{nick}/)) {
