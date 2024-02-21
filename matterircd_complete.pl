@@ -1145,8 +1145,8 @@ Irssi::signal_add('message public', 'signal_message_public');
 # The reactions cache keeps commonly used reactions.
 
 
-# Default list of reactions.
-Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_reactions', '+1 thumbsup laughing crossed_fingers pray wave rolling_on_the_floor_laughing astonished cry eyes party-rofl tada');
+# Default list of reactions. See https://raw.githubusercontent.com/github/gemoji/master/db/emoji.json
+Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_reactions', '+1 thumbsup laughing crossed_fingers pray wave rofl astonished cry eyes tada');
 
 # Now convert the default set.
 my $REACTIONS_DEFAULT = Irssi::settings_get_str('matterircd_complete_reactions');
