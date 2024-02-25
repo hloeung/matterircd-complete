@@ -251,7 +251,7 @@ sub update_msgthreadid {
     my $reply_prefix = Irssi::settings_get_str('matterircd_complete_override_reply_prefix');
     my $thread_m_style = 0;
 
-    if ($msg =~ s/\[(->|↪)?\@\@([0-9a-z]{26})(?:,\@\@([0-9a-z]{26}))?\]/\@\@PLACEHOLDER\@\@/) {
+    if ($msg =~ s/\[(->|↪)?\@\@([0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43})(?:,\@\@([0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43}))?\]/\@\@PLACEHOLDER\@\@/) {
         $prefix = $reply_prefix ? $reply_prefix : $1 if $1;
         $msgthreadid = $2;
         $msgpostid = $3 ? $3 : '';
@@ -410,7 +410,7 @@ sub cmd_message_thread_id_search {
         # Save input text.
         my $input = Irssi::parse_special('$L');
         # Remove existing thread.
-        $input =~ s/^@@(?:[0-9a-z]{26}|[0-9a-f]{3}) //;
+        $input =~ s/^@@(?:[0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43}|[0-9a-f]{3}) //;
         # Insert message/thread ID from cache.
         Irssi::gui_input_set_pos(0);
         Irssi::gui_input_set("\@\@${msgthreadid} ${input}");
@@ -445,7 +445,7 @@ sub signal_gui_key_pressed_msgthreadid {
         $input =~ tr///d;
 
         my $pos = 0;
-        if ($input =~ s/^(@@(?:[0-9a-z]{26}|[0-9a-f]{3}) )//) {
+        if ($input =~ s/^(@@(?:[0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43}|[0-9a-f]{3}) )//) {
             $pos = Irssi::gui_input_get_pos() - length($1);
         }
 
@@ -532,7 +532,7 @@ sub cache_msgthreadid {
     }
 
     # Mattermost message/thread IDs.
-    if ($msg =~ /\[(?:->|↪)?\@\@([0-9a-z]{26})(?:,\@\@([0-9a-z]{26}))?\]/) {
+    if ($msg =~ /\[(?:->|↪)?\@\@([0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43})(?:,\@\@([0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43}))?\]/) {
         my $msgthreadid = $1;
         my $msgpostid = $2 ? $2 : '';
 
@@ -594,7 +594,7 @@ sub signal_message_own_public_msgthreadid {
     my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
-    if ($msg !~ /^@@((?:[0-9a-z]{26})|(?:[0-9a-f]{3}))/) {
+    if ($msg !~ /^@@((?:[0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43})|(?:[0-9a-f]{3}))/) {
         return;
     }
     my $msgthreadid = $1;
@@ -629,10 +629,10 @@ sub signal_message_own_public_msgthreadid {
 
     my $reply_prefix = Irssi::settings_get_str('matterircd_complete_override_reply_prefix');
     if (Irssi::settings_get_bool('matterircd_complete_reply_msg_thread_id_at_start')) {
-        $msg =~ s/^@@[0-9a-z]{26} /${thread_color}[${reply_prefix}${msgthreadid}]\x0f /;
+        $msg =~ s/^@@(?:[0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43}) /${thread_color}[${reply_prefix}${msgthreadid}]\x0f /;
         $msg =~ s/^@@[0-9a-f]{3} /${thread_color}[${reply_prefix}${msgthreadid}]\x0f /;
     } else {
-        $msg =~ s/^@@[0-9a-z]{26} //;
+        $msg =~ s/^@@(?:[0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43}) //;
         $msg =~ s/^@@[0-9a-f]{3} //;
         $msg =~ s/$/ ${thread_color}[${reply_prefix}${msgthreadid}]\x0f/;
     }
@@ -648,7 +648,7 @@ sub signal_message_own_private {
     my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
-    if ($msg !~ /^@@((?:[0-9a-z]{26})|(?:[0-9a-f]{3}))/) {
+    if ($msg !~ /^@@([0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43}|[0-9a-f]{3})/) {
         return;
     }
     my $msgthreadid = $1;
@@ -683,10 +683,10 @@ sub signal_message_own_private {
 
     my $reply_prefix = Irssi::settings_get_str('matterircd_complete_override_reply_prefix');
     if (Irssi::settings_get_bool('matterircd_complete_reply_msg_thread_id_at_start')) {
-        $msg =~ s/^@@[0-9a-z]{26} /${thread_color}[${reply_prefix}${msgthreadid}]\x0f /;
+        $msg =~ s/^@@(?:[0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43}) /${thread_color}[${reply_prefix}${msgthreadid}]\x0f /;
         $msg =~ s/^@@[0-9a-f]{3} /${thread_color}[${reply_prefix}${msgthreadid}]\x0f /;
     } else {
-        $msg =~ s/^@@[0-9a-z]{26} //;
+        $msg =~ s/^@@(?:[0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43}) //;
         $msg =~ s/^@@[0-9a-f]{3} //;
         $msg =~ s/$/ ${thread_color}[${reply_prefix}${msgthreadid}]\x0f/;
     }
@@ -922,7 +922,7 @@ sub cmd_nicknames_search {
         my $compl_char = Irssi::settings_get_str('completion_char');
         # Remove any existing nickname and insert one from the cache.
         my $msgid = "";
-        if ($input =~ s/^(\@\@(?:[0-9a-z]{26}|[0-9a-f]{3}) )//) {
+        if ($input =~ s/^(\@\@(?:[0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43}|[0-9a-f]{3}) )//) {
             $msgid = $1;
         }
         $input =~ s/^\@[^${compl_char}]+$compl_char //;
@@ -1097,7 +1097,7 @@ sub signal_message_own_public_replied {
     my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
-    if ($msg !~ /^@@((?:[0-9a-z]{26})|(?:[0-9a-f]{3}))/) {
+    if ($msg !~ /^@@([0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43}|[0-9a-f]{3})/) {
         return;
     }
     my $msgid = $1;
@@ -1120,7 +1120,7 @@ sub signal_message_public {
 
     # For '/me' actions, it has trailing space so we need to use
     # \s* here.
-    $msg =~ /\[(?:->|↪)?\@\@([0-9a-z]{26})[\],]/;
+    $msg =~ /\[(?:->|↪)?\@\@([0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43})[\],]/;
     $msg =~ /\[(?:->|↪)?([0-9a-f]{3})[\],]/;
     my $msgthreadid = $1;
     return unless $msgthreadid;
@@ -1187,7 +1187,7 @@ sub signal_message_own_public_reactions {
     my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
-    if ($msg !~ /^@@((?:[0-9a-z]{26})|(?:[0-9a-f]{3}))\s*\+:(.*):\s*/) {
+    if ($msg !~ /^@@([0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43}|[0-9a-f]{3})\s*\+:(.*):\s*/) {
         return;
     }
     my $reaction = $2;
