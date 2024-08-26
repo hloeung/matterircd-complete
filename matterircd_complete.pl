@@ -488,6 +488,11 @@ sub signal_gui_key_pressed_msgthreadid {
 };
 Irssi::signal_add_last('gui key pressed', 'signal_gui_key_pressed_msgthreadid');
 
+# We keep the posts to threads IDs in a separate cache so it's added
+# to the end for autocompletion so it's less likely that we reply to
+# the wrong thread.
+my %MSGTHREAD_POST_ID_CACHE;
+
 sub signal_complete_word_msgthread_id {
     my ($complist, $window, $word, $linestart, $want_space) = @_;
 
@@ -503,9 +508,18 @@ sub signal_complete_word_msgthread_id {
         $word = substr($word, 2);
     }
 
+    # Main msg post and thread IDs in the main cache.
     foreach my $msgthread_id (@{$MSGTHREADID_CACHE{$window->{active}->{name}}}) {
         if ($msgthread_id =~ /^\Q$word\E/) {
             push(@$complist, "\@\@${msgthread_id}");
+        }
+    }
+    if (exists($MSGTHREAD_POST_ID_CACHE{$window->{active}->{name}})) {
+        # Store posts to threads IDs in a separate cache.
+        foreach my $msgthread_id (@{$MSGTHREAD_POST_ID_CACHE{$window->{active}->{name}}}) {
+            if ($msgthread_id =~ /^\Q$word\E/) {
+                push(@$complist, "\@\@${msgthread_id}");
+            }
         }
     }
 };
@@ -520,6 +534,7 @@ sub cache_msgthreadid {
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
     my @msgids = ();
+    my @msgpost_ids = ();
 
     my @ignore_nicks = split(/\s+/, Irssi::settings_get_str('matterircd_complete_nick_ignore'));
     # Ignore nicks configured to be ignored such as bots.
@@ -537,7 +552,7 @@ sub cache_msgthreadid {
         my $msgpostid = $2 ? $2 : '';
 
         if ($msgpostid ne '') {
-            push(@msgids, $msgpostid);
+            push(@msgpost_ids, $msgpostid);
         }
         push(@msgids, $msgthreadid);
     }
@@ -551,7 +566,7 @@ sub cache_msgthreadid {
         my $msgpostid = $2 ? $2 : '';
 
         if ($msgpostid ne '') {
-            push(@msgids, $msgpostid);
+            push(@msgpost_ids, $msgpostid);
         }
         push(@msgids, $msgthreadid);
     }
@@ -578,6 +593,12 @@ sub cache_msgthreadid {
             $MSGTHREADID_CACHE_INDEX = 0;
             stats_increment(\$MSGTHREADID_CACHE_STATS);
         }
+    }
+
+    # Search to supplementary cache to see if replies to posts IDs
+    # match. This is mainly for reactions and such.
+    for my $msgpostid (@msgpost_ids) {
+        cache_store(\@{$MSGTHREAD_POST_ID_CACHE{$key}}, $msgpostid, $cache_size);
     }
 }
 Irssi::signal_add('message irc action', 'cache_msgthreadid');
@@ -1146,7 +1167,7 @@ Irssi::signal_add('message public', 'signal_message_public');
 
 
 # Default list of reactions. See https://raw.githubusercontent.com/github/gemoji/master/db/emoji.json
-Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_reactions', '+1 thumbsup laughing crossed_fingers pray wave rofl astonished cry eyes tada');
+Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_reactions', '+1 thumbsup laughing crossed_fingers pray wave rofl astonished cry eyes tada 100');
 
 # Now convert the default set.
 my $REACTIONS_DEFAULT = Irssi::settings_get_str('matterircd_complete_reactions');
