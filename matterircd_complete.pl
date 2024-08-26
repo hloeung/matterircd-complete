@@ -1419,7 +1419,7 @@ sub stats_show {
     $channels = keys %{$cache{'REPLIED'}};
     Irssi::print("[matterircd_complete] ${entries} entries across ${channels} channels for threads replied to cache (${REPLIED_CACHE_STATS} updates)");
 
-    my $total_updates = $MSGTHREADID_CACHE_STATS + $NICKNAMES_CACHE_STATS + $REPLIED_CACHE_STATS;
+    my $total_updates = $MSGTHREADID_CACHE_STATS + $MSGTHREAD_POST_ID_CACHE_STATS + $NICKNAMES_CACHE_STATS + $REPLIED_CACHE_STATS;
     Irssi::print("[matterircd_complete] \x03%GSaved total of ${total} entries in the cache (${total_updates} total updates)…");
 }
 Irssi::command_bind('matterircd_complete_stats', 'stats_show');
