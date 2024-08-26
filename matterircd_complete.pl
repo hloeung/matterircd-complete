@@ -526,6 +526,7 @@ sub signal_complete_word_msgthread_id {
 Irssi::signal_add_last('complete word', 'signal_complete_word_msgthread_id');
 
 my $MSGTHREADID_CACHE_STATS = 0;
+my $MSGTHREAD_POST_ID_CACHE_STATS = 0;
 sub cache_msgthreadid {
     my($server, $msg, $nick, $address, $target) = @_;
 
@@ -598,7 +599,9 @@ sub cache_msgthreadid {
     # Search to supplementary cache to see if replies to posts IDs
     # match. This is mainly for reactions and such.
     for my $msgpostid (@msgpost_ids) {
-        cache_store(\@{$MSGTHREAD_POST_ID_CACHE{$key}}, $msgpostid, $cache_size);
+        if (cache_store(\@{$MSGTHREAD_POST_ID_CACHE{$key}}, $msgpostid, $cache_size)) {
+            stats_increment(\$MSGTHREAD_POST_ID_CACHE_STATS);
+        }
     }
 }
 Irssi::signal_add('message irc action', 'cache_msgthreadid');
@@ -1378,12 +1381,14 @@ sub stats_show {
 
     my %cache = (
         'MSGTHREADID' => \%MSGTHREADID_CACHE,
+        'MSGTHREAD_POST_ID' => \%MSGTHREAD_POST_ID_CACHE,
         'NICKNAMES' => \%NICKNAMES_CACHE,
         'REPLIED' => \%REPLIED_CACHE,
         );
 
     my %stats = (
         'MSGTHREADID' => 0,
+        'MSGTHREAD_POST_ID' => 0,
         'NICKNAMES' => 0,
         'REPLIED' => 0,
         );
@@ -1401,6 +1406,10 @@ sub stats_show {
     $entries = $stats{'MSGTHREADID'};
     $channels = keys %{$cache{'MSGTHREADID'}};
     Irssi::print("[matterircd_complete] ${entries} entries across ${channels} channels for msg/thread IDs cache (${MSGTHREADID_CACHE_STATS} updates)");
+
+    $entries = $stats{'MSGTHREAD_POST_ID'};
+    $channels = keys %{$cache{'MSGTHREAD_POST_ID'}};
+    Irssi::print("[matterircd_complete] ${entries} entries across ${channels} channels for posts/replies to threads IDs cache (${MSGTHREAD_POST_ID_CACHE_STATS} updates)");
 
     $entries = $stats{'NICKNAMES'};
     $channels = keys %{$cache{'NICKNAMES'}};
