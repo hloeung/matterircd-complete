@@ -1091,6 +1091,7 @@ sub cmd_matterircd_complete_replied_cache_clear {
     }
 };
 Irssi::command_bind('matterircd_complete_replied_cache_clear', 'cmd_matterircd_complete_replied_cache_clear');
+Irssi::command_bind('matterircd_complete_clear_replied_cache', 'cmd_matterircd_complete_replied_cache_clear');
 
 my $REPLIED_CACHE_CLEARED = 0;
 Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_clear_replied_cache_on_away', 0);
