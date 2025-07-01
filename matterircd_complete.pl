@@ -355,9 +355,12 @@ sub cache_store {
 # seen. This makes it easier for replying directly to threads in
 # Mattermost or creating new threads.
 
+Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_message_thread_id_cache_size', 32);
 
 my %MSGTHREADID_CACHE;
-Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_message_thread_id_cache_size', 32);
+# Smaller cache for most recent threads and posts for more accurate auto completion
+my %MSGTHREADID_MOST_RECENT_CACHE;
+
 sub cmd_matterircd_complete_msgthreadid_cache_dump {
     my ($data, $server, $wi) = @_;
 
@@ -385,6 +388,34 @@ sub cmd_matterircd_complete_msgthreadid_cache_dump {
     _wi_print($wi, "${channel}: Total: " . scalar @{$MSGTHREADID_CACHE{$channel}});
 };
 Irssi::command_bind('matterircd_complete_msgthreadid_cache_dump', 'cmd_matterircd_complete_msgthreadid_cache_dump');
+
+sub cmd_matterircd_complete_msgthreadid_most_recent_cache_dump {
+    my ($data, $server, $wi) = @_;
+
+    if (not $data) {
+        return unless ref $wi and ($wi->{type} eq 'CHANNEL' or $wi->{type} eq 'QUERY');
+    }
+
+    my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
+    return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
+
+    my $channel = $data ? $data : $wi->{name};
+    # Remove leading and trailing whitespace.
+    $channel =~ tr/ 	//d;
+
+    _wi_print($wi, "${channel}: Most recent Message/Thread ID cache");
+
+    if ((not exists($MSGTHREADID_MOST_RECENT_CACHE{$channel})) || (scalar @{$MSGTHREADID_MOST_RECENT_CACHE{$channel}} == 0)) {
+        _wi_print($wi, "${channel}: Empty");
+        return;
+    }
+
+    foreach my $msgthread_id (@{$MSGTHREADID_MOST_RECENT_CACHE{$channel}}) {
+        _wi_print($wi, "${channel}: ${msgthread_id}");
+    }
+    _wi_print($wi, "${channel}: Total: " . scalar @{$MSGTHREADID_MOST_RECENT_CACHE{$channel}});
+};
+Irssi::command_bind('matterircd_complete_msgthreadid_most_recent_cache_dump', 'cmd_matterircd_complete_msgthreadid_most_recent_cache_dump');
 
 my $MSGTHREADID_CACHE_SEARCH_ENABLED = 0;
 my $MSGTHREADID_CACHE_INDEX = 0;
@@ -488,11 +519,6 @@ sub signal_gui_key_pressed_msgthreadid {
 };
 Irssi::signal_add_last('gui key pressed', 'signal_gui_key_pressed_msgthreadid');
 
-# We keep the posts to threads IDs in a separate cache so it's added
-# to the end for autocompletion so it's less likely that we reply to
-# the wrong thread.
-my %MSGTHREAD_POST_ID_CACHE;
-
 sub signal_complete_word_msgthread_id {
     my ($complist, $window, $word, $linestart, $want_space) = @_;
 
@@ -508,25 +534,26 @@ sub signal_complete_word_msgthread_id {
         $word = substr($word, 2);
     }
 
+    if (exists($MSGTHREADID_MOST_RECENT_CACHE{$window->{active}->{name}})) {
+        # Search to include supplementary cache to see if replies to posts IDs
+        # match. This is mainly for reactions and such.
+        foreach my $msgthread_id (@{$MSGTHREADID_MOST_RECENT_CACHE{$window->{active}->{name}}}) {
+            if ($msgthread_id =~ /^\Q$word\E/) {
+                push(@$complist, "\@\@${msgthread_id}");
+            }
+        }
+    }
     # Main msg post and thread IDs in the main cache.
     foreach my $msgthread_id (@{$MSGTHREADID_CACHE{$window->{active}->{name}}}) {
         if ($msgthread_id =~ /^\Q$word\E/) {
             push(@$complist, "\@\@${msgthread_id}");
         }
     }
-    if (exists($MSGTHREAD_POST_ID_CACHE{$window->{active}->{name}})) {
-        # Store posts to threads IDs in a separate cache.
-        foreach my $msgthread_id (@{$MSGTHREAD_POST_ID_CACHE{$window->{active}->{name}}}) {
-            if ($msgthread_id =~ /^\Q$word\E/) {
-                push(@$complist, "\@\@${msgthread_id}");
-            }
-        }
-    }
 };
 Irssi::signal_add_last('complete word', 'signal_complete_word_msgthread_id');
 
 my $MSGTHREADID_CACHE_STATS = 0;
-my $MSGTHREAD_POST_ID_CACHE_STATS = 0;
+my $MSGTHREADID_MOST_RECENT_CACHE_STATS = 0;
 sub cache_msgthreadid {
     my($server, $msg, $nick, $address, $target) = @_;
 
@@ -589,6 +616,8 @@ sub cache_msgthreadid {
     }
 
     my $cache_size = Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
+
+    # Parent / thread IDs only.
     for my $msgid (@msgids) {
         if (cache_store(\@{$MSGTHREADID_CACHE{$key}}, $msgid, $cache_size)) {
             $MSGTHREADID_CACHE_INDEX = 0;
@@ -596,11 +625,16 @@ sub cache_msgthreadid {
         }
     }
 
-    # Search to supplementary cache to see if replies to posts IDs
-    # match. This is mainly for reactions and such.
+    # Most recent posts / replies to threads.
     for my $msgpostid (@msgpost_ids) {
-        if (cache_store(\@{$MSGTHREAD_POST_ID_CACHE{$key}}, $msgpostid, $cache_size)) {
-            stats_increment(\$MSGTHREAD_POST_ID_CACHE_STATS);
+        if (cache_store(\@{$MSGTHREADID_MOST_RECENT_CACHE{$key}}, $msgpostid, $cache_size)) {
+            stats_increment(\$MSGTHREADID_MOST_RECENT_CACHE_STATS);
+        }
+    }
+    # Include parent/thread ID in most recent, right at the beginning for more accurate auto completion
+    for my $msgid (@msgids) {
+        if (cache_store(\@{$MSGTHREADID_MOST_RECENT_CACHE{$key}}, $msgid, $cache_size)) {
+            stats_increment(\$MSGTHREADID_MOST_RECENT_CACHE_STATS);
         }
     }
 }
@@ -1091,7 +1125,7 @@ sub cmd_matterircd_complete_replied_cache_clear {
     }
 };
 Irssi::command_bind('matterircd_complete_replied_cache_clear', 'cmd_matterircd_complete_replied_cache_clear');
-Irssi::command_bind('matterircd_complete_clear_replied_cache', 'cmd_matterircd_complete_replied_cache_clear');
+Irssi::command_bind('matterircd_complete_cache_clear_replied', 'cmd_matterircd_complete_replied_cache_clear');
 
 my $REPLIED_CACHE_CLEARED = 0;
 Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_clear_replied_cache_on_away', 0);
@@ -1382,7 +1416,7 @@ sub stats_show {
 
     my %cache = (
         'MSGTHREADID' => \%MSGTHREADID_CACHE,
-        'MSGTHREAD_POST_ID' => \%MSGTHREAD_POST_ID_CACHE,
+        'MSGTHREAD_POST_ID' => \%MSGTHREADID_MOST_RECENT_CACHE,
         'NICKNAMES' => \%NICKNAMES_CACHE,
         'REPLIED' => \%REPLIED_CACHE,
         );
@@ -1410,7 +1444,7 @@ sub stats_show {
 
     $entries = $stats{'MSGTHREAD_POST_ID'};
     $channels = keys %{$cache{'MSGTHREAD_POST_ID'}};
-    Irssi::print("[matterircd_complete] ${entries} entries across ${channels} channels for posts/replies to threads IDs cache (${MSGTHREAD_POST_ID_CACHE_STATS} updates)");
+    Irssi::print("[matterircd_complete] ${entries} entries across ${channels} channels for recent posts/replies to threads IDs cache (${MSGTHREADID_MOST_RECENT_CACHE_STATS} updates)");
 
     $entries = $stats{'NICKNAMES'};
     $channels = keys %{$cache{'NICKNAMES'}};
@@ -1420,7 +1454,7 @@ sub stats_show {
     $channels = keys %{$cache{'REPLIED'}};
     Irssi::print("[matterircd_complete] ${entries} entries across ${channels} channels for threads replied to cache (${REPLIED_CACHE_STATS} updates)");
 
-    my $total_updates = $MSGTHREADID_CACHE_STATS + $MSGTHREAD_POST_ID_CACHE_STATS + $NICKNAMES_CACHE_STATS + $REPLIED_CACHE_STATS;
+    my $total_updates = $MSGTHREADID_CACHE_STATS + $MSGTHREADID_MOST_RECENT_CACHE_STATS + $NICKNAMES_CACHE_STATS + $REPLIED_CACHE_STATS;
     Irssi::print("[matterircd_complete] \x03%GSaved total of ${total} entries in the cache (${total_updates} total updates)…");
 }
 Irssi::command_bind('matterircd_complete_stats', 'stats_show');
@@ -1438,6 +1472,7 @@ sub save_cache {
 
     my %cache = (
         'MSGTHREADID' => \%MSGTHREADID_CACHE,
+        'MSGTHREADID_MOST_RECENT_CACHE' => \%MSGTHREADID_MOST_RECENT_CACHE,
         'REPLIED' => \%REPLIED_CACHE,
         );
 
@@ -1465,6 +1500,7 @@ sub load_cache {
 
     my %cache = (
         'MSGTHREADID' => \%MSGTHREADID_CACHE,
+        'MSGTHREADID_MOST_RECENT_CACHE' => \%MSGTHREADID_MOST_RECENT_CACHE,
         'REPLIED' => \%REPLIED_CACHE,
         );
 
