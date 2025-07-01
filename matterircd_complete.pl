@@ -355,6 +355,7 @@ sub cache_store {
 # seen. This makes it easier for replying directly to threads in
 # Mattermost or creating new threads.
 
+
 Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_message_thread_id_cache_size', 32);
 
 my %MSGTHREADID_CACHE;
@@ -761,8 +762,9 @@ Irssi::signal_add_last('message own_private', 'signal_message_own_private');
 # users/nicks will be first in the completion list.
 
 
-my %NICKNAMES_CACHE;
 Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_nick_cache_size', 16);
+
+my %NICKNAMES_CACHE;
 sub cmd_matterircd_complete_nick_cache_dump {
     my ($data, $server, $wi) = @_;
 
@@ -1043,8 +1045,9 @@ Irssi::signal_add_last('gui key pressed', 'signal_gui_key_pressed_nicks');
 # so that any further replies to these threads will be hilighted.
 
 
-my %REPLIED_CACHE;
 Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_replied_cache_size', 32);
+
+my %REPLIED_CACHE;
 sub cmd_matterircd_complete_replied_cache_dump {
     my ($data, $server, $wi) = @_;
 
@@ -1204,14 +1207,17 @@ Irssi::signal_add('message public', 'signal_message_public');
 # The reactions cache keeps commonly used reactions.
 
 
+Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_reactions_cache_size', 32);
+
 # Default list of reactions. See https://raw.githubusercontent.com/github/gemoji/master/db/emoji.json
 Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_reactions', '+1 thumbsup laughing crossed_fingers pray wave rofl astonished cry eyes tada 100');
 
 # Now convert the default set.
 my $REACTIONS_DEFAULT = Irssi::settings_get_str('matterircd_complete_reactions');
 
-my @REACTIONS_CACHE;
-Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_reactions_cache_size', 32);
+my %REACTIONS_CACHE;
+@{$REACTIONS_CACHE{'#'}} = ();
+
 sub cmd_matterircd_complete_reactions_cache_dump {
     my ($data, $server, $wi) = @_;
 
@@ -1221,10 +1227,10 @@ sub cmd_matterircd_complete_reactions_cache_dump {
     _wi_print($wi, "Reactions cache");
 
     my $count = 0;
-    if (scalar @REACTIONS_CACHE == 0) {
+    if (scalar @{$REACTIONS_CACHE{'#'}} == 0) {
         _wi_print($wi, "Empty cache");
     } else {
-        foreach my $reaction (@REACTIONS_CACHE) {
+        foreach my $reaction (@{$REACTIONS_CACHE{'#'}}) {
             _wi_print($wi, "${reaction}");
             $count += 1;
         }
@@ -1255,7 +1261,7 @@ sub signal_message_own_public_reactions {
     $reaction =~ s/^rolling_on_the_floor_laughing$/rofl/;
 
     my $cache_size = Irssi::settings_get_int('matterircd_complete_reactions_cache_size');
-    if (cache_store(\@REACTIONS_CACHE, $reaction, $cache_size)) {
+    if (cache_store(\@{$REACTIONS_CACHE{'#'}}, $reaction, $cache_size)) {
         stats_increment(\$REACTIONS_CACHE_STATS);
     }
 };
@@ -1275,7 +1281,7 @@ sub signal_complete_word_reaction {
         $word = substr($word, 2);
     }
 
-    my @reactions_cache = (@REACTIONS_CACHE, split /\s+/, $REACTIONS_DEFAULT);
+    my @reactions_cache = (@{$REACTIONS_CACHE{'#'}}, split /\s+/, $REACTIONS_DEFAULT);
     foreach my $reaction (@reactions_cache) {
         if ($reaction =~ /^\Q$word\E/) {
             push(@$complist, "+:${reaction}:");
@@ -1474,11 +1480,15 @@ sub save_cache {
         'MSGTHREADID' => \%MSGTHREADID_CACHE,
         'MSGTHREADID_MOST_RECENT_CACHE' => \%MSGTHREADID_MOST_RECENT_CACHE,
         'REPLIED' => \%REPLIED_CACHE,
+        'REACTIONS' => \%REACTIONS_CACHE,
         );
 
     foreach my $key (sort keys %cache) {
         foreach my $channel (sort keys %{$cache{$key}}) {
             my $d = $cache{$key}->{$channel};
+            if (not $d) {
+                next;
+            }
             my $entries = join(',', @{$d});
             if (scalar(@{$d}) == 0) {
                 next;
@@ -1502,6 +1512,7 @@ sub load_cache {
         'MSGTHREADID' => \%MSGTHREADID_CACHE,
         'MSGTHREADID_MOST_RECENT_CACHE' => \%MSGTHREADID_MOST_RECENT_CACHE,
         'REPLIED' => \%REPLIED_CACHE,
+        'REACTIONS' => \%REACTIONS_CACHE,
         );
 
     my $total = 0;
