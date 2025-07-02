@@ -653,10 +653,11 @@ sub signal_message_own_public_msgthreadid {
     my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
-    if ($msg !~ /^@@((?:[0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43})|(?:[0-9a-f]{3}))/) {
+    if ($msg !~ /^@@((?:[0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43})|(?:[0-9a-f]{3}))\s+([+-]:\S+:)?/) {
         return;
     }
     my $msgthreadid = $1;
+    my $reaction = $2 ? $2 : '';
 
     # matterircd generated 3-letter hexadecimal.
     my $thread_m_style = 0;
@@ -664,14 +665,24 @@ sub signal_message_own_public_msgthreadid {
         $thread_m_style = 1;
     }
 
-    my $cache_size = Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
-    if (cache_store(\@{$MSGTHREADID_CACHE{$target}}, $msgthreadid, $cache_size)) {
-        $MSGTHREADID_CACHE_INDEX = 0;
-        stats_increment(\$MSGTHREADID_CACHE_STATS);
+    # If it's a reaction and it's already in the most recent cache, skip to increase accuracy of auto completion
+    my $found_in_recent = 0;
+    if ($reaction ne '') {
+        if (grep /$msgthreadid/, @{$MSGTHREADID_CACHE{$target}}) {
+            $found_in_recent = 1;
+        }
     }
-    # Include parent/thread ID in most recent, right at the beginning for more accurate auto completion
-    if (cache_store(\@{$MSGTHREADID_MOST_RECENT_CACHE{$target}}, $msgthreadid, $cache_size)) {
-        stats_increment(\$MSGTHREADID_MOST_RECENT_CACHE_STATS);
+
+    if (not $found_in_recent) {
+        my $cache_size = Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
+        if (cache_store(\@{$MSGTHREADID_CACHE{$target}}, $msgthreadid, $cache_size)) {
+            $MSGTHREADID_CACHE_INDEX = 0;
+            stats_increment(\$MSGTHREADID_CACHE_STATS);
+        }
+        # Include parent/thread ID in most recent, right at the beginning for more accurate auto completion
+        if (cache_store(\@{$MSGTHREADID_MOST_RECENT_CACHE{$target}}, $msgthreadid, $cache_size)) {
+            stats_increment(\$MSGTHREADID_MOST_RECENT_CACHE_STATS);
+        }
     }
 
     my $thread_color = Irssi::settings_get_int('matterircd_complete_thread_id_color');
@@ -711,10 +722,11 @@ sub signal_message_own_private {
     my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
-    if ($msg !~ /^@@([0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43}|[0-9a-f]{3})/) {
+    if ($msg !~ /^@@((?:[0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43})|(?:[0-9a-f]{3}))\s+([+-]:\S+:)?/) {
         return;
     }
     my $msgthreadid = $1;
+    my $reaction = $2 ? $2 : '';
 
     # matterircd generated 3-letter hexadecimal.
     my $thread_m_style = 0;
@@ -722,14 +734,24 @@ sub signal_message_own_private {
         $thread_m_style = 1;
     }
 
-    my $cache_size = Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
-    if (cache_store(\@{$MSGTHREADID_CACHE{$target}}, $msgthreadid, $cache_size)) {
-        $MSGTHREADID_CACHE_INDEX = 0;
-        stats_increment(\$MSGTHREADID_CACHE_STATS);
+    # If it's a reaction and it's already in the most recent cache, skip to increase accuracy of auto completion
+    my $found_in_recent = 0;
+    if ($reaction ne '') {
+        if (grep /$msgthreadid/, @{$MSGTHREADID_CACHE{$target}}) {
+            $found_in_recent = 1;
+        }
     }
-    # Include parent/thread ID in most recent, right at the beginning for more accurate auto completion
-    if (cache_store(\@{$MSGTHREADID_MOST_RECENT_CACHE{$target}}, $msgthreadid, $cache_size)) {
-        stats_increment(\$MSGTHREADID_MOST_RECENT_CACHE_STATS);
+
+    if (not $found_in_recent) {
+        my $cache_size = Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
+        if (cache_store(\@{$MSGTHREADID_CACHE{$target}}, $msgthreadid, $cache_size)) {
+            $MSGTHREADID_CACHE_INDEX = 0;
+            stats_increment(\$MSGTHREADID_CACHE_STATS);
+        }
+        # Include parent/thread ID in most recent, right at the beginning for more accurate auto completion
+        if (cache_store(\@{$MSGTHREADID_MOST_RECENT_CACHE{$target}}, $msgthreadid, $cache_size)) {
+            stats_increment(\$MSGTHREADID_MOST_RECENT_CACHE_STATS);
+        }
     }
 
     my $thread_color = Irssi::settings_get_int('matterircd_complete_thread_id_color');
