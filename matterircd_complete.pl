@@ -669,6 +669,10 @@ sub signal_message_own_public_msgthreadid {
         $MSGTHREADID_CACHE_INDEX = 0;
         stats_increment(\$MSGTHREADID_CACHE_STATS);
     }
+    # Include parent/thread ID in most recent, right at the beginning for more accurate auto completion
+    if (cache_store(\@{$MSGTHREADID_MOST_RECENT_CACHE{$target}}, $msgthreadid, $cache_size)) {
+        stats_increment(\$MSGTHREADID_MOST_RECENT_CACHE_STATS);
+    }
 
     my $thread_color = Irssi::settings_get_int('matterircd_complete_thread_id_color');
     if ($thread_color == -1) {
@@ -722,6 +726,10 @@ sub signal_message_own_private {
     if (cache_store(\@{$MSGTHREADID_CACHE{$target}}, $msgthreadid, $cache_size)) {
         $MSGTHREADID_CACHE_INDEX = 0;
         stats_increment(\$MSGTHREADID_CACHE_STATS);
+    }
+    # Include parent/thread ID in most recent, right at the beginning for more accurate auto completion
+    if (cache_store(\@{$MSGTHREADID_MOST_RECENT_CACHE{$target}}, $msgthreadid, $cache_size)) {
+        stats_increment(\$MSGTHREADID_MOST_RECENT_CACHE_STATS);
     }
 
     my $thread_color = Irssi::settings_get_int('matterircd_complete_thread_id_color');
