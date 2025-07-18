@@ -419,6 +419,8 @@ sub cmd_matterircd_complete_msgthreadid_most_recent_cache_dump {
 Irssi::command_bind('matterircd_complete_msgthreadid_most_recent_cache_dump', 'cmd_matterircd_complete_msgthreadid_most_recent_cache_dump');
 
 my $MSGTHREADID_CACHE_SEARCH_ENABLED = 0;
+my $MSGTHREADID_CACHE_SEARCH_RECENT;
+my @MSGTHREADID_CACHE_COMBINED;
 my $MSGTHREADID_CACHE_INDEX = 0;
 sub cmd_message_thread_id_search {
     my ($data, $server, $wi) = @_;
@@ -431,9 +433,12 @@ sub cmd_message_thread_id_search {
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
     $MSGTHREADID_CACHE_SEARCH_ENABLED = 1;
+    @MSGTHREADID_CACHE_COMBINED = @{$MSGTHREADID_CACHE{$wi->{name}}};
+    # Always add the most recent thread we replied to to the beginning.
+    unshift(@MSGTHREADID_CACHE_COMBINED, $MSGTHREADID_CACHE_SEARCH_RECENT);
     my $msgthreadid = $MSGTHREADID_CACHE{$wi->{name}}[$MSGTHREADID_CACHE_INDEX];
     $MSGTHREADID_CACHE_INDEX += 1;
-    if ($MSGTHREADID_CACHE_INDEX > $#{$MSGTHREADID_CACHE{$wi->{name}}}) {
+    if ($MSGTHREADID_CACHE_INDEX > $#MSGTHREADID_CACHE_COMBINED) {
         # Cycle back to the start.
         $MSGTHREADID_CACHE_INDEX = 0;
     }
@@ -674,6 +679,8 @@ sub signal_message_own_public_msgthreadid {
     }
 
     if (not $found_in_recent) {
+        $MSGTHREADID_CACHE_SEARCH_RECENT = $msgthreadid;
+
         my $cache_size = Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
         if (cache_store(\@{$MSGTHREADID_CACHE{$target}}, $msgthreadid, $cache_size)) {
             $MSGTHREADID_CACHE_INDEX = 0;
@@ -743,6 +750,8 @@ sub signal_message_own_private {
     }
 
     if (not $found_in_recent) {
+        $MSGTHREADID_CACHE_SEARCH_RECENT = $msgthreadid;
+
         my $cache_size = Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
         if (cache_store(\@{$MSGTHREADID_CACHE{$target}}, $msgthreadid, $cache_size)) {
             $MSGTHREADID_CACHE_INDEX = 0;
