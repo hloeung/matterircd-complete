@@ -721,6 +721,9 @@ sub signal_message_own_public_msgthreadid {
         $msg =~ s/$/ ${thread_color}[${reply_prefix}${msgthreadid}]\x0f/;
     }
 
+    # Reset message_thread_id_search
+    $MSGTHREADID_CACHE_INDEX = 0;
+
     Irssi::signal_continue($server, $msg, $target);
 };
 Irssi::signal_add_last('message own_public', 'signal_message_own_public_msgthreadid');
@@ -792,6 +795,9 @@ sub signal_message_own_private {
         $msg =~ s/^@@[0-9a-f]{3} //;
         $msg =~ s/$/ ${thread_color}[${reply_prefix}${msgthreadid}]\x0f/;
     }
+
+    # Reset message_thread_id_search
+    $MSGTHREADID_CACHE_INDEX = 0;
 
     Irssi::signal_continue($server, $msg, $target, $orig_target);
 };
