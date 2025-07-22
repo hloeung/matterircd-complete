@@ -634,12 +634,14 @@ sub cache_msgthreadid {
     # Most recent posts / replies to threads.
     for my $msgpostid (@msgpost_ids) {
         if (cache_store(\@{$MSGTHREADID_MOST_RECENT_CACHE{$key}}, $msgpostid, $cache_size)) {
+            $MSGTHREADID_CACHE_INDEX = 0;
             stats_increment(\$MSGTHREADID_MOST_RECENT_CACHE_STATS);
         }
     }
     # Include parent/thread ID in most recent, right at the beginning for more accurate auto completion
     for my $msgid (@msgids) {
         if (cache_store(\@{$MSGTHREADID_MOST_RECENT_CACHE{$key}}, $msgid, $cache_size)) {
+            $MSGTHREADID_CACHE_INDEX = 0;
             stats_increment(\$MSGTHREADID_MOST_RECENT_CACHE_STATS);
         }
     }
@@ -688,6 +690,7 @@ sub signal_message_own_public_msgthreadid {
         }
         # Include parent/thread ID in most recent, right at the beginning for more accurate auto completion
         if (cache_store(\@{$MSGTHREADID_MOST_RECENT_CACHE{$target}}, $msgthreadid, $cache_size)) {
+            $MSGTHREADID_CACHE_INDEX = 0;
             stats_increment(\$MSGTHREADID_MOST_RECENT_CACHE_STATS);
         }
     }
@@ -759,6 +762,7 @@ sub signal_message_own_private {
         }
         # Include parent/thread ID in most recent, right at the beginning for more accurate auto completion
         if (cache_store(\@{$MSGTHREADID_MOST_RECENT_CACHE{$target}}, $msgthreadid, $cache_size)) {
+            $MSGTHREADID_CACHE_INDEX = 0;
             stats_increment(\$MSGTHREADID_MOST_RECENT_CACHE_STATS);
         }
     }
