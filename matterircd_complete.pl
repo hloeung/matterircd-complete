@@ -1308,6 +1308,7 @@ sub signal_message_own_public_reactions {
 
     # https://github.com/github/gemoji/pull/280
     $reaction =~ s/^rolling_on_the_floor_laughing$/rofl/;
+    $reaction =~ s/^lol$/laughing/;
 
     my $cache_size = Irssi::settings_get_int('matterircd_complete_reactions_cache_size');
     if (cache_store(\@{$REACTIONS_CACHE{'#'}}, $reaction, $cache_size)) {
