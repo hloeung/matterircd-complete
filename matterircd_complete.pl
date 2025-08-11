@@ -1248,6 +1248,8 @@ sub signal_message_public {
 
     Irssi::signal_continue($server, $msg, $nick, $address, $target);
 };
+Irssi::signal_add('message irc action', 'signal_message_public');
+Irssi::signal_add('message irc notice', 'signal_message_public');
 Irssi::signal_add('message public', 'signal_message_public');
 
 
