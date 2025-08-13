@@ -1161,11 +1161,11 @@ sub cmd_matterircd_complete_replied_cache_clear {
                 $id = substr($id, 2);
             }
             foreach my $msgid (@{$REPLIED_CACHE{$channel}}) {
-                if ($id eq $msgid) {
+                if (rindex($msgid, $id, 0) == 0) {
                     splice(@{$REPLIED_CACHE{$channel}}, $i, 1);
                     stats_increment(\$REPLIED_CACHE_STATS);
-                    _wi_print($wi, "matterircd_complete replied cache removed ${id} from ${channel} cache");
-                    last;
+                    _wi_print($wi, "matterircd_complete replied cache removed ${msgid} from ${channel} cache");
+                    $i -= 1;
                 }
                 $i += 1;
             }
