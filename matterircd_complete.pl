@@ -1242,7 +1242,11 @@ sub signal_message_public {
         # Add user's (or our own) nick for hilighting if not in
         # message and message not from us.
         if (($nick ne $server->{nick}) && ($msg !~ /\@$server->{nick}/)) {
-            $msg =~ s/\(re (\@\S+): /(re \@$server->{nick}, $1: /;
+            if ($msg =~ /\(re (\@\S+): /) {
+                $msg =~ s/\(re (\@\S+): /(re \@$server->{nick}, $1: /;
+            } else {
+                $msg =~ s/$/ (🔔 \@$server->{nick})/;
+            }
         }
     }
 
