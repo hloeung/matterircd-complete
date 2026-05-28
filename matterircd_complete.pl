@@ -51,6 +51,20 @@
 # To ignore specific nicks in autocomplete:
 #
 #   /set matterircd_complete_nick_ignore somebot anotherbot
+#
+# Bind the last message permalink to a key to quickly get the URL:
+#
+#   /bind ^P /last_message_permalink
+#
+# Then Ctrl+p prints the permalink(s) for the last message in the
+# current channel, e.g.:
+#
+#   Thread ID: https://mattermost.example.com/team/pl/5nsmwg844irjppej...
+#   Message ID: https://mattermost.example.com/team/pl/79w7u...
+#
+# Configure the base URL for permalinks:
+#
+#   /set matterircd_complete_permalink_base_url https://mattermost.example.com/team/pl/
 
 use strict;
 use warnings;
@@ -82,6 +96,7 @@ my $KEY_O      = 79;
 Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_networks', '');
 Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_nick_ignore', '');
 Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_channel_dont_ignore', '');
+Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_permalink_base_url', 'https://mattermost.example.com/team/pl/');
 
 
 sub _wi_print {
@@ -361,6 +376,8 @@ Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_message_thre
 my %MSGTHREADID_CACHE;
 # Smaller cache for most recent threads and posts for more accurate auto completion
 my %MSGTHREADID_MOST_RECENT_CACHE;
+# Last message's thread/post IDs per channel for permalink generation
+my %LAST_CHANNEL_MSGTHREAD;
 
 sub cmd_matterircd_complete_msgthreadid_cache_dump {
     my ($data, $server, $wi) = @_;
@@ -417,6 +434,32 @@ sub cmd_matterircd_complete_msgthreadid_most_recent_cache_dump {
     _wi_print($wi, "${channel}: Total: " . scalar @{$MSGTHREADID_MOST_RECENT_CACHE{$channel}});
 };
 Irssi::command_bind('matterircd_complete_msgthreadid_most_recent_cache_dump', 'cmd_matterircd_complete_msgthreadid_most_recent_cache_dump');
+
+sub cmd_last_message_permalink {
+    my ($data, $server, $wi) = @_;
+
+    return unless ref $wi and ($wi->{type} eq 'CHANNEL' or $wi->{type} eq 'QUERY');
+
+    my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
+    return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
+
+    my $channel = $wi->{name};
+
+    if (!exists($LAST_CHANNEL_MSGTHREAD{$channel})) {
+        _wi_print($wi, "[matterircd_complete] No message/thread ID cached for ${channel}");
+        return;
+    }
+
+    my $base_url  = Irssi::settings_get_str('matterircd_complete_permalink_base_url');
+    my $thread_id = $LAST_CHANNEL_MSGTHREAD{$channel}{thread_id};
+    my $post_id   = $LAST_CHANNEL_MSGTHREAD{$channel}{post_id};
+
+    _wi_print($wi, "Thread ID: ${base_url}${thread_id}");
+    if ($post_id ne '') {
+        _wi_print($wi, "Message ID: ${base_url}${post_id}");
+    }
+}
+Irssi::command_bind('last_message_permalink', 'cmd_last_message_permalink');
 
 my $MSGTHREADID_CACHE_SEARCH_ENABLED = 0;
 my $MSGTHREADID_CACHE_SEARCH_RECENT;
@@ -644,6 +687,14 @@ sub cache_msgthreadid {
             $MSGTHREADID_CACHE_INDEX = 0;
             stats_increment(\$MSGTHREADID_MOST_RECENT_CACHE_STATS);
         }
+    }
+
+    # Track last message's IDs per channel for permalink generation.
+    if (@msgids) {
+        $LAST_CHANNEL_MSGTHREAD{$key} = {
+            thread_id => $msgids[0],
+            post_id   => @msgpost_ids ? $msgpost_ids[0] : '',
+        };
     }
 }
 Irssi::signal_add('message irc action', 'cache_msgthreadid');
