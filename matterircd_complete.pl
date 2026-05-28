@@ -65,6 +65,17 @@
 # Configure the base URL for permalinks:
 #
 #   /set matterircd_complete_permalink_base_url https://mattermost.example.com/team/pl/
+#
+# Bind a scrollback request to a key to replay the last N messages:
+#
+#   /bind ^R /scrollback
+#
+# This sends a scrollback request to matterircd for the current channel.
+# The number of lines defaults to matterircd_complete_scrollback_lines (default 5).
+# You can also pass a count directly: /scrollback 10
+#
+#   /set matterircd_complete_scrollback_lines 5
+#   /set matterircd_complete_service_account_nick mattermost
 
 use strict;
 use warnings;
@@ -460,6 +471,26 @@ sub cmd_last_message_permalink {
     }
 }
 Irssi::command_bind('last_message_permalink', 'cmd_last_message_permalink');
+
+Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_scrollback_lines', 5);
+Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_service_account_nick', 'mattermost');
+
+sub cmd_scrollback {
+    my ($data, $server, $wi) = @_;
+
+    return unless ref $wi and ($wi->{type} eq 'CHANNEL' or $wi->{type} eq 'QUERY');
+
+    my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
+    return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
+
+    my $channel = $wi->{name};
+    my $lines = ($data && $data =~ /^\s*(\d+)\s*$/) ? $1
+              : Irssi::settings_get_int('matterircd_complete_scrollback_lines');
+    my $service_nick = Irssi::settings_get_str('matterircd_complete_service_account_nick');
+
+    $server->command("msg ${service_nick} scrollback ${channel} ${lines}");
+}
+Irssi::command_bind('scrollback', 'cmd_scrollback');
 
 my $MSGTHREADID_CACHE_SEARCH_ENABLED = 0;
 my $MSGTHREADID_CACHE_SEARCH_RECENT;
