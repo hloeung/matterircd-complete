@@ -68,7 +68,7 @@
 #
 # Bind a scrollback request to a key to replay the last N messages:
 #
-#   /bind ^R /scrollback
+#   /bind ^R /matterircd_complete_scrollback
 #
 # This sends a scrollback request to matterircd for the current channel.
 # The number of lines defaults to matterircd_complete_scrollback_lines (default 5).
@@ -475,7 +475,7 @@ Irssi::command_bind('last_message_permalink', 'cmd_last_message_permalink');
 Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_scrollback_lines', 5);
 Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_service_account_nick', 'mattermost');
 
-sub cmd_scrollback {
+sub cmd_matterircd_complete_scrollback {
     my ($data, $server, $wi) = @_;
 
     return unless ref $wi and ($wi->{type} eq 'CHANNEL' or $wi->{type} eq 'QUERY');
@@ -490,7 +490,7 @@ sub cmd_scrollback {
 
     $server->command("msg ${service_nick} scrollback ${channel} ${lines}");
 }
-Irssi::command_bind('scrollback', 'cmd_scrollback');
+Irssi::command_bind('matterircd_complete_scrollback', 'cmd_matterircd_complete_scrollback');
 
 my $MSGTHREADID_CACHE_SEARCH_ENABLED = 0;
 my $MSGTHREADID_CACHE_SEARCH_RECENT;
@@ -1404,6 +1404,29 @@ sub signal_message_own_public_reactions {
     }
 };
 Irssi::signal_add('message own_public', 'signal_message_own_public_reactions');
+
+sub signal_message_own_private_reactions {
+    my($server, $msg, $target, $orig_target) = @_;
+
+    return unless Irssi::settings_get_int('matterircd_complete_reactions_cache_size');
+    my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
+    return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
+
+    if ($msg !~ /^@@([0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43}|[0-9a-f]{3})\s*\+:(.*):\s*/) {
+        return;
+    }
+    my $reaction = $2;
+
+    # https://github.com/github/gemoji/pull/280
+    $reaction =~ s/^rolling_on_the_floor_laughing$/rofl/;
+    $reaction =~ s/^lol$/laughing/;
+
+    my $cache_size = Irssi::settings_get_int('matterircd_complete_reactions_cache_size');
+    if (cache_store(\@{$REACTIONS_CACHE{'#'}}, $reaction, $cache_size)) {
+        stats_increment(\$REACTIONS_CACHE_STATS);
+    }
+};
+Irssi::signal_add('message own_private', 'signal_message_own_private_reactions');
 
 sub signal_complete_word_reaction {
     my ($complist, $window, $word, $linestart, $want_space) = @_;
