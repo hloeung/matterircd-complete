@@ -697,10 +697,12 @@ sub cache_msgthreadid {
 
     my $cache_size = Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
 
+    # Reset the keybind cycle pointer since a new valid message arrived
+    $MSGTHREADID_CACHE_INDEX = 0;
+
     # Parent / thread IDs only.
     for my $msgid (@msgids) {
         if (cache_store(\@{$MSGTHREADID_CACHE{$key}}, $msgid, $cache_size)) {
-            $MSGTHREADID_CACHE_INDEX = 0;
             stats_increment(\$MSGTHREADID_CACHE_STATS);
         }
     }
@@ -708,14 +710,12 @@ sub cache_msgthreadid {
     # Most recent posts / replies to threads.
     for my $msgpostid (@msgpost_ids) {
         if (cache_store(\@{$MSGTHREADID_MOST_RECENT_CACHE{$key}}, $msgpostid, $cache_size)) {
-            $MSGTHREADID_CACHE_INDEX = 0;
             stats_increment(\$MSGTHREADID_MOST_RECENT_CACHE_STATS);
         }
     }
     # Include parent/thread ID in most recent, right at the beginning for more accurate auto completion
     for my $msgid (@msgids) {
         if (cache_store(\@{$MSGTHREADID_MOST_RECENT_CACHE{$key}}, $msgid, $cache_size)) {
-            $MSGTHREADID_CACHE_INDEX = 0;
             stats_increment(\$MSGTHREADID_MOST_RECENT_CACHE_STATS);
         }
     }
