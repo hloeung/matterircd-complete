@@ -16,6 +16,11 @@
 #
 #   /bind ^G /message_thread_id_search
 #
+# You can also add a key binding to cycle through only the thread IDs
+# you have personally replied to (most recent first) on a specific channel:
+#
+#   /bind ^T /message_thread_id_search_recent
+#
 # Also bind to insert nicknames:
 #
 #   /bind ^F /nicknames_search
@@ -387,6 +392,9 @@ Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_message_thre
 my %MSGTHREADID_CACHE;
 # Smaller cache for most recent threads and posts for more accurate auto completion
 my %MSGTHREADID_MOST_RECENT_CACHE;
+# Forward declarations — fully initialised later alongside the replied-cache commands.
+my %REPLIED_CACHE;
+my $REPLIED_CACHE_STATS = 0;
 # Last message's thread/post IDs per channel for permalink generation
 my %LAST_CHANNEL_MSGTHREAD;
 
@@ -493,9 +501,10 @@ sub cmd_matterircd_complete_scrollback {
 Irssi::command_bind('matterircd_complete_scrollback', 'cmd_matterircd_complete_scrollback');
 
 my $MSGTHREADID_CACHE_SEARCH_ENABLED = 0;
-my $MSGTHREADID_CACHE_SEARCH_RECENT;
-my @MSGTHREADID_CACHE_COMBINED;
 my $MSGTHREADID_CACHE_INDEX = 0;
+my $MSGTHREADID_LAST_SEARCH_TYPE = '';
+my $MSGTHREADID_CACHE_LAST_CHANNEL = '';
+
 sub cmd_message_thread_id_search {
     my ($data, $server, $wi) = @_;
 
@@ -506,13 +515,16 @@ sub cmd_message_thread_id_search {
     my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
+    if ($MSGTHREADID_LAST_SEARCH_TYPE ne 'chrono' || $MSGTHREADID_CACHE_LAST_CHANNEL ne $wi->{name}) {
+        $MSGTHREADID_CACHE_INDEX = 0;
+        $MSGTHREADID_LAST_SEARCH_TYPE = 'chrono';
+        $MSGTHREADID_CACHE_LAST_CHANNEL = $wi->{name};
+    }
+
     $MSGTHREADID_CACHE_SEARCH_ENABLED = 1;
-    @MSGTHREADID_CACHE_COMBINED = @{$MSGTHREADID_CACHE{$wi->{name}}};
-    # Always add the most recent thread we replied to to the beginning.
-    unshift(@MSGTHREADID_CACHE_COMBINED, $MSGTHREADID_CACHE_SEARCH_RECENT);
     my $msgthreadid = $MSGTHREADID_CACHE{$wi->{name}}[$MSGTHREADID_CACHE_INDEX];
     $MSGTHREADID_CACHE_INDEX += 1;
-    if ($MSGTHREADID_CACHE_INDEX > $#MSGTHREADID_CACHE_COMBINED) {
+    if ($MSGTHREADID_CACHE_INDEX > $#{$MSGTHREADID_CACHE{$wi->{name}}}) {
         # Cycle back to the start.
         $MSGTHREADID_CACHE_INDEX = 0;
     }
@@ -528,6 +540,39 @@ sub cmd_message_thread_id_search {
     }
 };
 Irssi::command_bind('message_thread_id_search', 'cmd_message_thread_id_search');
+
+sub cmd_message_thread_id_search_recent {
+    my ($data, $server, $wi) = @_;
+
+    return unless Irssi::settings_get_int('matterircd_complete_replied_cache_size');
+    return unless ref $wi and ($wi->{type} eq 'CHANNEL' or $wi->{type} eq 'QUERY');
+    return unless exists($REPLIED_CACHE{$wi->{name}}) && scalar(@{$REPLIED_CACHE{$wi->{name}}});
+
+    my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
+    return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
+
+    if ($MSGTHREADID_LAST_SEARCH_TYPE ne 'recent' || $MSGTHREADID_CACHE_LAST_CHANNEL ne $wi->{name}) {
+        $MSGTHREADID_CACHE_INDEX = 0;
+        $MSGTHREADID_LAST_SEARCH_TYPE = 'recent';
+        $MSGTHREADID_CACHE_LAST_CHANNEL = $wi->{name};
+    }
+
+    $MSGTHREADID_CACHE_SEARCH_ENABLED = 1;
+    my $msgthreadid = $REPLIED_CACHE{$wi->{name}}[$MSGTHREADID_CACHE_INDEX];
+    $MSGTHREADID_CACHE_INDEX += 1;
+    if ($MSGTHREADID_CACHE_INDEX > $#{$REPLIED_CACHE{$wi->{name}}}) {
+        # Cycle back to the start.
+        $MSGTHREADID_CACHE_INDEX = 0;
+    }
+
+    if ($msgthreadid) {
+        my $input = Irssi::parse_special('$L');
+        $input =~ s/^@@(?:[0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43}|[0-9a-f]{3}) //;
+        Irssi::gui_input_set_pos(0);
+        Irssi::gui_input_set("\@\@${msgthreadid} ${input}");
+    }
+};
+Irssi::command_bind('message_thread_id_search_recent', 'cmd_message_thread_id_search_recent');
 
 my $ESC_PRESSED = 0;
 my $O_PRESSED   = 0;
@@ -763,8 +808,6 @@ sub signal_message_own_public_msgthreadid {
     }
 
     if (not $found_in_recent) {
-        $MSGTHREADID_CACHE_SEARCH_RECENT = $msgthreadid;
-
         my $cache_size = Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
         if (cache_store(\@{$MSGTHREADID_CACHE{$target}}, $msgthreadid, $cache_size)) {
             $MSGTHREADID_CACHE_INDEX = 0;
@@ -838,8 +881,6 @@ sub signal_message_own_private {
     }
 
     if (not $found_in_recent) {
-        $MSGTHREADID_CACHE_SEARCH_RECENT = $msgthreadid;
-
         my $cache_size = Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
         if (cache_store(\@{$MSGTHREADID_CACHE{$target}}, $msgthreadid, $cache_size)) {
             $MSGTHREADID_CACHE_INDEX = 0;
@@ -849,6 +890,13 @@ sub signal_message_own_private {
         if (cache_store(\@{$MSGTHREADID_MOST_RECENT_CACHE{$target}}, $msgthreadid, $cache_size)) {
             $MSGTHREADID_CACHE_INDEX = 0;
             stats_increment(\$MSGTHREADID_MOST_RECENT_CACHE_STATS);
+        }
+
+        my $replied_cache_size = Irssi::settings_get_int('matterircd_complete_replied_cache_size');
+        if ($replied_cache_size) {
+            if (cache_store(\@{$REPLIED_CACHE{$target}}, $msgthreadid, $replied_cache_size)) {
+                stats_increment(\$REPLIED_CACHE_STATS);
+            }
         }
     }
 
@@ -1178,7 +1226,6 @@ Irssi::signal_add_last('gui key pressed', 'signal_gui_key_pressed_nicks');
 
 Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_replied_cache_size', 32);
 
-my %REPLIED_CACHE;
 sub cmd_matterircd_complete_replied_cache_dump {
     my ($data, $server, $wi) = @_;
 
@@ -1207,7 +1254,6 @@ sub cmd_matterircd_complete_replied_cache_dump {
 };
 Irssi::command_bind('matterircd_complete_replied_cache_dump', 'cmd_matterircd_complete_replied_cache_dump');
 
-my $REPLIED_CACHE_STATS = 0;
 sub cmd_matterircd_complete_replied_cache_clear {
     my ($data, $server, $wi) = @_;
 
