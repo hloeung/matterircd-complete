@@ -204,6 +204,25 @@ sub xcolor_to_irssi {
     }
 }
 
+# Taken from hexcolors irssi script (_convert) and adapted for our use
+# https://github.com/irssi/irssi/issues/1508
+# https://modern.ircdocs.horse/formatting#hex-color
+sub hex_to_ansi {
+    $_[0] =~ s{
+        \x04 ([[:xdigit:]]{2}) ([[:xdigit:]]{2}) ([[:xdigit:]]{2})
+        ( ,  ([[:xdigit:]]{2}) ([[:xdigit:]]{2}) ([[:xdigit:]]{2}) )?
+    }{
+        (sprintf "\x1b[38;2;%s;%s;%sm",
+         (hex $1), (hex $2), (hex $3)) . ( $4 ?
+        (sprintf "\x1b[48;2;%s;%s;%sm",
+         (hex $5), (hex $6), (hex $7)) : '' )
+    }gex;
+
+    $_[0] =~ s{\x04}{\x1b[39m\x1b[49m}gx;
+
+    return $_[0];
+}
+
 sub get_thread_format {
     my ($str) = @_;
     my @nums = (0..9,'a'..'z');
@@ -270,6 +289,10 @@ sub update_msgthreadid {
     # Replace tabs with spaces.
     # https://github.com/irssi/irssi/issues/1499
     $msg =~ s/\t/        /g;
+
+    # Work around irssi's lack of support for modern IRC hex colors
+    # https://github.com/irssi/irssi/issues/1508
+    $msg = hex_to_ansi($msg);
 
     my $prefix = '';
     my $msgthreadid = '';
@@ -1337,7 +1360,6 @@ sub signal_message_public {
 Irssi::signal_add('message irc action', 'signal_message_public');
 Irssi::signal_add('message irc notice', 'signal_message_public');
 Irssi::signal_add('message public', 'signal_message_public');
-
 
 #==============================================================================
 
