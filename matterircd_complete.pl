@@ -223,6 +223,24 @@ sub hex_to_ansi {
     return $_[0];
 }
 
+# Convert modern IRC strikethrough (0x1e) to ANSI escape sequences
+# https://modern.ircdocs.horse/formatting.html#strikethrough
+sub strikethrough_to_ansi {
+    my $text = $_[0];
+    my $toggle = 0;
+
+    # Replace each \x1e with the appropriate ANSI code based on the toggle state
+    $text =~ s{\x1e}{
+        $toggle ^= 1; # Flip the state between 1 and 0
+        $toggle ? "\x1b[9m~" : "~\x1b[29m"
+    }gex;
+
+    # If the user left the strikethrough open at the end of the message, close it
+    $text .= "\x1b[29m" if $toggle;
+
+    return $text;
+}
+
 sub get_thread_format {
     my ($str) = @_;
     my @nums = (0..9,'a'..'z');
@@ -293,6 +311,10 @@ sub update_msgthreadid {
     # Work around irssi's lack of support for modern IRC hex colors
     # https://github.com/irssi/irssi/issues/1508
     $msg = hex_to_ansi($msg);
+
+    # Work around irssi's lack of support for modern IRC strikethrough
+    # https://github.com/irssi/irssi/issues/1589
+    $msg = strikethrough_to_ansi($msg);
 
     my $prefix = '';
     my $msgthreadid = '';
