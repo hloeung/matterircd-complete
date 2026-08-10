@@ -1567,12 +1567,13 @@ sub clear_typing {
     Irssi::statusbar_items_redraw('matterircd_typing');
 }
 
-# Hook 1: Request capability on connect
-Irssi::signal_add('server cap ls', sub {
-    my ($server, $caps) = @_;
-    if ($caps =~ /(?:^| )message-tags(?: |$)/) {
-        $server->send_raw("CAP REQ :message-tags");
-    }
+# Hook 1: Request capability on connect via raw socket
+Irssi::signal_add('server connected', sub {
+    my ($server) = @_;
+
+    # We use send_raw because cap_toggle is not exposed in the Perl API.
+    # Our updated matterircd safely processes this late CAP REQ.
+    $server->send_raw("CAP REQ :message-tags");
 });
 
 # Hook 2: Intercept the TAGMSG
@@ -1601,6 +1602,23 @@ Irssi::signal_add_first('server event tags', sub {
 # Hook 3: Redraw status bar when changing windows
 Irssi::signal_add('window changed', sub {
     Irssi::statusbar_items_redraw('matterircd_typing');
+});
+
+# Hook 4: Clean up state on disconnect
+Irssi::signal_add('server disconnected', sub {
+    my ($server) = @_;
+    my $server_tag = $server->{tag};
+
+    if (exists $typing_states{$server_tag}) {
+        # Remove all pending timeouts for this server
+        foreach my $target (keys %{$typing_states{$server_tag}}) {
+            foreach my $nick (keys %{$typing_states{$server_tag}{$target}}) {
+                Irssi::timeout_remove($typing_states{$server_tag}{$target}{$nick});
+            }
+        }
+        delete $typing_states{$server_tag};
+        Irssi::statusbar_items_redraw('matterircd_typing');
+    }
 });
 
 #==============================================================================
