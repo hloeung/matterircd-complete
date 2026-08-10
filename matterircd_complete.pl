@@ -1583,6 +1583,7 @@ Irssi::signal_add_first('server event tags', sub {
     # data format: "TAGMSG #channel" or "TAGMSG my_nick"
     return unless $data =~ /^TAGMSG\s+(.+)$/i;
     my $target = $1;
+    $target = $nick if lc($target) eq lc($server->{nick});
 
     # Parse the IRCv3 tags
     if ($tags =~ /(?:^|;)\+typing=(active|paused|done)(?:;|$)/) {
