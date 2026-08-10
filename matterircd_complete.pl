@@ -1568,11 +1568,9 @@ sub clear_typing {
 }
 
 # Hook 1: Request capability on connect
-Irssi::signal_add('server cap ls', sub {
-    my ($server, $caps) = @_;
-    if ($caps =~ /(?:^| )message-tags(?: |$)/) {
-        $server->send_raw("CAP REQ :message-tags");
-    }
+Irssi::signal_add('server connected', sub {
+    my ($server) = @_;
+    $server->cap_toggle('message-tags', 1);
 });
 
 # Hook 2: Intercept the TAGMSG
@@ -1582,6 +1580,7 @@ Irssi::signal_add_first('server event tags', sub {
     # data format: "TAGMSG #channel" or "TAGMSG my_nick"
     return unless $data =~ /^TAGMSG\s+(.+)$/i;
     my $target = $1;
+    $target = $nick if lc($target) eq lc($server->{nick});
 
     # Parse the IRCv3 tags
     if ($tags =~ /(?:^|;)\+typing=(active|paused|done)(?:;|$)/) {
