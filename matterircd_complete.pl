@@ -1498,6 +1498,112 @@ Irssi::signal_add_last('complete word', 'signal_complete_word_reaction');
 
 #==============================================================================
 
+# +typing - IRCv3 message tags
+#
+# /statusbar window add -alignment right matterircd_typing
+# /save
+
+# Track active typing states: $typing_states{server_tag}{channel_name}{nick} = timeout_tag
+our %typing_states;
+
+# Register the statusbar item
+Irssi::statusbar_item_register('matterircd_typing', '{sb $0-}', 'sb_matterircd_typing');
+
+# Renders the status bar item
+sub sb_matterircd_typing {
+    my ($item, $get_size_only) = @_;
+
+    my $window = Irssi::active_win();
+    return unless $window && $window->{active_server} && $window->{active};
+
+    my $server_tag = $window->{active_server}->{tag};
+    my $target     = $window->{active}->{name};
+
+    if (exists $typing_states{$server_tag}{$target}) {
+        my @typists = sort keys %{$typing_states{$server_tag}{$target}};
+        if (@typists) {
+            my $text = "typing: " . join(", ", @typists);
+            # Display: [typing: user1, user2]
+            $item->default_handler($get_size_only, "{sb %G$text%n}", '', 1);
+            return;
+        }
+    }
+
+    # Empty string if no one is typing
+    $item->default_handler($get_size_only, '', '', 1);
+}
+
+# Sets a user as actively typing
+sub set_typing {
+    my ($server_tag, $target, $nick) = @_;
+
+    # Clear existing timeout if they just sent another active ping
+    if (exists $typing_states{$server_tag}{$target}{$nick}) {
+        Irssi::timeout_remove($typing_states{$server_tag}{$target}{$nick});
+    }
+
+    # Set new timeout for 6 seconds (IRCv3 spec)
+    $typing_states{$server_tag}{$target}{$nick} = Irssi::timeout_add_once(6000, sub {
+        clear_typing($server_tag, $target, $nick);
+    }, []);
+
+    Irssi::statusbar_items_redraw('matterircd_typing');
+}
+
+# Clears the typing state for a user
+sub clear_typing {
+    my ($server_tag, $target, $nick) = @_;
+
+    if (exists $typing_states{$server_tag}{$target}{$nick}) {
+        Irssi::timeout_remove($typing_states{$server_tag}{$target}{$nick});
+        delete $typing_states{$server_tag}{$target}{$nick};
+    }
+
+    # Clean up empty hashes
+    if (keys %{$typing_states{$server_tag}{$target}} == 0) {
+        delete $typing_states{$server_tag}{$target};
+    }
+
+    Irssi::statusbar_items_redraw('matterircd_typing');
+}
+
+# Hook 1: Request capability on connect
+Irssi::signal_add('server connected', sub {
+    my ($server) = @_;
+    $server->cap_toggle('message-tags', 1);
+});
+
+# Hook 2: Intercept the TAGMSG
+Irssi::signal_add_first('server event tags', sub {
+    my ($server, $data, $nick, $address, $tags) = @_;
+
+    # data format: "TAGMSG #channel" or "TAGMSG my_nick"
+    return unless $data =~ /^TAGMSG\s+(.+)$/i;
+    my $target = $1;
+    $target = $nick if lc($target) eq lc($server->{nick});
+
+    # Parse the IRCv3 tags
+    if ($tags =~ /(?:^|;)\+typing=(active|paused|done)(?:;|$)/) {
+        my $status = $1;
+
+        if ($status eq 'active') {
+            set_typing($server->{tag}, $target, $nick);
+        } else {
+            clear_typing($server->{tag}, $target, $nick);
+        }
+
+        # Stop core Irssi from throwing "Unknown command TAGMSG"
+        Irssi::signal_stop();
+    }
+});
+
+# Hook 3: Redraw status bar when changing windows
+Irssi::signal_add('window changed', sub {
+    Irssi::statusbar_items_redraw('matterircd_typing');
+});
+
+#==============================================================================
+
 # Remove an array's elements per their values
 sub array_splice_values {
     my ($ar_ref, $uw_ref) = @_;
