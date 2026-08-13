@@ -76,6 +76,17 @@
 #
 #   /set matterircd_complete_scrollback_lines 5
 #   /set matterircd_complete_service_account_nick mattermost
+#
+# Add the private-channel indicator to the statusbar:
+#
+#   /statusbar window add -alignment left matterircd_private
+#   /save
+#
+# Add the +typing IRCv3 message-tags to the statusbar:
+#
+#   /statusbar window add -alignment left matterircd_typing
+#   /save
+#
 
 use strict;
 use warnings;
