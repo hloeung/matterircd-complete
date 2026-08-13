@@ -1747,6 +1747,16 @@ Irssi::signal_add('channel mode changed', sub {
     }
 });
 
+# Initialization (Runs once when the script loads/reloads)
+foreach my $channel (Irssi::channels()) {
+    # This safely ignores networks we don't care about, checks internal memory,
+    # and only sends MODE if we genuinely don't know the state yet.
+    request_channel_mode($channel);
+}
+
+# Ensure the UI redraws immediately after initialization
+Irssi::statusbar_items_redraw('matterircd_private');
+
 #==============================================================================
 
 # Remove an array's elements per their values
