@@ -1527,7 +1527,16 @@ sub sb_matterircd_typing {
     my $window = Irssi::active_win();
     return unless $window && $window->{active_server} && $window->{active};
 
-    my $server_tag = $window->{active_server}->{tag};
+    my $server = $window->{active_server};
+
+    # Restrict to configured chatnets
+    my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
+    unless (exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}}) {
+        $item->default_handler($get_size_only, '', '', 1);
+        return;
+    }
+
+    my $server_tag = $server->{tag};
     my $target     = $window->{active}->{name};
 
     if (exists $typing_states{$server_tag}{$target}) {
@@ -1582,6 +1591,10 @@ sub clear_typing {
 Irssi::signal_add('server connected', sub {
     my ($server) = @_;
 
+    # Restrict to configured chatnets
+    my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
+    return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
+
     # We use send_raw because cap_toggle is not exposed in the Perl API.
     # Our updated matterircd safely processes this late CAP REQ.
     $server->send_raw("CAP REQ :message-tags");
@@ -1590,6 +1603,10 @@ Irssi::signal_add('server connected', sub {
 # Hook 2: Intercept the TAGMSG
 Irssi::signal_add_first('server event tags', sub {
     my ($server, $data, $nick, $address, $tags) = @_;
+
+    # Restrict to configured chatnets
+    my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
+    return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
     # data format: "TAGMSG #channel" or "TAGMSG my_nick"
     return unless $data =~ /^TAGMSG\s+(.+)$/i;
