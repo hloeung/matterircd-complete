@@ -1635,6 +1635,9 @@ Irssi::signal_add('server disconnected', sub {
 
 #==============================================================================
 
+# Custom hash to track private channels safely, bypassing Irssi's internal state
+our %matterircd_priv_chans;
+
 Irssi::statusbar_item_register('matterircd_private', '$0', 'sb_matterircd_private');
 
 sub sb_matterircd_private {
@@ -1644,16 +1647,69 @@ sub sb_matterircd_private {
 
     if ($window && $window->{active} && $window->{active}->{type} eq 'CHANNEL') {
         my $server = $window->{active_server};
-        my $chanrec = $server->channel_find($window->{active}->{name}) if $server;
+        if ($server) {
+            # Restrict to configured chatnets
+            my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
+            if (exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}}) {
+                my $target = lc($window->{active}->{name});
+                my $chanrec = $server->channel_find($window->{active}->{name});
 
-        if ($chanrec && $chanrec->{mode} =~ /[sp]/i) {
-            $output = '{sb 🔒}';
+                # Check Irssi's internal memory FIRST, then fall back to our custom hash
+                my $internal_mode = ($chanrec && defined $chanrec->{mode}) ? $chanrec->{mode} : "";
+
+                if ($internal_mode =~ /[sp]/i || $matterircd_priv_chans{$server->{tag}}{$target}) {
+                    $output = '{sb 🔒}';
+                }
+            }
         }
     }
 
     $item->default_handler($get_size_only, $output, '', 1);
 }
 
+# Explicitly request the mode on join ONLY if channel_sync is OFF
+sub request_channel_mode {
+    my ($channel) = @_;
+
+    # If Irssi is already configured to sync channels, back off and let it do its job
+    return if Irssi::settings_get_bool('channel_sync');
+
+    my $server = $channel->{server};
+    return unless $server;
+
+    # Restrict to configured chatnets
+    my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
+    return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
+
+    $server->send_raw("MODE " . $channel->{name});
+}
+Irssi::signal_add('channel joined', 'request_channel_mode');
+
+# Intercept the raw 324 RPL_CHANNELMODEIS numeric directly from the server
+Irssi::signal_add('event 324', sub {
+    my ($server, $data) = @_;
+
+    # Restrict to configured chatnets
+    my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
+    return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
+
+    # $data looks like: "hloeung #is-private +pi"
+    my ($nick, $channel, $modes) = split(/\s+/, $data, 3);
+    return unless $channel;
+
+    $modes = "" unless defined $modes;
+
+    # If the mode string contains p or s, mark it private in our hash
+    if ($modes =~ /[sp]/i) {
+        $matterircd_priv_chans{$server->{tag}}{lc($channel)} = 1;
+    } else {
+        delete $matterircd_priv_chans{$server->{tag}}{lc($channel)};
+    }
+
+    Irssi::statusbar_items_redraw('matterircd_private');
+});
+
+# UI refresh hooks
 Irssi::signal_add('window item changed', sub { Irssi::statusbar_items_redraw('matterircd_private'); });
 Irssi::signal_add('window changed', sub { Irssi::statusbar_items_redraw('matterircd_private'); });
 
