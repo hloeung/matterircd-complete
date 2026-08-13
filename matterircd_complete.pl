@@ -1652,6 +1652,8 @@ Irssi::signal_add('server disconnected', sub {
 
 #==============================================================================
 
+# Show padlock emoji for private channels
+
 # Custom hash to track private channels safely, bypassing Irssi's internal state
 our %matterircd_priv_chans;
 
