@@ -1646,7 +1646,6 @@ sub sb_matterircd_private {
 
 Irssi::signal_add('window item changed', sub { Irssi::statusbar_items_redraw('matterircd_private'); });
 Irssi::signal_add('window changed', sub { Irssi::statusbar_items_redraw('matterircd_private'); });
-Irssi::signal_add('channel mode changed', sub { Irssi::statusbar_items_redraw('matterircd_private'); });
 
 # Redraw if a channel's modes change while we are looking at it
 Irssi::signal_add('channel mode changed', sub {
