@@ -1669,6 +1669,12 @@ Irssi::signal_add('channel mode changed', sub {
     }
 });
 
+# Explicitly request the mode on join so we don't need the noisy channel_sync=ON setting
+Irssi::signal_add('channel joined', sub {
+    my ($channel) = @_;
+    $channel->{server}->send_raw("MODE " . $channel->{name});
+});
+
 #==============================================================================
 
 # Remove an array's elements per their values
