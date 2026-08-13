@@ -76,6 +76,17 @@
 #
 #   /set matterircd_complete_scrollback_lines 5
 #   /set matterircd_complete_service_account_nick mattermost
+#
+# Add the private-channel indicator to the statusbar:
+#
+#   /statusbar window add -alignment left matterircd_private
+#   /save
+#
+# Add the +typing IRCv3 message-tags to the statusbar:
+#
+#   /statusbar window add -alignment left matterircd_typing
+#   /save
+#
 
 use strict;
 use warnings;
@@ -1619,6 +1630,42 @@ Irssi::signal_add('server disconnected', sub {
         }
         delete $typing_states{$server_tag};
         Irssi::statusbar_items_redraw('matterircd_typing');
+    }
+});
+
+#==============================================================================
+
+Irssi::statusbar_item_register('matterircd_private', '$0', 'sb_matterircd_private');
+
+sub sb_matterircd_private {
+    my ($item, $get_size_only) = @_;
+    my $window = Irssi::active_win();
+    my $output = '';
+
+    if ($window && $window->{active} && $window->{active}->{type} eq 'CHANNEL') {
+        my $server = $window->{active_server};
+        my $chanrec = $server->channel_find($window->{active}->{name}) if $server;
+
+        if ($chanrec && $chanrec->{mode} =~ /[sp]/i) {
+            $output = '{sb 🔒}';
+        }
+    }
+
+    $item->default_handler($get_size_only, $output, '', 1);
+}
+
+Irssi::signal_add('window item changed', sub { Irssi::statusbar_items_redraw('matterircd_private'); });
+Irssi::signal_add('window changed', sub { Irssi::statusbar_items_redraw('matterircd_private'); });
+
+# Redraw if a channel's modes change while we are looking at it
+Irssi::signal_add('channel mode changed', sub {
+    my ($channel) = @_;
+    my $window = Irssi::active_win();
+
+    if ($window && $window->{active} &&
+        $window->{active}->{type} eq 'CHANNEL' &&
+        $window->{active}->{name} eq $channel->{name}) {
+        Irssi::statusbar_items_redraw('matterircd_private');
     }
 });
 
