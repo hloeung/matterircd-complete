@@ -90,7 +90,6 @@
 
 use strict;
 use warnings;
-use utf8;
 use experimental 'smartmatch';
 
 require Irssi::TextUI;
