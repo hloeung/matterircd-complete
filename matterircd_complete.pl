@@ -1684,21 +1684,24 @@ sub sb_matterircd_private {
     $item->default_handler($get_size_only, $output, '', 1);
 }
 
-# Explicitly request the mode on join ONLY if channel_sync is OFF
+# Explicitly request the mode on join if we don't already have it
 sub request_channel_mode {
     my ($channel) = @_;
-
-    # If Irssi is already configured to sync channels, back off and let it do its job
-    return if Irssi::settings_get_bool('channel_sync');
-
     my $server = $channel->{server};
+
     return unless $server;
 
     # Restrict to configured chatnets
     my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
-    $server->send_raw("MODE " . $channel->{name});
+    my $target = lc($channel->{name});
+    my $internal_mode = defined $channel->{mode} ? $channel->{mode} : "";
+
+    # Only ask the server if Irssi's memory is empty AND it's not in our hash
+    if ($internal_mode eq "" && !$matterircd_priv_chans{$server->{tag}}{$target}) {
+        $server->send_raw("MODE " . $channel->{name});
+    }
 }
 Irssi::signal_add('channel joined', 'request_channel_mode');
 
