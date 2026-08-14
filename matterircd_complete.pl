@@ -1687,7 +1687,7 @@ sub sb_matterircd_private {
     $item->default_handler($get_size_only, $output, '', 1);
 }
 
-# Explicitly request the mode on join if we don't already have it
+# Explicitly request the mode on join+sync if we don't already have it
 sub request_channel_mode {
     my ($channel) = @_;
     my $server = $channel->{server};
@@ -1706,7 +1706,7 @@ sub request_channel_mode {
         $server->send_raw("MODE " . $channel->{name});
     }
 }
-Irssi::signal_add('channel joined', 'request_channel_mode');
+Irssi::signal_add('channel sync', 'request_channel_mode');
 
 # Intercept the raw 324 RPL_CHANNELMODEIS numeric directly from the server
 Irssi::signal_add('event 324', sub {
