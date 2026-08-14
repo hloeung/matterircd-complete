@@ -79,13 +79,17 @@
 #
 # Add the private-channel indicator to the statusbar:
 #
-#   /statusbar window add -alignment left matterircd_private
+#   /statusbar window add -alignment left -priority 15 matterircd_private
 #   /save
+#
+# You might want to add `-after window_empty` as well.
 #
 # Add the +typing IRCv3 message-tags to the statusbar:
 #
-#   /statusbar window add -alignment left matterircd_typing
+#   /statusbar window add -alignment left -priority 15 matterircd_typing
 #   /save
+#
+# You mightwant to add `-before act` (or `lag`) as well.
 #
 
 use strict;
