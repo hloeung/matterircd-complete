@@ -1518,9 +1518,9 @@ Irssi::signal_add_last('complete word', 'signal_complete_word_reaction');
 our %typing_states;
 
 # Register the statusbar item
-Irssi::statusbar_item_register('matterircd_typing', '{sb $0-}', 'sb_matterircd_typing');
+Irssi::statusbar_item_register('matterircd_typing', '$0', 'sb_matterircd_typing');
 
-# Renders the status bar item
+# Renders the status bar item dynamically
 sub sb_matterircd_typing {
     my ($item, $get_size_only) = @_;
 
@@ -1532,24 +1532,25 @@ sub sb_matterircd_typing {
     # Restrict to configured chatnets
     my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
     unless (exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}}) {
+        # Reverted to 1 so Irssi natively hides the empty space
         $item->default_handler($get_size_only, '', '', 1);
         return;
     }
 
     my $server_tag = $server->{tag};
-    my $target     = $window->{active}->{name};
+    my $target     = lc($window->{active}->{name}); # Ensure lowercase for hash consistency
 
     if (exists $typing_states{$server_tag}{$target}) {
         my @typists = sort keys %{$typing_states{$server_tag}{$target}};
         if (@typists) {
             my $text = "typing: " . join(", ", @typists);
-            # Display: [typing: user1, user2]
+            # Display: [typing: user1, user2] only when active
             $item->default_handler($get_size_only, "{sb %G$text%n}", '', 1);
             return;
         }
     }
 
-    # Empty string if no one is typing
+    # Reverted to 1 so Irssi natively hides the empty space
     $item->default_handler($get_size_only, '', '', 1);
 }
 
