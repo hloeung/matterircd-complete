@@ -1667,28 +1667,38 @@ Irssi::statusbar_item_register('matterircd_private', '$0', 'sb_matterircd_privat
 sub sb_matterircd_private {
     my ($item, $get_size_only) = @_;
     my $window = Irssi::active_win();
-    my $output = '';
 
-    if ($window && $window->{active} && $window->{active}->{type} eq 'CHANNEL') {
-        my $server = $window->{active_server};
-        if ($server) {
-            # Restrict to configured chatnets
-            my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
-            if (exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}}) {
-                my $target = lc($window->{active}->{name});
-                my $chanrec = $server->channel_find($window->{active}->{name});
+    # Must have an active window and server
+    return $item->default_handler($get_size_only, '', '', 1)
+        unless $window && $window->{active} && $window->{active_server};
 
-                # Check Irssi's internal memory FIRST, then fall back to our custom hash
-                my $internal_mode = ($chanrec && defined $chanrec->{mode}) ? $chanrec->{mode} : "";
+    my $server = $window->{active_server};
 
-                if ($internal_mode =~ /[sp]/i || $matterircd_priv_chans{$server->{tag}}{$target}) {
-                    $output = '{sb 🔒}';
-                }
-            }
+    # Restrict to configured chatnets
+    my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
+    return $item->default_handler($get_size_only, '', '', 1)
+        unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
+
+    my $win_type = $window->{active}->{type};
+
+    # Direct Messages / Queries are always private
+    if ($win_type eq 'QUERY') {
+        return $item->default_handler($get_size_only, '{sb 🔒}', '', 1);
+    }
+
+    # Channels (check internal memory, then fallback hash)
+    if ($win_type eq 'CHANNEL') {
+        my $target        = lc($window->{active}->{name});
+        my $chanrec       = $server->channel_find($window->{active}->{name});
+        my $internal_mode = ($chanrec && defined $chanrec->{mode}) ? $chanrec->{mode} : "";
+
+        if ($internal_mode =~ /[sp]/i || $matterircd_priv_chans{$server->{tag}}{$target}) {
+            return $item->default_handler($get_size_only, '{sb 🔒}', '', 1);
         }
     }
 
-    $item->default_handler($get_size_only, $output, '', 1);
+    # Default fallback: Public or unhandled window types
+    $item->default_handler($get_size_only, '', '', 1);
 }
 
 # Explicitly request the mode on join+sync if we don't already have it
