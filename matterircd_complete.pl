@@ -1715,8 +1715,8 @@ sub request_channel_mode {
     my $target = lc($channel->{name});
     my $internal_mode = defined $channel->{mode} ? $channel->{mode} : "";
 
-    # Only ask the server if Irssi's memory is empty AND it's not in our hash
-    if ($internal_mode eq "" && !$matterircd_priv_chans{$server->{tag}}{$target}) {
+    # Only query if Irssi has no mode AND we haven't already recorded this channel's state
+    if ($internal_mode eq "" && !exists $matterircd_priv_chans{$server->{tag}}{$target}) {
         $server->send_raw("MODE " . $channel->{name});
     }
 }
@@ -1736,11 +1736,11 @@ Irssi::signal_add('event 324', sub {
 
     $modes = "" unless defined $modes;
 
-    # If the mode string contains p or s, mark it private in our hash
+    # Store 1 for private, 0 for public (maintains the key in the hash)
     if ($modes =~ /[sp]/i) {
         $matterircd_priv_chans{$server->{tag}}{lc($channel)} = 1;
     } else {
-        delete $matterircd_priv_chans{$server->{tag}}{lc($channel)};
+        $matterircd_priv_chans{$server->{tag}}{lc($channel)} = 0;
     }
 
     Irssi::statusbar_items_redraw('matterircd_private');
