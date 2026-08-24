@@ -1615,8 +1615,8 @@ Irssi::signal_add_first('server event tags', sub {
 
     # data format: "TAGMSG #channel" or "TAGMSG my_nick"
     return unless $data =~ /^TAGMSG\s+(.+)$/i;
-    my $target = $1;
-    $target = $nick if lc($target) eq lc($server->{nick});
+    my $target = lc($1);
+    $target = lc($nick) if $target eq lc($server->{nick});
 
     # Parse the IRCv3 tags
     if ($tags =~ /(?:^|;)\+typing=(active|paused|done)(?:;|$)/) {
@@ -1627,8 +1627,13 @@ Irssi::signal_add_first('server event tags', sub {
         } else {
             clear_typing($server->{tag}, $target, $nick);
         }
+    }
+});
 
-        # Stop core Irssi from throwing "Unknown command TAGMSG"
+# Silence unknown command TAGMSG warnings without breaking signal flow
+Irssi::signal_add('default event', sub {
+    my ($server, $data, $nick, $address) = @_;
+    if ($data =~ /^TAGMSG\b/i) {
         Irssi::signal_stop();
     }
 });
