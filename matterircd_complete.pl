@@ -91,6 +91,15 @@
 #
 # You mightwant to add `-before act` (or `lag`) as well.
 #
+# Add the DM topic to the topic/header statusbar:
+#
+#   Ensure topic bar stays visible in queries:
+#     /statusbar topic visible always
+#
+#   Add item to statusbar:
+#     /statusbar topic add -alignment left -priority 100 matterircd_dm_topic
+#     /save
+#
 
 use strict;
 use warnings;
@@ -1660,6 +1669,7 @@ Irssi::signal_add('server disconnected', sub {
     }
 });
 
+
 #==============================================================================
 
 # Show padlock emoji for private channels
@@ -1776,6 +1786,167 @@ foreach my $channel (Irssi::channels()) {
 
 # Ensure the UI redraws immediately after initialization
 Irssi::statusbar_items_redraw('matterircd_private');
+
+
+#==============================================================================
+
+# Track and display topics/headers in DM (Query) windows
+#
+# Ensure topic bar stays visible in queries:
+#   /statusbar topic visible always
+#
+# Add item to statusbar:
+#   /statusbar topic add -alignment left -priority 100 matterircd_dm_topic
+#   /save
+
+our %DM_TOPIC_CACHE;
+
+sub is_matterircd_net {
+    my ($server) = @_;
+    return 0 unless $server;
+
+    my %chatnets = map { lc($_) => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
+    return 1 if exists $chatnets{'*'};
+    return 1 if defined $server->{chatnet} && exists $chatnets{lc($server->{chatnet})};
+    return 1 if defined $server->{tag}     && exists $chatnets{lc($server->{tag})};
+
+    return 0;
+}
+
+sub get_cached_dm_topic {
+    my ($server, $target) = @_;
+    return '' unless $server && $target;
+
+    my $t   = lc($target);
+    my $tag = lc($server->{tag} // '');
+    my $net = lc($server->{chatnet} // '');
+
+    return $DM_TOPIC_CACHE{$tag}{$t} if $tag ne '' && exists $DM_TOPIC_CACHE{$tag}{$t};
+    return $DM_TOPIC_CACHE{$net}{$t} if $net ne '' && exists $DM_TOPIC_CACHE{$net}{$t};
+
+    return '';
+}
+
+sub set_cached_dm_topic {
+    my ($server, $target, $topic) = @_;
+    return unless $server && $target;
+
+    my $t   = lc($target);
+    my $tag = lc($server->{tag} // '');
+    my $net = lc($server->{chatnet} // '');
+
+    $DM_TOPIC_CACHE{$tag}{$t} = $topic if $tag ne '';
+    $DM_TOPIC_CACHE{$net}{$t} = $topic if $net ne '';
+}
+
+Irssi::statusbar_item_register('matterircd_dm_topic', '$0', 'sb_matterircd_dm_topic');
+
+sub sb_matterircd_dm_topic {
+    my ($item, $get_size_only) = @_;
+    my $window = Irssi::active_win();
+
+    return $item->default_handler($get_size_only, '', '', 1)
+        unless $window && $window->{active} && $window->{active_server};
+
+    my $server = $window->{active_server};
+    return $item->default_handler($get_size_only, '', '', 1) unless is_matterircd_net($server);
+
+    my $win_item = $window->{active};
+
+    if ($win_item->{type} eq 'QUERY') {
+        my $topic = get_cached_dm_topic($server, $win_item->{name});
+        if (length($topic)) {
+            $topic =~ s/%/%%/g;
+            # Prepend a leading space to separate from the window/server info
+            return $item->default_handler($get_size_only, " $topic", '', 1);
+        }
+    }
+
+    $item->default_handler($get_size_only, '', '', 1);
+}
+
+sub cmd_matterircd_complete_dm_topic_dump {
+    my ($data, $server, $wi) = @_;
+
+    _wi_print($wi, "DM Topic Cache Dump:");
+    foreach my $tag (sort keys %DM_TOPIC_CACHE) {
+        foreach my $target (sort keys %{$DM_TOPIC_CACHE{$tag}}) {
+            _wi_print($wi, "  [${tag}] ${target} => $DM_TOPIC_CACHE{$tag}{$target}");
+        }
+    }
+}
+Irssi::command_bind('matterircd_complete_dm_topic_dump', 'cmd_matterircd_complete_dm_topic_dump');
+
+sub check_action_topic_change {
+    my ($server, $msg, $nick, $address, $target) = @_;
+    return unless $server && is_matterircd_net($server);
+    return unless defined $msg && defined $target;
+
+    return if substr($target, 0, 1) eq '#';
+
+    my $topic = undef;
+
+    if ($msg =~ /^updated (?:the )?(?:channel )?(?:topic|header) (?:from: .*? )?to:\s*(.*)$/si) {
+        $topic = $1;
+    } elsif ($msg =~ /^(?:cleared|removed) (?:the )?(?:channel )?(?:topic|header)/si) {
+        $topic = '';
+    }
+
+    if (defined $topic) {
+        my $my_nick = $server->{nick} // '';
+        my $target_key = (lc($target) eq lc($my_nick)) ? lc($nick) : lc($target);
+
+        set_cached_dm_topic($server, $target_key, $topic);
+        Irssi::statusbar_items_redraw('matterircd_dm_topic');
+    }
+}
+Irssi::signal_add('message irc action', 'check_action_topic_change');
+Irssi::signal_add('message irc notice', 'check_action_topic_change');
+Irssi::signal_add('message private',    'check_action_topic_change');
+
+Irssi::signal_add('event topic', sub {
+    my ($server, $data, $nick, $address) = @_;
+    return unless $server && is_matterircd_net($server);
+
+    my ($target, $topic);
+    if ($data =~ /^(\S+)\s+:(.*)$/s) {
+        ($target, $topic) = ($1, $2);
+    } elsif ($data =~ /^(\S+)\s+(.*)$/s) {
+        ($target, $topic) = ($1, $2);
+    } else {
+        return;
+    }
+
+    return if substr($target, 0, 1) eq '#';
+
+    $topic =~ s/^://;
+    my $my_nick = $server->{nick} // '';
+    my $target_key = (lc($target) eq lc($my_nick)) ? lc($nick) : lc($target);
+
+    set_cached_dm_topic($server, $target_key, $topic);
+    Irssi::statusbar_items_redraw('matterircd_dm_topic');
+});
+
+Irssi::signal_add('event 332', sub {
+    my ($server, $data) = @_;
+    return unless $server && is_matterircd_net($server);
+
+    my ($me, $target, $topic) = split(/\s+/, $data, 3);
+    return unless $target && defined $topic;
+    return if substr($target, 0, 1) eq '#';
+
+    $topic =~ s/^://;
+    my $my_nick = $server->{nick} // '';
+    my $target_key = (lc($target) eq lc($my_nick)) ? lc($me) : lc($target);
+
+    set_cached_dm_topic($server, $target_key, $topic);
+    Irssi::statusbar_items_redraw('matterircd_dm_topic');
+});
+
+Irssi::signal_add('window item changed', sub { Irssi::statusbar_items_redraw('matterircd_dm_topic'); });
+Irssi::signal_add('window changed',      sub { Irssi::statusbar_items_redraw('matterircd_dm_topic'); });
+Irssi::signal_add('query created',       sub { Irssi::statusbar_items_redraw('matterircd_dm_topic'); });
+
 
 #==============================================================================
 
@@ -1946,6 +2117,13 @@ sub stats_show {
     $channels = keys %{$cache{'REPLIED'}};
     Irssi::print("[matterircd_complete] ${entries} entries across ${channels} channels for threads replied to cache (${REPLIED_CACHE_STATS} updates)");
 
+    my $dm_topics_count = 0;
+    foreach my $tag (keys %DM_TOPIC_CACHE) {
+        $dm_topics_count += scalar keys %{$DM_TOPIC_CACHE{$tag}};
+    }
+    $total += $dm_topics_count;
+    Irssi::print("[matterircd_complete] ${dm_topics_count} DM topics cached");
+
     my $total_updates = $MSGTHREADID_CACHE_STATS + $MSGTHREADID_MOST_RECENT_CACHE_STATS + $NICKNAMES_CACHE_STATS + $REPLIED_CACHE_STATS;
     Irssi::print("[matterircd_complete] \x03%GSaved total of ${total} entries in the cache (${total_updates} total updates)…");
 }
@@ -1967,7 +2145,7 @@ sub save_cache {
         'MSGTHREADID_MOST_RECENT_CACHE' => \%MSGTHREADID_MOST_RECENT_CACHE,
         'REPLIED' => \%REPLIED_CACHE,
         'REACTIONS' => \%REACTIONS_CACHE,
-        );
+    );
 
     foreach my $key (sort keys %cache) {
         foreach my $channel (sort keys %{$cache{$key}}) {
@@ -1982,6 +2160,15 @@ sub save_cache {
             print(FH "${key} ${channel} ${entries}\n");
         }
     }
+
+    # Save DM topics
+    foreach my $tag (keys %DM_TOPIC_CACHE) {
+        foreach my $target (keys %{$DM_TOPIC_CACHE{$tag}}) {
+            my $topic = $DM_TOPIC_CACHE{$tag}{$target};
+            print(FH "DMTOPIC ${tag} ${target} ${topic}\n") if length($topic);
+        }
+    }
+
     close(FH);
 
     # eq "" so show stats on /matterircd_complete_cache_save command.
@@ -2004,6 +2191,11 @@ sub load_cache {
     my $total = 0;
     while(<FH>) {
         chomp;
+        if (/^DMTOPIC\s+(\S+)\s+(\S+)\s+(.*)$/) {
+            $DM_TOPIC_CACHE{$1}{$2} = $3;
+            $total += 1;
+            next;
+        }
         my ($key, $channel, $entries) = split;
         my @d = split(',', $entries);
         $cache{$key}->{$channel} = \@d;
