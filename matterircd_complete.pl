@@ -2117,6 +2117,13 @@ sub stats_show {
     $channels = keys %{$cache{'REPLIED'}};
     Irssi::print("[matterircd_complete] ${entries} entries across ${channels} channels for threads replied to cache (${REPLIED_CACHE_STATS} updates)");
 
+    my $dm_topics_count = 0;
+    foreach my $tag (keys %DM_TOPIC_CACHE) {
+        $dm_topics_count += scalar keys %{$DM_TOPIC_CACHE{$tag}};
+    }
+    $total += $dm_topics_count;
+    Irssi::print("[matterircd_complete] ${dm_topics_count} DM topics cached");
+
     my $total_updates = $MSGTHREADID_CACHE_STATS + $MSGTHREADID_MOST_RECENT_CACHE_STATS + $NICKNAMES_CACHE_STATS + $REPLIED_CACHE_STATS;
     Irssi::print("[matterircd_complete] \x03%GSaved total of ${total} entries in the cache (${total_updates} total updates)…");
 }
@@ -2186,6 +2193,7 @@ sub load_cache {
         chomp;
         if (/^DMTOPIC\s+(\S+)\s+(\S+)\s+(.*)$/) {
             $DM_TOPIC_CACHE{$1}{$2} = $3;
+            $total += 1;
             next;
         }
         my ($key, $channel, $entries) = split;
