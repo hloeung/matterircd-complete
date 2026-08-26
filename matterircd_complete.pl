@@ -1536,30 +1536,27 @@ Irssi::statusbar_item_register('matterircd_typing', '$0', 'sb_matterircd_typing'
 # Renders the status bar item dynamically
 sub sb_matterircd_typing {
     my ($item, $get_size_only) = @_;
-
     my $window = Irssi::active_win();
-    return unless $window && $window->{active_server} && $window->{active};
+
+    # Must have an active window, server, and active target
+    return $item->default_handler($get_size_only, '', '', 1)
+        unless $window && $window->{active_server} && $window->{active};
 
     my $server = $window->{active_server};
 
     # Restrict to configured chatnets
     my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
-    unless (exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}}) {
-        # Reverted to 1 so Irssi natively hides the empty space
-        $item->default_handler($get_size_only, '', '', 1);
-        return;
-    }
+    return $item->default_handler($get_size_only, '', '', 1)
+        unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
     my $server_tag = $server->{tag};
-    my $target     = lc($window->{active}->{name}); # Ensure lowercase for hash consistency
+    my $target     = lc($window->{active}->{name});
 
     if (exists $typing_states{$server_tag}{$target}) {
         my @typists = sort keys %{$typing_states{$server_tag}{$target}};
         if (@typists) {
             my $text = "typing: " . join(", ", @typists);
-            # Display: [typing: user1, user2] only when active
-            $item->default_handler($get_size_only, "{sb %G$text%n}", '', 1);
-            return;
+            return $item->default_handler($get_size_only, "{sb %G$text%n}", '', 1);
         }
     }
 
@@ -1642,8 +1639,13 @@ Irssi::signal_add_first('server event tags', sub {
 });
 
 # Silence unknown command TAGMSG warnings without breaking signal flow
-Irssi::signal_add('default event', sub {
+Irssi::signal_add_first('event default', sub {
     my ($server, $data, $nick, $address) = @_;
+    return unless $server && $data;
+
+    my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
+    return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
+
     if ($data =~ /^TAGMSG\b/i) {
         Irssi::signal_stop();
     }
