@@ -54,7 +54,7 @@
 #
 # Bind the last message permalink to a key to quickly get the URL:
 #
-#   /bind ^P /last_message_permalink
+#   /bind ^P /matterircd_complete_last_message_permalink
 #
 # Then Ctrl+p prints the permalink(s) for the last message in the
 # current channel, e.g.:
@@ -539,7 +539,7 @@ sub cmd_last_message_permalink {
         _wi_print($wi, "Message ID: ${base_url}${post_id}");
     }
 }
-Irssi::command_bind('last_message_permalink', 'cmd_last_message_permalink');
+Irssi::command_bind('matterircd_complete_last_message_permalink', 'cmd_last_message_permalink');
 
 Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_scrollback_lines', 5);
 Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_service_account_nick', 'mattermost');
