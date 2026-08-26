@@ -1627,9 +1627,9 @@ Irssi::signal_add_first('server event tags', sub {
     my $target = lc($1);
     $target = lc($nick) if $target eq lc($server->{nick});
 
-    # Parse the IRCv3 tags
-    if ($tags =~ /(?:^|;)\+typing=(active|paused|done)(?:;|$)/) {
-        my $status = $1;
+    # Parse the IRCv3 tags (case-insensitive)
+    if (defined $tags && $tags =~ /(?:^|;)\+typing=(active|paused|done)(?:;|$)/i) {
+        my $status = lc($1);
 
         if ($status eq 'active') {
             set_typing($server->{tag}, $target, $nick);
@@ -1637,6 +1637,8 @@ Irssi::signal_add_first('server event tags', sub {
             clear_typing($server->{tag}, $target, $nick);
         }
     }
+
+    Irssi::signal_stop();
 });
 
 # Silence unknown command TAGMSG warnings without breaking signal flow
