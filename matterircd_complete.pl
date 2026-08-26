@@ -1720,11 +1720,17 @@ sub sb_matterircd_private {
     $item->default_handler($get_size_only, '', '', 1);
 }
 
-# Explicitly request the mode on join+sync if we don't already have it
+Irssi::settings_add_bool('matterircd_complete', 'matterircd_request_channel_mode', 1);
+
+# Explicitly request the mode on join/sync if we don't already have it
 sub request_channel_mode {
     my ($channel) = @_;
-    my $server = $channel->{server};
+    return unless $channel;
 
+    # Check if mode requesting is enabled
+    return unless Irssi::settings_get_bool('matterircd_request_channel_mode');
+
+    my $server = $channel->{server};
     return unless $server;
 
     # Restrict to configured chatnets
