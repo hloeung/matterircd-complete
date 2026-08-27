@@ -1682,6 +1682,10 @@ Irssi::settings_add_bool('matterircd_complete', 'matterircd_send_typing', 0);
 # Track last time a typing ping was sent per target to avoid flooding
 my %last_typing_sent;
 
+# State tracking for shortcut prefixes (Escape/Alt sequences and Ctrl+X)
+my $in_esc_seq    = 0;
+my $ctrl_x_prefix = 0;
+
 # Hook every keypress in Irssi's input line
 Irssi::signal_add('gui key pressed', sub {
     my ($key) = @_;
@@ -1689,8 +1693,41 @@ Irssi::signal_add('gui key pressed', sub {
     # Check if sending typing notifications is enabled
     return unless Irssi::settings_get_bool('matterircd_send_typing');
 
-    # Ignore control keys, function keys, Enter, Backspace, etc.
+    # Filter out Alt/Meta/Escape sequences (e.g. Alt+1..9, Esc+1..9, arrows)
+    if ($key == 27) {
+        $in_esc_seq = 1;
+        return;
+    }
+    if ($in_esc_seq) {
+        if ($key == 91 || $key == 79) { # CSI / SS3 bracket ('[' or 'O')
+            $in_esc_seq = 2;
+            return;
+        }
+        if ($in_esc_seq == 2) {
+            $in_esc_seq = 0 if ($key >= 64 && $key <= 126 && $key != 91);
+            return;
+        }
+        $in_esc_seq = 0;
+        return;
+    }
+
+    # Filter out Ctrl+X window-switch combos (^X followed by window number)
+    if ($key == 24) { # ASCII 24 = Ctrl+X
+        $ctrl_x_prefix = 1;
+        return;
+    }
+    if ($ctrl_x_prefix) {
+        $ctrl_x_prefix = 0;
+        return;
+    }
+
+    # Ignore non-printable/control characters (Enter, Backspace, Tab, etc.)
     return if $key < 32 || $key > 126;
+
+    # Ignore when typing Irssi slash commands (e.g. /win 1, /join)
+    my $input_line = Irssi::parse_special('$L');
+    return if $key == 47 && $input_line eq '';
+    return if $input_line =~ m{^/(?!/)};
 
     my $window = Irssi::active_win();
     return unless $window && $window->{active_server} && $window->{active};
@@ -1704,6 +1741,9 @@ Irssi::signal_add('gui key pressed', sub {
 
     my $target = $window->{active}->{name};
     return unless $target;
+
+    # Ignore local/virtual channels (e.g. &messages)
+    return if $target =~ /^&/;
 
     my $server_tag = $server->{tag};
     my $now = time();
