@@ -1742,6 +1742,9 @@ Irssi::signal_add('gui key pressed', sub {
     my $target = $window->{active}->{name};
     return unless $target;
 
+    # Ignore local/virtual channels (e.g. &messages)
+    return if $target =~ /^&/;
+
     my $server_tag = $server->{tag};
     my $now = time();
 
