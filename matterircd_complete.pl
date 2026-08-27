@@ -1639,7 +1639,8 @@ Irssi::signal_add_first('server event tags', sub {
         }
     }
 
-    Irssi::signal_stop();
+    # Don't stop here to allow TAGMSGs to flow down to IRC clients connected via irssi PROXY
+    # Irssi::signal_stop();
 });
 
 # Silence unknown command TAGMSG warnings without breaking signal flow
