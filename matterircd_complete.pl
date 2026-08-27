@@ -1644,12 +1644,9 @@ Irssi::signal_add_first('server event tags', sub {
 });
 
 # Silence unknown command TAGMSG warnings without breaking signal flow
-Irssi::signal_add_first('event default', sub {
+Irssi::signal_add('default event', sub {
     my ($server, $data, $nick, $address) = @_;
-    return unless $server && $data;
-
-    my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
-    return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
+    return unless $server && $data && is_matterircd_net($server);
 
     if ($data =~ /^TAGMSG\b/i) {
         Irssi::signal_stop();
