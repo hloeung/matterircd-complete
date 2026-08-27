@@ -91,6 +91,10 @@
 #
 # You mightwant to add `-before act` (or `lag`) as well.
 #
+# To send +typing events, enable:
+#
+#  /set matterircd_send_typing ON
+#
 # Add the DM topic to the topic/header statusbar:
 #
 #   Ensure topic bar stays visible in queries:
@@ -1671,6 +1675,47 @@ Irssi::signal_add('server disconnected', sub {
         delete $typing_states{$server_tag};
         Irssi::statusbar_items_redraw('matterircd_typing');
     }
+});
+
+Irssi::settings_add_bool('matterircd_complete', 'matterircd_send_typing', 0);
+
+# Track last time a typing ping was sent per target to avoid flooding
+my %last_typing_sent;
+
+# Hook every keypress in Irssi's input line
+Irssi::signal_add('gui key pressed', sub {
+    my ($key) = @_;
+
+    # Check if sending typing notifications is enabled
+    return unless Irssi::settings_get_bool('matterircd_send_typing');
+
+    # Ignore control keys, function keys, Enter, Backspace, etc.
+    return if $key < 32 || $key > 126;
+
+    my $window = Irssi::active_win();
+    return unless $window && $window->{active_server} && $window->{active};
+
+    my $server = $window->{active_server};
+    return unless $server->{connected};
+
+    # Restrict to configured chatnets
+    my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
+    return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
+
+    my $target = $window->{active}->{name};
+    return unless $target;
+
+    my $server_tag = $server->{tag};
+    my $now = time();
+
+    # Only send at most once every 4 seconds per window
+    return if exists $last_typing_sent{$server_tag}{$target}
+           && ($now - $last_typing_sent{$server_tag}{$target} < 4);
+
+    $last_typing_sent{$server_tag}{$target} = $now;
+
+    # Send IRCv3 TAGMSG directly over the raw connection
+    $server->send_raw("\@+typing=active TAGMSG $target");
 });
 
 
