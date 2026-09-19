@@ -464,7 +464,7 @@ sub cache_store {
 # Mattermost or creating new threads.
 
 
-Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_message_thread_id_cache_size', 32);
+Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_message_thread_id_cache_size', 128);
 
 my %MSGTHREADID_CACHE;
 # Smaller cache for most recent threads and posts for more accurate auto completion
@@ -1003,25 +1003,28 @@ sub msgthreadid_find {
 
     return unless defined $id && length($id);
 
+    my @matches = ();
+    my %seen = ();
+
     # Search most recent cache first (replies to posts, reactions, etc.)
     if (exists $MSGTHREADID_MOST_RECENT_CACHE{$target}) {
-        foreach my $cached_id (@{$MSGTHREADID_MOST_RECENT_CACHE{$target}}) {
-            if ($cached_id =~ /^\Q$id\E/) {
-                return $cached_id;
+        for my $cached_id (@{$MSGTHREADID_MOST_RECENT_CACHE{$target}}) {
+            if ($cached_id =~ /^\Q$id\E/ && !$seen{$cached_id}++) {
+                push(@matches, $cached_id);
             }
         }
     }
 
     # Search main thread ID cache
     if (exists $MSGTHREADID_CACHE{$target}) {
-        foreach my $cached_id (@{$MSGTHREADID_CACHE{$target}}) {
-            if ($cached_id =~ /^\Q$id\E/) {
-                return $cached_id;
+        for my $cached_id (@{$MSGTHREADID_CACHE{$target}}) {
+            if ($cached_id =~ /^\Q$id\E/ && !$seen{$cached_id}++) {
+                push(@matches, $cached_id);
             }
         }
     }
 
-    return;
+    return wantarray ? ($matches[0], scalar @matches) : $matches[0];
 }
 
 our $current_thread_preview = '';
@@ -1090,7 +1093,7 @@ sub update_thread_preview {
     if ($input =~ /^@@((?:\$[0-9A-Za-z\-_\.]+|[0-9a-zA-Z]+))/) {
         my $id = $1;
         my $target = $window->{active}->{name};
-        my $full_id = msgthreadid_find($target, $id);
+        my ($full_id, $match_count) = msgthreadid_find($target, $id);
 
         my $reply_prefix = Irssi::settings_get_str('matterircd_complete_override_reply_prefix');
         if ($full_id) {
@@ -1103,7 +1106,8 @@ sub update_thread_preview {
                 $display_id = substr($full_id, 0, $len) . '…';
             }
 
-            $new_preview = "%K[${thread_color_fmt}${reply_prefix}${display_id}%n%K] ";
+            my $ambig = ($match_count > 1) ? " %Y(${match_count} matches!)%K" : "";
+            $new_preview = "%K[${thread_color_fmt}${reply_prefix}${display_id}${ambig}%n%K] ";
         } else {
             $new_preview = "%K[%R${reply_prefix}${id}?%n%K] ";
         }
