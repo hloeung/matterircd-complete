@@ -575,7 +575,7 @@ sub cmd_matterircd_complete_scrollback {
 Irssi::command_bind('matterircd_complete_scrollback', 'cmd_matterircd_complete_scrollback');
 
 my $MSGTHREADID_CACHE_SEARCH_ENABLED = 0;
-my $MSGTHREADID_CACHE_SEARCH_RECENT;
+my %MSGTHREADID_CACHE_SEARCH_RECENT;
 my @MSGTHREADID_CACHE_COMBINED;
 my $MSGTHREADID_CACHE_INDEX = 0;
 sub cmd_message_thread_id_search {
@@ -588,11 +588,31 @@ sub cmd_message_thread_id_search {
     my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
-    $MSGTHREADID_CACHE_SEARCH_ENABLED = 1;
-    @MSGTHREADID_CACHE_COMBINED = @{$MSGTHREADID_CACHE{$wi->{name}}};
-    # Always add the most recent thread we replied to to the beginning.
-    unshift(@MSGTHREADID_CACHE_COMBINED, $MSGTHREADID_CACHE_SEARCH_RECENT);
-    my $msgthreadid = $MSGTHREADID_CACHE{$wi->{name}}[$MSGTHREADID_CACHE_INDEX];
+    # Use frozen snapshot on the first cmd_message_thread_id_search call.
+    if (! $MSGTHREADID_CACHE_SEARCH_ENABLED) {
+        @MSGTHREADID_CACHE_COMBINED = @{$MSGTHREADID_CACHE{$wi->{name}}};
+
+        # Always add the most recent thread we replied to to the beginning.
+        my $recent_id = $MSGTHREADID_CACHE_SEARCH_RECENT{$wi->{name}};
+        if (defined $recent_id && length $recent_id) {
+            if (!@MSGTHREADID_CACHE_COMBINED || $MSGTHREADID_CACHE_COMBINED[0] ne $recent_id) {
+                unshift(@MSGTHREADID_CACHE_COMBINED, $recent_id);
+            }
+        }
+
+        return unless scalar @MSGTHREADID_CACHE_COMBINED;
+
+        $MSGTHREADID_CACHE_SEARCH_ENABLED = 1;
+        $MSGTHREADID_CACHE_INDEX = 0;
+    }
+
+    return unless scalar @MSGTHREADID_CACHE_COMBINED;
+
+    if ($MSGTHREADID_CACHE_INDEX > $#MSGTHREADID_CACHE_COMBINED) {
+        $MSGTHREADID_CACHE_INDEX = 0;
+    }
+
+    my $msgthreadid = $MSGTHREADID_CACHE_COMBINED[$MSGTHREADID_CACHE_INDEX];
     $MSGTHREADID_CACHE_INDEX += 1;
     if ($MSGTHREADID_CACHE_INDEX > $#MSGTHREADID_CACHE_COMBINED) {
         # Cycle back to the start.
@@ -612,6 +632,12 @@ sub cmd_message_thread_id_search {
 };
 Irssi::command_bind('message_thread_id_search', 'cmd_message_thread_id_search');
 
+Irssi::signal_add('window changed', sub {
+    $MSGTHREADID_CACHE_SEARCH_ENABLED = 0;
+    @MSGTHREADID_CACHE_COMBINED = ();
+    $MSGTHREADID_CACHE_INDEX = 0;
+});
+
 my $ESC_PRESSED = 0;
 my $O_PRESSED   = 0;
 sub signal_gui_key_pressed_msgthreadid {
@@ -624,8 +650,9 @@ sub signal_gui_key_pressed_msgthreadid {
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
     if (($key == $KEY_RET) || ($key == $KEY_CTRL_U)) {
-        $MSGTHREADID_CACHE_INDEX = 0;
         $MSGTHREADID_CACHE_SEARCH_ENABLED = 0;
+        @MSGTHREADID_CACHE_COMBINED = ();
+        $MSGTHREADID_CACHE_INDEX = 0;
 
         $ESC_PRESSED = 0;
         $O_PRESSED = 0;
@@ -653,8 +680,9 @@ sub signal_gui_key_pressed_msgthreadid {
         Irssi::gui_input_set($input);
         Irssi::gui_input_set_pos($pos);
 
-        $MSGTHREADID_CACHE_INDEX = 0;
         $MSGTHREADID_CACHE_SEARCH_ENABLED = 0;
+        @MSGTHREADID_CACHE_COMBINED = ();
+        $MSGTHREADID_CACHE_INDEX = 0;
 
         $ESC_PRESSED = 0;
         $O_PRESSED = 0;
@@ -668,8 +696,9 @@ sub signal_gui_key_pressed_msgthreadid {
         $O_PRESSED = 1;
     }
     elsif ($key == $KEY_B && $O_PRESSED && $ESC_PRESSED) {
-        $MSGTHREADID_CACHE_INDEX = 0;
         $MSGTHREADID_CACHE_SEARCH_ENABLED = 0;
+        @MSGTHREADID_CACHE_COMBINED = ();
+        $MSGTHREADID_CACHE_INDEX = 0;
 
         $ESC_PRESSED = 0;
         $O_PRESSED = 0;
@@ -780,8 +809,9 @@ sub cache_msgthreadid {
 
     my $cache_size = Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
 
-    # Reset the keybind cycle pointer since a new valid message arrived
-    $MSGTHREADID_CACHE_INDEX = 0;
+    # Reset the keybind cycle pointer since a new valid message arrived,
+    # unless the user is actively cycling through threads with Ctrl+G.
+    $MSGTHREADID_CACHE_INDEX = 0 unless $MSGTHREADID_CACHE_SEARCH_ENABLED;
 
     # Parent / thread IDs only.
     for my $msgid (@msgids) {
@@ -846,7 +876,7 @@ sub signal_message_own_public_msgthreadid {
     }
 
     if (not $found_in_recent) {
-        $MSGTHREADID_CACHE_SEARCH_RECENT = $msgthreadid;
+        $MSGTHREADID_CACHE_SEARCH_RECENT{$target} = $msgthreadid;
 
         my $cache_size = Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
         if (cache_store(\@{$MSGTHREADID_CACHE{$target}}, $msgthreadid, $cache_size)) {
@@ -921,7 +951,7 @@ sub signal_message_own_private {
     }
 
     if (not $found_in_recent) {
-        $MSGTHREADID_CACHE_SEARCH_RECENT = $msgthreadid;
+        $MSGTHREADID_CACHE_SEARCH_RECENT{$target} = $msgthreadid;
 
         my $cache_size = Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
         if (cache_store(\@{$MSGTHREADID_CACHE{$target}}, $msgthreadid, $cache_size)) {
