@@ -1023,6 +1023,26 @@ sub queue_thread_preview {
     $preview_tag = Irssi::timeout_add_once(10, \&update_thread_preview, undef);
 }
 
+sub thread_color_format {
+    my ($str) = @_;
+
+    my $thread_color = Irssi::settings_get_int('matterircd_complete_thread_id_color');
+    if ($thread_color != -1) {
+        my @mirc_to_format = qw(%W %k %b %g %R %r %m %y %Y %G %c %C %B %M %K %w);
+        return $mirc_to_format[$thread_color % 16] // '%n';
+    }
+
+    my ($color, $prepend) = get_thread_format($str);
+    my $fmt = "%X${color}";
+
+    # Add style modifiers if set in get_thread_format
+    $fmt = "%_${fmt}" if index($prepend, "\x02") != -1;
+    $fmt = "%I${fmt}" if index($prepend, "\x1d") != -1;
+    $fmt = "%U${fmt}" if index($prepend, "\x1f") != -1;
+
+    return $fmt;
+}
+
 sub update_thread_preview {
     $preview_tag = undef;
     my $window = Irssi::active_win();
@@ -1044,12 +1064,7 @@ sub update_thread_preview {
 
         my $reply_prefix = Irssi::settings_get_str('matterircd_complete_override_reply_prefix');
         if ($full_id) {
-            my $thread_color = Irssi::settings_get_int('matterircd_complete_thread_id_color');
-            if ($thread_color == -1) {
-                $thread_color = thread_color($full_id);
-            } else {
-                $thread_color = "\x03${thread_color}";
-            }
+            my $thread_color_fmt = thread_color_format($full_id);
 
             my $len = Irssi::settings_get_int('matterircd_complete_shorten_message_thread_id');
             my $display_id = $full_id;
@@ -1058,9 +1073,9 @@ sub update_thread_preview {
                 $display_id = substr($full_id, 0, $len) . '…';
             }
 
-            $new_preview = "{sb ${thread_color}${reply_prefix}${display_id}%n}";
+            $new_preview = "%K[${thread_color_fmt}${reply_prefix}${display_id}%n%K] ";
         } else {
-            $new_preview = "{sb %R${reply_prefix}${id}?%n}";
+            $new_preview = "%K[%R${reply_prefix}${id}?%n%K] ";
         }
     }
 
