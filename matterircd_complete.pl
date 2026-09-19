@@ -104,6 +104,15 @@
 #     /statusbar topic add -alignment left -priority 100 matterircd_dm_topic
 #     /save
 #
+# Add showing live message thread preview:
+#
+#   Next to input prompt:
+#     /statusbar prompt add -before input -priority 100 matterircd_thread
+#     /save
+#
+#   Or next to message-tags:
+#     /statusbar window add -alignment left -priority 15 matterircd_thread
+#     /save
 
 use strict;
 use warnings;
@@ -598,6 +607,7 @@ sub cmd_message_thread_id_search {
         # Insert message/thread ID from cache.
         Irssi::gui_input_set_pos(0);
         Irssi::gui_input_set("\@\@${msgthreadid} ${input}");
+        queue_thread_preview();
     }
 };
 Irssi::command_bind('message_thread_id_search', 'cmd_message_thread_id_search');
@@ -984,6 +994,101 @@ sub msgthreadid_find {
     return;
 }
 
+our $current_thread_preview = '';
+my $preview_tag;
+
+Irssi::statusbar_item_register('matterircd_thread', '$0', 'sb_matterircd_thread');
+
+sub sb_matterircd_thread {
+    my ($item, $get_size_only) = @_;
+    my $window = Irssi::active_win();
+
+    return $item->default_handler($get_size_only, '', '', 1)
+        unless $window && $window->{active_server} && $window->{active};
+
+    my $server = $window->{active_server};
+    return $item->default_handler($get_size_only, '', '', 1)
+        unless is_matterircd_net($server);
+
+    if (length($current_thread_preview)) {
+        return $item->default_handler($get_size_only, $current_thread_preview, '', 1);
+    }
+
+    $item->default_handler($get_size_only, '', '', 1);
+}
+
+sub queue_thread_preview {
+    Irssi::timeout_remove($preview_tag) if $preview_tag;
+    # 10ms delay allows Irssi's input buffer to update after the keystroke
+    $preview_tag = Irssi::timeout_add_once(10, \&update_thread_preview, undef);
+}
+
+sub thread_color_format {
+    my ($str) = @_;
+
+    my $thread_color = Irssi::settings_get_int('matterircd_complete_thread_id_color');
+    if ($thread_color != -1) {
+        my @mirc_to_format = qw(%W %k %b %g %R %r %m %y %Y %G %c %C %B %M %K %w);
+        return $mirc_to_format[$thread_color % 16] // '%n';
+    }
+
+    my ($color, $prepend) = get_thread_format($str);
+    my $fmt = "%X${color}";
+
+    # Add style modifiers if set in get_thread_format
+    $fmt = "%_${fmt}" if index($prepend, "\x02") != -1;
+    $fmt = "%I${fmt}" if index($prepend, "\x1d") != -1;
+    $fmt = "%U${fmt}" if index($prepend, "\x1f") != -1;
+
+    return $fmt;
+}
+
+sub update_thread_preview {
+    $preview_tag = undef;
+    my $window = Irssi::active_win();
+    unless ($window && $window->{active_server} && $window->{active} && is_matterircd_net($window->{active_server})) {
+        if ($current_thread_preview ne '') {
+            $current_thread_preview = '';
+            Irssi::statusbar_items_redraw('matterircd_thread');
+        }
+        return;
+    }
+
+    my $input = Irssi::parse_special('$L');
+    my $new_preview = '';
+
+    if ($input =~ /^@@((?:\$[0-9A-Za-z\-_\.]+|[0-9a-zA-Z]+))/) {
+        my $id = $1;
+        my $target = $window->{active}->{name};
+        my $full_id = msgthreadid_find($target, $id);
+
+        my $reply_prefix = Irssi::settings_get_str('matterircd_complete_override_reply_prefix');
+        if ($full_id) {
+            my $thread_color_fmt = thread_color_format($full_id);
+
+            my $len = Irssi::settings_get_int('matterircd_complete_shorten_message_thread_id');
+            my $display_id = $full_id;
+            my $thread_m_style = ($full_id =~ /^[0-9a-f]{3}$/) ? 1 : 0;
+            if (($len < 25) && ($thread_m_style != 1)) {
+                $display_id = substr($full_id, 0, $len) . '…';
+            }
+
+            $new_preview = "%K[${thread_color_fmt}${reply_prefix}${display_id}%n%K] ";
+        } else {
+            $new_preview = "%K[%R${reply_prefix}${id}?%n%K] ";
+        }
+    }
+
+    if ($new_preview ne $current_thread_preview) {
+        $current_thread_preview = $new_preview;
+        Irssi::statusbar_items_redraw('matterircd_thread');
+    }
+}
+
+Irssi::signal_add('gui key pressed', \&queue_thread_preview);
+Irssi::signal_add('window changed', \&queue_thread_preview);
+Irssi::signal_add('window item changed', \&queue_thread_preview);
+
 sub signal_send_text {
     my ($line, $server, $wi) = @_;
 
@@ -993,6 +1098,11 @@ sub signal_send_text {
 
     my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
+
+    if ($current_thread_preview ne '') {
+        $current_thread_preview = '';
+        Irssi::statusbar_items_redraw('matterircd_thread');
+    }
 
     if ($line =~ /^@@((?:\$[0-9A-Za-z\-_\.]+|[0-9a-zA-Z]+))(\s.*)?$/) {
         my $id = $1;
