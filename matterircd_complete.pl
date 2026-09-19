@@ -590,9 +590,18 @@ sub cmd_message_thread_id_search {
 
     $MSGTHREADID_CACHE_SEARCH_ENABLED = 1;
     @MSGTHREADID_CACHE_COMBINED = @{$MSGTHREADID_CACHE{$wi->{name}}};
-    # Always add the most recent thread we replied to to the beginning.
-    unshift(@MSGTHREADID_CACHE_COMBINED, $MSGTHREADID_CACHE_SEARCH_RECENT);
-    my $msgthreadid = $MSGTHREADID_CACHE{$wi->{name}}[$MSGTHREADID_CACHE_INDEX];
+    # Always add the most recent thread we replied to to the beginning if set and not already first.
+    if (defined $MSGTHREADID_CACHE_SEARCH_RECENT && length $MSGTHREADID_CACHE_SEARCH_RECENT) {
+        if (!@MSGTHREADID_CACHE_COMBINED || $MSGTHREADID_CACHE_COMBINED[0] ne $MSGTHREADID_CACHE_SEARCH_RECENT) {
+            unshift(@MSGTHREADID_CACHE_COMBINED, $MSGTHREADID_CACHE_SEARCH_RECENT);
+        }
+    }
+
+    if ($MSGTHREADID_CACHE_INDEX > $#MSGTHREADID_CACHE_COMBINED) {
+        $MSGTHREADID_CACHE_INDEX = 0;
+    }
+
+    my $msgthreadid = $MSGTHREADID_CACHE_COMBINED[$MSGTHREADID_CACHE_INDEX];
     $MSGTHREADID_CACHE_INDEX += 1;
     if ($MSGTHREADID_CACHE_INDEX > $#MSGTHREADID_CACHE_COMBINED) {
         # Cycle back to the start.
