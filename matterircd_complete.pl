@@ -1078,6 +1078,8 @@ sub thread_color_format {
     return $fmt;
 }
 
+Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_live_thread_preview_hide_nick', 0);
+
 sub update_thread_preview {
     $preview_tag = undef;
     my $window = Irssi::active_win();
@@ -1111,6 +1113,9 @@ sub update_thread_preview {
             my $ambig = ($match_count > 1) ? " %Y(${match_count} matches!)%K" : "";
             my $author = $MSGTHREADID_LAST_NICK{$target}{$full_id};
             my $author_fmt = (defined $author && length $author) ? " %K(\@${author}%K)" : "";
+            if (Irssi::settings_get_bool('matterircd_complete_live_thread_preview_hide_nick')) {
+                $author_fmt = "";
+            }
 
             $new_preview = "%K[${thread_color_fmt}${reply_prefix}${display_id}${ambig}${author_fmt}%n%K] ";
         } else {
