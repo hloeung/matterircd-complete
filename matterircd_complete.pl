@@ -958,6 +958,56 @@ sub signal_message_own_private {
 };
 Irssi::signal_add_last('message own_private', 'signal_message_own_private');
 
+sub msgthreadid_find {
+    my ($target, $id) = @_;
+
+    return unless defined $id && length($id);
+
+    # Search most recent cache first (replies to posts, reactions, etc.)
+    if (exists $MSGTHREADID_MOST_RECENT_CACHE{$target}) {
+        foreach my $cached_id (@{$MSGTHREADID_MOST_RECENT_CACHE{$target}}) {
+            if ($cached_id =~ /^\Q$id\E/) {
+                return $cached_id;
+            }
+        }
+    }
+
+    # Search main thread ID cache
+    if (exists $MSGTHREADID_CACHE{$target}) {
+        foreach my $cached_id (@{$MSGTHREADID_CACHE{$target}}) {
+            if ($cached_id =~ /^\Q$id\E/) {
+                return $cached_id;
+            }
+        }
+    }
+
+    return;
+}
+
+sub signal_send_text {
+    my ($line, $server, $wi) = @_;
+
+    return unless $server && $wi;
+    return unless $wi->{type} eq 'CHANNEL' || $wi->{type} eq 'QUERY';
+    return unless Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
+
+    my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
+    return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
+
+    if ($line =~ /^@@((?:\$[0-9A-Za-z\-_\.]+|[0-9a-zA-Z]+))(\s.*)?$/) {
+        my $id = $1;
+        my $rest = $2 // '';
+        my $target = $wi->{name};
+
+        my $full_id = msgthreadid_find($target, $id);
+        if ($full_id && $full_id ne $id) {
+            $line = "\@\@${full_id}${rest}";
+            Irssi::signal_continue($line, $server, $wi);
+        }
+    }
+}
+Irssi::signal_add_first('send text', 'signal_send_text');
+
 
 #==============================================================================
 
