@@ -467,7 +467,8 @@ sub cache_store {
 Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_message_thread_id_cache_size', 128);
 
 my %MSGTHREADID_CACHE;
-# Smaller cache for most recent threads and posts for more accurate auto completion
+my %MSGTHREADID_LAST_NICK;
+# Cache for most recent threads and posts for more accurate auto completion
 my %MSGTHREADID_MOST_RECENT_CACHE;
 # Last message's thread/post IDs per channel for permalink generation
 my %LAST_CHANNEL_MSGTHREAD;
@@ -815,6 +816,7 @@ sub cache_msgthreadid {
 
     # Parent / thread IDs only.
     for my $msgid (@msgids) {
+        $MSGTHREADID_LAST_NICK{$key}{$msgid} = $nick;
         if (cache_store(\@{$MSGTHREADID_CACHE{$key}}, $msgid, $cache_size)) {
             stats_increment(\$MSGTHREADID_CACHE_STATS);
         }
@@ -1107,7 +1109,10 @@ sub update_thread_preview {
             }
 
             my $ambig = ($match_count > 1) ? " %Y(${match_count} matches!)%K" : "";
-            $new_preview = "%K[${thread_color_fmt}${reply_prefix}${display_id}${ambig}%n%K] ";
+            my $author = $MSGTHREADID_LAST_NICK{$target}{$full_id};
+            my $author_fmt = (defined $author && length $author) ? " %K(\@${author}%K)" : "";
+
+            $new_preview = "%K[${thread_color_fmt}${reply_prefix}${display_id}${ambig}${author_fmt}%n%K] ";
         } else {
             $new_preview = "%K[%R${reply_prefix}${id}?%n%K] ";
         }
