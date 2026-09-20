@@ -1018,14 +1018,16 @@ sub msgthreadid_find {
 
     return unless defined $id && length($id);
 
+    my $want_all = wantarray;
     my @matches = ();
     my %seen = ();
 
     # Search most recent cache first (replies to posts, reactions, etc.)
     if (exists $MSGTHREADID_MOST_RECENT_CACHE{$target}) {
         for my $cached_id (@{$MSGTHREADID_MOST_RECENT_CACHE{$target}}) {
-            if ($cached_id =~ /^\Q$id\E/ && !$seen{$cached_id}++) {
-                push(@matches, $cached_id);
+            if (index($cached_id, $id) == 0) {
+                return $cached_id unless $want_all;
+                push(@matches, $cached_id) unless $seen{$cached_id}++;
             }
         }
     }
@@ -1033,8 +1035,9 @@ sub msgthreadid_find {
     # Search main thread ID cache
     if (exists $MSGTHREADID_CACHE{$target}) {
         for my $cached_id (@{$MSGTHREADID_CACHE{$target}}) {
-            if ($cached_id =~ /^\Q$id\E/ && !$seen{$cached_id}++) {
-                push(@matches, $cached_id);
+            if (index($cached_id, $id) == 0) {
+                return $cached_id unless $want_all;
+                push(@matches, $cached_id) unless $seen{$cached_id}++;
             }
         }
     }
@@ -1094,6 +1097,12 @@ Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_live_thread
 
 sub update_thread_preview {
     $preview_tag = undef;
+
+    my $input = Irssi::parse_special('$L');
+    if ($current_thread_preview eq '' && substr($input, 0, 2) ne '@@') {
+        return;
+    }
+
     my $window = Irssi::active_win();
     unless ($window && $window->{active_server} && $window->{active} && is_matterircd_net($window->{active_server})) {
         if ($current_thread_preview ne '') {
@@ -1103,7 +1112,6 @@ sub update_thread_preview {
         return;
     }
 
-    my $input = Irssi::parse_special('$L');
     my $new_preview = '';
 
     if ($input =~ /^@@((?:\$[0-9A-Za-z\-_\.]+|[0-9a-zA-Z]+))/) {
