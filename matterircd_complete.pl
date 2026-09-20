@@ -624,7 +624,7 @@ sub cmd_message_thread_id_search {
         # Save input text.
         my $input = Irssi::parse_special('$L');
         # Remove existing thread.
-        $input =~ s/^@@(?:[0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43}|[0-9a-f]{3}) //;
+        $input =~ s/^@@(?:[0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})?\s*//;
         # Insert message/thread ID from cache.
         Irssi::gui_input_set_pos(0);
         Irssi::gui_input_set("\@\@${msgthreadid} ${input}");
@@ -674,7 +674,7 @@ sub signal_gui_key_pressed_msgthreadid {
         $input =~ s/\x03//g;
 
         my $pos = 0;
-        if ($input =~ s/^(\@\@(?:\$[0-9A-Za-z\-_\.]+|[0-9a-zA-Z]+)?\s*)//) {
+        if ($input =~ s/^(\@\@(?:[0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})?\s*)//) {
             $pos = Irssi::gui_input_get_pos() - length($1);
         }
 
@@ -1114,7 +1114,7 @@ sub update_thread_preview {
 
     my $new_preview = '';
 
-    if ($input =~ /^@@((?:\$[0-9A-Za-z\-_\.]+|[0-9a-zA-Z]+))/) {
+    if ($input =~ /^@@([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})/) {
         my $id = $1;
         my $target = $window->{active}->{name};
         my ($full_id, $match_count) = msgthreadid_find($target, $id);
@@ -1168,7 +1168,7 @@ sub signal_send_text {
         Irssi::statusbar_items_redraw('matterircd_thread');
     }
 
-    if ($line =~ /^@@((?:\$[0-9A-Za-z\-_\.]+|[0-9a-zA-Z]+))(\s.*)?$/) {
+    if ($line =~ /^@@([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})(\s.*)?$/) {
         my $id = $1;
         my $rest = $2 // '';
         my $target = $wi->{name};
@@ -1410,8 +1410,9 @@ sub cmd_nicknames_search {
         my $compl_char = Irssi::settings_get_str('completion_char');
         # Remove any existing nickname and insert one from the cache.
         my $msgid = "";
-        if ($input =~ s/^(\@\@(?:[0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43}|[0-9a-f]{3}) )//) {
+        if ($input =~ s/^(\@\@(?:[0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})\s*)//) {
             $msgid = $1;
+            $msgid .= " " if $msgid !~ /\s$/;
         }
         $input =~ s/^\@[^${compl_char}]+$compl_char //;
         Irssi::gui_input_set_pos(0);
@@ -1452,8 +1453,9 @@ sub signal_gui_key_pressed_nicks {
 
         # Preserve any leading @@thread ID if present
         my $msgid = "";
-        if ($input =~ s/^(\@\@(?:\$[0-9A-Za-z\-_\.]+|[0-9a-zA-Z]+)?\s*)//) {
+        if ($input =~ s/^(\@\@(?:[0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})\s*)//) {
             $msgid = $1;
+            $msgid .= " " if $msgid !~ /\s$/;
         }
 
         # Remove @nick prefix (supports bare '@', '@ ', '@nick', '@nick:', '@nick: ')
