@@ -639,12 +639,19 @@ Irssi::signal_add('window changed', sub {
     $MSGTHREADID_CACHE_INDEX = 0;
 });
 
+our $current_thread_preview = '';
+
 my $ESC_PRESSED = 0;
 my $O_PRESSED   = 0;
 sub signal_gui_key_pressed_msgthreadid {
     my ($key) = @_;
 
-    return unless $MSGTHREADID_CACHE_SEARCH_ENABLED;
+    # If search mode is not active, only intercept Ctrl+C when an @@ prefix is present
+    if (! $MSGTHREADID_CACHE_SEARCH_ENABLED) {
+        return unless $key == $KEY_CTRL_C;
+        my $input = Irssi::parse_special('$L');
+        return unless $input =~ /^@@/;
+    }
 
     my $server = Irssi::active_server();
     my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
@@ -663,20 +670,19 @@ sub signal_gui_key_pressed_msgthreadid {
     elsif ($key == $KEY_CTRL_C) {
         my $input = Irssi::parse_special('$L');
 
-        # Remove the Ctrl+C character.
-        $input =~ tr///d;
+        # Remove the Ctrl+C character (ASCII 3).
+        $input =~ s/\x03//g;
 
         my $pos = 0;
-        if ($input =~ s/^(@@(?:[0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43}|[0-9a-f]{3}) )//) {
+        if ($input =~ s/^(\@\@(?:\$[0-9A-Za-z\-_\.]+|[0-9a-zA-Z]+)\s*)//) {
             $pos = Irssi::gui_input_get_pos() - length($1);
         }
 
-        # We also want to move the input position back one for Ctrl+C
-        # char.
+        # We also want to move the input position back one for Ctrl+C char.
         $pos = $pos > 0 ? $pos - 1 : 0;
 
         # Replace the text in the input box with our modified version,
-        # then move cursor positon to where it was without the
+        # then move cursor position to where it was without the
         # message/thread ID.
         Irssi::gui_input_set($input);
         Irssi::gui_input_set_pos($pos);
@@ -687,6 +693,11 @@ sub signal_gui_key_pressed_msgthreadid {
 
         $ESC_PRESSED = 0;
         $O_PRESSED = 0;
+
+        if ($current_thread_preview ne '') {
+            $current_thread_preview = '';
+            Irssi::statusbar_items_redraw('matterircd_thread');
+        }
     }
 
     # For 'down arrow', it's a sequence of ESC + O + B.
@@ -1031,7 +1042,6 @@ sub msgthreadid_find {
     return wantarray ? ($matches[0], scalar @matches) : $matches[0];
 }
 
-our $current_thread_preview = '';
 my $preview_tag;
 
 Irssi::statusbar_item_register('matterircd_thread', '$0', 'sb_matterircd_thread');
