@@ -674,7 +674,7 @@ sub signal_gui_key_pressed_msgthreadid {
         $input =~ s/\x03//g;
 
         my $pos = 0;
-        if ($input =~ s/^(\@\@(?:\$[0-9A-Za-z\-_\.]+|[0-9a-zA-Z]+)\s*)//) {
+        if ($input =~ s/^(\@\@(?:\$[0-9A-Za-z\-_\.]+|[0-9a-zA-Z]+)?\s*)//) {
             $pos = Irssi::gui_input_get_pos() - length($1);
         }
 
@@ -1415,7 +1415,12 @@ Irssi::command_bind('nicknames_search', 'cmd_nicknames_search');
 sub signal_gui_key_pressed_nicks {
     my ($key) = @_;
 
-    return unless $NICKNAMES_CACHE_SEARCH_ENABLED;
+    # If search mode is not active, only intercept Ctrl+C when an @ prefix is present (and not @@)
+    if (! $NICKNAMES_CACHE_SEARCH_ENABLED) {
+        return unless $key == $KEY_CTRL_C;
+        my $input = Irssi::parse_special('$L');
+        return unless $input =~ /^(?:\@\@\S+\s+)?\@(?!\@)/;
+    }
 
     my $server = Irssi::active_server();
     my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
@@ -1431,21 +1436,30 @@ sub signal_gui_key_pressed_nicks {
     elsif ($key == $KEY_CTRL_C) {
         my $input = Irssi::parse_special('$L');
 
-        # Remove the Ctrl+C character.
-        $input =~ tr///d;
+        # Remove the Ctrl+C character (ASCII 3).
+        $input =~ s/\x03//g;
 
         my $compl_char = Irssi::settings_get_str('completion_char');
         my $pos = 0;
-        if ($input =~ s/^(\@[^${compl_char}]+$compl_char )//) {
+
+        # Preserve any leading @@thread ID if present
+        my $msgid = "";
+        if ($input =~ s/^(\@\@(?:\$[0-9A-Za-z\-_\.]+|[0-9a-zA-Z]+)?\s*)//) {
+            $msgid = $1;
+        }
+
+        # Remove @nick prefix (supports bare '@', '@ ', '@nick', '@nick:', '@nick: ')
+        if ($input =~ s/^(\@(?!\@)[^\s\Q${compl_char}\E]*\Q${compl_char}\E?\s*)//) {
             $pos = Irssi::gui_input_get_pos() - length($1);
         }
 
-        # We also want to move the input position back one for Ctrl+C
-        # char.
+        $input = "${msgid}${input}";
+
+        # We also want to move the input position back one for Ctrl+C char.
         $pos = $pos > 0 ? $pos - 1 : 0;
 
         # Replace the text in the input box with our modified version,
-        # then move cursor positon to where it was without the
+        # then move cursor position to where it was without the
         # current nickname.
         Irssi::gui_input_set($input);
         Irssi::gui_input_set_pos($pos);
