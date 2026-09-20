@@ -824,10 +824,12 @@ sub cache_msgthreadid {
 
     # Most recent posts / replies to threads.
     for my $msgpostid (@msgpost_ids) {
+        $MSGTHREADID_LAST_NICK{$key}{$msgpostid} = $nick;
         if (cache_store(\@{$MSGTHREADID_MOST_RECENT_CACHE{$key}}, $msgpostid, $cache_size)) {
             stats_increment(\$MSGTHREADID_MOST_RECENT_CACHE_STATS);
         }
     }
+
     # Include parent/thread ID in most recent, right at the beginning for more accurate auto completion
     for my $msgid (@msgids) {
         if (cache_store(\@{$MSGTHREADID_MOST_RECENT_CACHE{$key}}, $msgid, $cache_size)) {
