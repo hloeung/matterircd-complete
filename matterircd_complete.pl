@@ -343,7 +343,7 @@ sub update_msgthreadid {
 
     # Replace tabs with spaces.
     # https://github.com/irssi/irssi/issues/1499
-    $msg =~ s/\t/        /g;
+    $msg =~ s/\t/        /g if index($msg, "\t") != -1;
 
     # Work around irssi's lack of support for modern IRC hex colors
     # https://github.com/irssi/irssi/issues/1508
@@ -352,6 +352,11 @@ sub update_msgthreadid {
     # Work around irssi's lack of support for modern IRC strikethrough
     # https://github.com/irssi/irssi/issues/1589
     $msg = strikethrough_to_ansi($msg);
+
+    if (index($msg, '[') == -1) {
+        Irssi::signal_continue($server, $msg, $nick, $address, $target);
+        return;
+    }
 
     my $prefix = '';
     my $msgthreadid = '';
@@ -371,7 +376,7 @@ sub update_msgthreadid {
     }
     if (not $msgthreadid) {
         Irssi::signal_continue($server, $msg, $nick, $address, $target);
-        return
+        return;
     }
 
     my $thread_color = Irssi::settings_get_int('matterircd_complete_thread_id_color');
@@ -624,7 +629,7 @@ sub cmd_message_thread_id_search {
         # Save input text.
         my $input = Irssi::parse_special('$L');
         # Remove existing thread.
-        $input =~ s/^@@(?:[0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43}|[0-9a-f]{3}) //;
+        $input =~ s/^@@(?:[0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})?\s*//;
         # Insert message/thread ID from cache.
         Irssi::gui_input_set_pos(0);
         Irssi::gui_input_set("\@\@${msgthreadid} ${input}");
@@ -674,7 +679,7 @@ sub signal_gui_key_pressed_msgthreadid {
         $input =~ s/\x03//g;
 
         my $pos = 0;
-        if ($input =~ s/^(\@\@(?:\$[0-9A-Za-z\-_\.]+|[0-9a-zA-Z]+)?\s*)//) {
+        if ($input =~ s/^(\@\@(?:[0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})?\s*)//) {
             $pos = Irssi::gui_input_get_pos() - length($1);
         }
 
@@ -764,6 +769,7 @@ sub cache_msgthreadid {
     return unless Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
     my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
+    return if index($msg, '[') == -1;
 
     my @msgids = ();
     my @msgpost_ids = ();
@@ -1114,7 +1120,7 @@ sub update_thread_preview {
 
     my $new_preview = '';
 
-    if ($input =~ /^@@((?:\$[0-9A-Za-z\-_\.]+|[0-9a-zA-Z]+))/) {
+    if ($input =~ /^@@([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})/) {
         my $id = $1;
         my $target = $window->{active}->{name};
         my ($full_id, $match_count) = msgthreadid_find($target, $id);
@@ -1168,7 +1174,7 @@ sub signal_send_text {
         Irssi::statusbar_items_redraw('matterircd_thread');
     }
 
-    if ($line =~ /^@@((?:\$[0-9A-Za-z\-_\.]+|[0-9a-zA-Z]+))(\s.*)?$/) {
+    if ($line =~ /^@@([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})(\s.*)?$/) {
         my $id = $1;
         my $rest = $2 // '';
         my $target = $wi->{name};
@@ -1410,8 +1416,9 @@ sub cmd_nicknames_search {
         my $compl_char = Irssi::settings_get_str('completion_char');
         # Remove any existing nickname and insert one from the cache.
         my $msgid = "";
-        if ($input =~ s/^(\@\@(?:[0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43}|[0-9a-f]{3}) )//) {
+        if ($input =~ s/^(\@\@(?:[0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})\s*)//) {
             $msgid = $1;
+            $msgid .= " " if $msgid !~ /\s$/;
         }
         $input =~ s/^\@[^${compl_char}]+$compl_char //;
         Irssi::gui_input_set_pos(0);
@@ -1452,8 +1459,9 @@ sub signal_gui_key_pressed_nicks {
 
         # Preserve any leading @@thread ID if present
         my $msgid = "";
-        if ($input =~ s/^(\@\@(?:\$[0-9A-Za-z\-_\.]+|[0-9a-zA-Z]+)?\s*)//) {
+        if ($input =~ s/^(\@\@(?:[0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})\s*)//) {
             $msgid = $1;
+            $msgid .= " " if $msgid !~ /\s$/;
         }
 
         # Remove @nick prefix (supports bare '@', '@ ', '@nick', '@nick:', '@nick: ')
@@ -1621,6 +1629,7 @@ sub signal_message_public {
     return unless Irssi::settings_get_int('matterircd_complete_replied_cache_size');
     my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
+    return if index($msg, '[') == -1;
 
     # For '/me' actions, it has trailing space so we need to use
     # \s* here.
@@ -1960,11 +1969,6 @@ Irssi::signal_add('gui key pressed', sub {
     # Ignore non-printable/control characters (Enter, Backspace, Tab, etc.)
     return if $key < 32 || $key > 126;
 
-    # Ignore when typing Irssi slash commands (e.g. /win 1, /join)
-    my $input_line = Irssi::parse_special('$L');
-    return if $key == 47 && $input_line eq '';
-    return if $input_line =~ m{^/(?!/)};
-
     my $window = Irssi::active_win();
     return unless $window && $window->{active_server} && $window->{active};
 
@@ -1976,10 +1980,8 @@ Irssi::signal_add('gui key pressed', sub {
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
     my $target = $window->{active}->{name};
-    return unless $target;
-
     # Ignore local/virtual channels (e.g. &messages)
-    return if $target =~ /^&/;
+    return unless $target && substr($target, 0, 1) ne '&';
 
     my $server_tag = $server->{tag};
     my $now = time();
@@ -1987,6 +1989,11 @@ Irssi::signal_add('gui key pressed', sub {
     # Only send at most once every 4 seconds per window
     return if exists $last_typing_sent{$server_tag}{$target}
            && ($now - $last_typing_sent{$server_tag}{$target} < 4);
+
+    # Ignore when typing Irssi slash commands (e.g. /win 1, /join)
+    my $input_line = Irssi::parse_special('$L');
+    return if $key == 47 && $input_line eq '';
+    return if $input_line =~ m{^/(?!/)};
 
     $last_typing_sent{$server_tag}{$target} = $now;
 
