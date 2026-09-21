@@ -110,8 +110,8 @@
 #     /statusbar prompt add -before input -priority 100 matterircd_thread
 #     /save
 #
-#   Or next to message-tags:
-#     /statusbar window add -alignment left -priority 15 matterircd_thread
+#   Or next to message-tags (Use matterircd_thread for short and matterircd_thread_full for full message IDs)::
+#     /statusbar window add -alignment left -priority 15 matterircd_thread_full
 #     /save
 
 use strict;
@@ -634,13 +634,20 @@ sub cmd_message_thread_id_search {
     }
 
     if ($msgthreadid) {
+        my $len = Irssi::settings_get_int('matterircd_complete_shorten_message_thread_id');
+        my $thread_m_style = ($msgthreadid =~ /^[0-9a-f]{3}$/) ? 1 : 0;
+        my $insert_id = $msgthreadid;
+        if (($len < 25) && ($thread_m_style != 1)) {
+            $insert_id = substr($msgthreadid, 0, $len);
+        }
+
         # Save input text.
         my $input = Irssi::parse_special('$L');
         # Remove existing thread.
         $input =~ s/^@@(?:[0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})?\s*//;
         # Insert message/thread ID from cache.
         Irssi::gui_input_set_pos(0);
-        Irssi::gui_input_set("\@\@${msgthreadid} ${input}");
+        Irssi::gui_input_set("\@\@${insert_id} ${input}");
         queue_thread_preview();
     }
 };
@@ -653,6 +660,7 @@ Irssi::signal_add('window changed', sub {
 });
 
 our $current_thread_preview = '';
+our $current_thread_preview_full = '';
 
 my $ESC_PRESSED = 0;
 my $O_PRESSED   = 0;
@@ -707,9 +715,11 @@ sub signal_gui_key_pressed_msgthreadid {
         $ESC_PRESSED = 0;
         $O_PRESSED = 0;
 
-        if ($current_thread_preview ne '') {
+        if ($current_thread_preview ne '' || $current_thread_preview_full ne '') {
             $current_thread_preview = '';
+            $current_thread_preview_full = '';
             Irssi::statusbar_items_redraw('matterircd_thread');
+            Irssi::statusbar_items_redraw('matterircd_thread_full');
         }
     }
 
@@ -1064,9 +1074,20 @@ sub msgthreadid_find {
 my $preview_tag;
 
 Irssi::statusbar_item_register('matterircd_thread', '$0', 'sb_matterircd_thread');
+Irssi::statusbar_item_register('matterircd_thread_full', '$0', 'sb_matterircd_thread_full');
 
 sub sb_matterircd_thread {
     my ($item, $get_size_only) = @_;
+    _sb_matterircd_thread_render($item, $get_size_only, $current_thread_preview);
+}
+
+sub sb_matterircd_thread_full {
+    my ($item, $get_size_only) = @_;
+    _sb_matterircd_thread_render($item, $get_size_only, $current_thread_preview_full);
+}
+
+sub _sb_matterircd_thread_render {
+    my ($item, $get_size_only, $text) = @_;
     my $window = Irssi::active_win();
 
     return $item->default_handler($get_size_only, '', '', 1)
@@ -1076,8 +1097,8 @@ sub sb_matterircd_thread {
     return $item->default_handler($get_size_only, '', '', 1)
         unless is_matterircd_net($server);
 
-    if (length($current_thread_preview)) {
-        return $item->default_handler($get_size_only, $current_thread_preview, '', 1);
+    if (length($text)) {
+        return $item->default_handler($get_size_only, $text, '', 1);
     }
 
     $item->default_handler($get_size_only, '', '', 1);
@@ -1115,20 +1136,23 @@ sub update_thread_preview {
     $preview_tag = undef;
 
     my $input = Irssi::parse_special('$L');
-    if ($current_thread_preview eq '' && substr($input, 0, 2) ne '@@') {
+    if ($current_thread_preview eq '' && $current_thread_preview_full eq '' && substr($input, 0, 2) ne '@@') {
         return;
     }
 
     my $window = Irssi::active_win();
     unless ($window && $window->{active_server} && $window->{active} && is_matterircd_net($window->{active_server})) {
-        if ($current_thread_preview ne '') {
+        if ($current_thread_preview ne '' || $current_thread_preview_full ne '') {
             $current_thread_preview = '';
+            $current_thread_preview_full = '';
             Irssi::statusbar_items_redraw('matterircd_thread');
+            Irssi::statusbar_items_redraw('matterircd_thread_full');
         }
         return;
     }
 
     my $new_preview = '';
+    my $new_preview_full = '';
 
     if ($input =~ /^@@([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})/) {
         my $id = $1;
@@ -1139,29 +1163,30 @@ sub update_thread_preview {
         if ($full_id) {
             my $thread_color_fmt = thread_color_format($full_id);
 
+            # Compact preview for prompt
             my $len = Irssi::settings_get_int('matterircd_complete_shorten_message_thread_id');
             my $display_id = $full_id;
             my $thread_m_style = ($full_id =~ /^[0-9a-f]{3}$/) ? 1 : 0;
             if (($len < 25) && ($thread_m_style != 1)) {
                 $display_id = substr($full_id, 0, $len) . '…';
             }
+            $new_preview = "%K[${thread_color_fmt}${reply_prefix}${display_id}%n%K] ";
 
-            my $ambig = ($match_count > 1) ? " %Y(${match_count} matches!)%K" : "";
+            # Full preview with author for window bar
             my $author = $MSGTHREADID_LAST_NICK{$target}{$full_id};
             my $author_fmt = (defined $author && length $author) ? " %K(\@${author}%K)" : "";
-            if (Irssi::settings_get_bool('matterircd_complete_live_thread_preview_hide_nick')) {
-                $author_fmt = "";
-            }
-
-            $new_preview = "%K[${thread_color_fmt}${reply_prefix}${display_id}${ambig}${author_fmt}%n%K] ";
+            $new_preview_full = "%K[${thread_color_fmt}${reply_prefix}${full_id}${author_fmt}%n%K]";
         } else {
             $new_preview = "%K[%R${reply_prefix}${id}?%n%K] ";
+            $new_preview_full = "%K[%R${reply_prefix}${id}?%n%K]";
         }
     }
 
-    if ($new_preview ne $current_thread_preview) {
+    if ($new_preview ne $current_thread_preview || $new_preview_full ne $current_thread_preview_full) {
         $current_thread_preview = $new_preview;
+        $current_thread_preview_full = $new_preview_full;
         Irssi::statusbar_items_redraw('matterircd_thread');
+        Irssi::statusbar_items_redraw('matterircd_thread_full');
     }
 }
 
@@ -1179,9 +1204,11 @@ sub signal_send_text {
     my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
-    if ($current_thread_preview ne '') {
+    if ($current_thread_preview ne '' || $current_thread_preview_full ne '') {
         $current_thread_preview = '';
+        $current_thread_preview_full = '';
         Irssi::statusbar_items_redraw('matterircd_thread');
+        Irssi::statusbar_items_redraw('matterircd_thread_full');
     }
 
     if ($line =~ /^@@([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})(\s.*)?$/) {
