@@ -637,7 +637,29 @@ sub cmd_message_thread_id_search {
         my $len = Irssi::settings_get_int('matterircd_complete_shorten_message_thread_id');
         my $thread_m_style = ($msgthreadid =~ /^[0-9a-f]{3}$/) ? 1 : 0;
         my $insert_id = $msgthreadid;
+
         if (($len < 25) && ($thread_m_style != 1)) {
+            my $full_len = length($msgthreadid);
+            my $target = $wi->{name};
+            my @other_ids = grep { $_ ne $msgthreadid } (
+                @{$MSGTHREADID_CACHE{$target} // []},
+                @{$MSGTHREADID_MOST_RECENT_CACHE{$target} // []}
+            );
+
+            # Expand length if another cached thread shares the same prefix
+            while ($len < $full_len) {
+                my $prefix = substr($msgthreadid, 0, $len);
+                my $collision = 0;
+                for my $other (@other_ids) {
+                    if (index($other, $prefix) == 0) {
+                        $collision = 1;
+                        last;
+                    }
+                }
+                last unless $collision;
+                $len++;
+            }
+
             $insert_id = substr($msgthreadid, 0, $len);
         }
 
