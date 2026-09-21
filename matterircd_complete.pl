@@ -580,8 +580,11 @@ sub cmd_matterircd_complete_scrollback {
 }
 Irssi::command_bind('matterircd_complete_scrollback', 'cmd_matterircd_complete_scrollback');
 
+Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_message_thread_id_recent_timeout', 45);
+
 my $MSGTHREADID_CACHE_SEARCH_ENABLED = 0;
 my %MSGTHREADID_CACHE_SEARCH_RECENT;
+my %MSGTHREADID_CACHE_SEARCH_RECENT_TIME;
 my @MSGTHREADID_CACHE_COMBINED;
 my $MSGTHREADID_CACHE_INDEX = 0;
 sub cmd_message_thread_id_search {
@@ -598,10 +601,15 @@ sub cmd_message_thread_id_search {
     if (! $MSGTHREADID_CACHE_SEARCH_ENABLED) {
         @MSGTHREADID_CACHE_COMBINED = @{$MSGTHREADID_CACHE{$wi->{name}}};
 
-        # Always add the most recent thread we replied to to the beginning.
+        # Prioritize the thread we replied to if within the expiration timeout.
         my $recent_id = $MSGTHREADID_CACHE_SEARCH_RECENT{$wi->{name}};
-        if (defined $recent_id && length $recent_id) {
+        my $recent_time = $MSGTHREADID_CACHE_SEARCH_RECENT_TIME{$wi->{name}} // 0;
+        my $timeout = Irssi::settings_get_int('matterircd_complete_message_thread_id_recent_timeout');
+
+        if (defined $recent_id && length $recent_id && (time() - $recent_time < $timeout)) {
             if (!@MSGTHREADID_CACHE_COMBINED || $MSGTHREADID_CACHE_COMBINED[0] ne $recent_id) {
+                # Deduplicate and place at the beginning
+                @MSGTHREADID_CACHE_COMBINED = grep { $_ ne $recent_id } @MSGTHREADID_CACHE_COMBINED;
                 unshift(@MSGTHREADID_CACHE_COMBINED, $recent_id);
             }
         }
@@ -891,13 +899,14 @@ sub signal_message_own_public_msgthreadid {
     # If it's a reaction and it's already in the most recent cache, skip to increase accuracy of auto completion
     my $found_in_recent = 0;
     if ($reaction ne '') {
-        if (grep /$msgthreadid/, @{$MSGTHREADID_CACHE{$target}}) {
+        if (grep { $_ eq $msgthreadid } @{$MSGTHREADID_CACHE{$target}}) {
             $found_in_recent = 1;
         }
     }
 
     if (not $found_in_recent) {
         $MSGTHREADID_CACHE_SEARCH_RECENT{$target} = $msgthreadid;
+        $MSGTHREADID_CACHE_SEARCH_RECENT_TIME{$target} = time();
 
         my $cache_size = Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
         if (cache_store(\@{$MSGTHREADID_CACHE{$target}}, $msgthreadid, $cache_size)) {
@@ -966,13 +975,14 @@ sub signal_message_own_private {
     # If it's a reaction and it's already in the most recent cache, skip to increase accuracy of auto completion
     my $found_in_recent = 0;
     if ($reaction ne '') {
-        if (grep /$msgthreadid/, @{$MSGTHREADID_CACHE{$target}}) {
+        if (grep { $_ eq $msgthreadid } @{$MSGTHREADID_CACHE{$target}}) {
             $found_in_recent = 1;
         }
     }
 
     if (not $found_in_recent) {
         $MSGTHREADID_CACHE_SEARCH_RECENT{$target} = $msgthreadid;
+        $MSGTHREADID_CACHE_SEARCH_RECENT_TIME{$target} = time();
 
         my $cache_size = Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
         if (cache_store(\@{$MSGTHREADID_CACHE{$target}}, $msgthreadid, $cache_size)) {
