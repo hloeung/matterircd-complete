@@ -212,7 +212,8 @@ my @thread_id_selected_colors = ();
 
 # Rely on message/thread IDs stored in message cache so we can shorten
 # to save on screen real-estate.
-Irssi::settings_add_int('matterircd_complete',  'matterircd_complete_shorten_message_thread_id', 5);
+Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_shorten_message_thread_id', 5);
+Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_message_thread_id_min', 5);
 Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_shorten_message_thread_id_hide_prefix', 1);
 Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_override_reply_prefix', '↪');
 
@@ -634,7 +635,9 @@ sub cmd_message_thread_id_search {
     }
 
     if ($msgthreadid) {
-        my $len = Irssi::settings_get_int('matterircd_complete_shorten_message_thread_id');
+        my $len = Irssi::settings_get_int('matterircd_complete_message_thread_id_min')
+            || Irssi::settings_get_int('matterircd_complete_shorten_message_thread_id');
+
         my $thread_m_style = ($msgthreadid =~ /^[0-9a-f]{3}$/) ? 1 : 0;
         my $insert_id = $msgthreadid;
 
@@ -646,7 +649,7 @@ sub cmd_message_thread_id_search {
                 @{$MSGTHREADID_MOST_RECENT_CACHE{$target} // []}
             );
 
-            # Expand length if another cached thread shares the same prefix
+            # Expand beyond $len if another cached thread shares the same prefix
             while ($len < $full_len) {
                 my $prefix = substr($msgthreadid, 0, $len);
                 my $collision = 0;
@@ -1186,7 +1189,8 @@ sub update_thread_preview {
             my $thread_color_fmt = thread_color_format($full_id);
 
             # Compact preview for prompt
-            my $len = Irssi::settings_get_int('matterircd_complete_shorten_message_thread_id');
+            my $len = Irssi::settings_get_int('matterircd_complete_message_thread_id_min')
+                || Irssi::settings_get_int('matterircd_complete_shorten_message_thread_id');
             my $display_id = $full_id;
             my $thread_m_style = ($full_id =~ /^[0-9a-f]{3}$/) ? 1 : 0;
             if (($len < 25) && ($thread_m_style != 1)) {
