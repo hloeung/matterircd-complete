@@ -16,6 +16,11 @@
 #
 #   /bind ^G /message_thread_id_search
 #
+# Bind searching with /last message/thread ID completion to a key to make it
+# easier to see what you're replying to:
+#
+#   /bind meta-g command message_thread_id_last
+#
 # Also bind to insert nicknames:
 #
 #   /bind ^F /nicknames_search
@@ -213,7 +218,7 @@ my @thread_id_selected_colors = ();
 # Rely on message/thread IDs stored in message cache so we can shorten
 # to save on screen real-estate.
 Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_shorten_message_thread_id', 5);
-Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_message_thread_id_min', 5);
+Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_message_thread_id_min', 0);
 Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_shorten_message_thread_id_hide_prefix', 1);
 Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_override_reply_prefix', '↪');
 
@@ -677,6 +682,47 @@ sub cmd_message_thread_id_search {
     }
 };
 Irssi::command_bind('message_thread_id_search', 'cmd_message_thread_id_search');
+
+sub cmd_message_thread_id_last {
+    my ($data, $server, $wi) = @_;
+
+    my $window = Irssi::active_win();
+    return unless $window && $window->{active_server} && $window->{active};
+    return unless is_matterircd_net($window->{active_server});
+
+    my $target = $window->{active}->{name};
+    my $input = Irssi::parse_special('$L');
+    my $pos = Irssi::gui_input_get_pos();
+    my $id;
+
+    # Extract ID from the prompt if present
+    if ($input =~ /^@@([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})/) {
+        $id = $1;
+    } elsif (exists $MSGTHREADID_CACHE{$target} && @{$MSGTHREADID_CACHE{$target}}) {
+        # Fallback to latest thread if prompt is empty
+        $id = $MSGTHREADID_CACHE_SEARCH_RECENT{$target}
+           // $MSGTHREADID_CACHE{$target}[0];
+    }
+
+    return unless defined $id && length $id;
+
+    # Irssi's /last (lastlog) searches the visible window scrollback text.
+    # We must search for the shortened prefix that actually appears on screen.
+    my $len = Irssi::settings_get_int('matterircd_complete_shorten_message_thread_id');
+    my $thread_m_style = ($id =~ /^[0-9a-f]{3}$/) ? 1 : 0;
+    my $search_id = $id;
+    if (($len < 25) && ($thread_m_style != 1) && (length($search_id) > $len)) {
+        $search_id = substr($search_id, 0, $len);
+    }
+
+    # Execute /last with the short ID, then restore input buffer and cursor
+    my $reply_prefix = Irssi::settings_get_str('matterircd_complete_override_reply_prefix');
+    $window->command("last -regexp \\[(?:${reply_prefix})?${search_id}");
+    Irssi::gui_input_set($input);
+    Irssi::gui_input_set_pos($pos);
+    queue_thread_preview();
+}
+Irssi::command_bind('message_thread_id_last', 'cmd_message_thread_id_last');
 
 Irssi::signal_add('window changed', sub {
     $MSGTHREADID_CACHE_SEARCH_ENABLED = 0;
