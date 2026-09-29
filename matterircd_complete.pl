@@ -986,15 +986,20 @@ sub signal_message_own_public_msgthreadid {
     }
 
     if (not $found_in_recent) {
-        $MSGTHREADID_CACHE_SEARCH_RECENT{$target} = $msgthreadid;
-        $MSGTHREADID_CACHE_SEARCH_RECENT_TIME{$target} = time();
-
         my $cache_size = Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
-        if (cache_store(\@{$MSGTHREADID_CACHE{$target}}, $msgthreadid, $cache_size)) {
-            $MSGTHREADID_CACHE_INDEX = 0;
-            stats_increment(\$MSGTHREADID_CACHE_STATS);
+
+        # Only conversation replies become sticky and enter the root thread cycle cache
+        if ($reaction eq '') {
+            $MSGTHREADID_CACHE_SEARCH_RECENT{$target} = $msgthreadid;
+            $MSGTHREADID_CACHE_SEARCH_RECENT_TIME{$target} = time();
+
+            if (cache_store(\@{$MSGTHREADID_CACHE{$target}}, $msgthreadid, $cache_size)) {
+                $MSGTHREADID_CACHE_INDEX = 0;
+                stats_increment(\$MSGTHREADID_CACHE_STATS);
+            }
         }
-        # Include parent/thread ID in most recent, right at the beginning for more accurate auto completion
+
+        # Reactions can still refresh their place in the general most-recent cache for Tab completion
         if (cache_store(\@{$MSGTHREADID_MOST_RECENT_CACHE{$target}}, $msgthreadid, $cache_size)) {
             $MSGTHREADID_CACHE_INDEX = 0;
             stats_increment(\$MSGTHREADID_MOST_RECENT_CACHE_STATS);
@@ -1062,15 +1067,20 @@ sub signal_message_own_private {
     }
 
     if (not $found_in_recent) {
-        $MSGTHREADID_CACHE_SEARCH_RECENT{$target} = $msgthreadid;
-        $MSGTHREADID_CACHE_SEARCH_RECENT_TIME{$target} = time();
-
         my $cache_size = Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
-        if (cache_store(\@{$MSGTHREADID_CACHE{$target}}, $msgthreadid, $cache_size)) {
-            $MSGTHREADID_CACHE_INDEX = 0;
-            stats_increment(\$MSGTHREADID_CACHE_STATS);
+
+        # Only conversation replies become sticky and enter the root thread cycle cache
+        if ($reaction eq '') {
+            $MSGTHREADID_CACHE_SEARCH_RECENT{$target} = $msgthreadid;
+            $MSGTHREADID_CACHE_SEARCH_RECENT_TIME{$target} = time();
+
+            if (cache_store(\@{$MSGTHREADID_CACHE{$target}}, $msgthreadid, $cache_size)) {
+                $MSGTHREADID_CACHE_INDEX = 0;
+                stats_increment(\$MSGTHREADID_CACHE_STATS);
+            }
         }
-        # Include parent/thread ID in most recent, right at the beginning for more accurate auto completion
+
+        # Reactions can still refresh their place in the general most-recent cache for Tab completion
         if (cache_store(\@{$MSGTHREADID_MOST_RECENT_CACHE{$target}}, $msgthreadid, $cache_size)) {
             $MSGTHREADID_CACHE_INDEX = 0;
             stats_increment(\$MSGTHREADID_MOST_RECENT_CACHE_STATS);
