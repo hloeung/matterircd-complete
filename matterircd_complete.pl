@@ -339,9 +339,19 @@ sub cmd_matterircd_complete_thread_id_get_color {
     $id =~ s/^[\[↪\->]*(?:\@\@?)?//;
     $id =~ s/(?:…|\.\.\.|\])+$//;
 
+    return unless length($id);
+
     if ($wi && ($wi->{type} eq 'CHANNEL' || $wi->{type} eq 'QUERY')) {
-        my ($full_id) = msgthreadid_find($wi->{name}, $id);
-        $id = $full_id if $full_id;
+        my ($full_id, $match_count) = msgthreadid_find($wi->{name}, $id);
+        if (!$full_id && $id =~ /^(?:[0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43}|[0-9a-f]{3})$/) {
+            $full_id = $id;
+            $match_count = 1;
+        }
+        if (!$full_id || $match_count != 1) {
+            _wi_print($wi, "[matterircd_complete] No unique full message/thread ID found for ${id}");
+            return;
+        }
+        $id = $full_id;
     }
 
     my ($color, $prepend) = get_thread_format($id);
