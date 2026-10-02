@@ -571,8 +571,15 @@ sub cmd_last_message_permalink {
     }
 
     if ($target_id) {
-        my ($full_id) = msgthreadid_find($channel, $target_id);
-        $full_id = $target_id unless $full_id;
+        my ($full_id, $match_count) = msgthreadid_find($channel, $target_id);
+        if (!$full_id && $target_id =~ /^(?:[0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43})$/) {
+            $full_id = $target_id;
+            $match_count = 1;
+        }
+        if (!$full_id || $match_count != 1) {
+            _wi_print($wi, "[matterircd_complete] No unique full message/thread ID found for ${target_id}");
+            return;
+        }
         _wi_print($wi, "Thread ID: ${base_url}${full_id}");
         return;
     }
@@ -1738,12 +1745,24 @@ sub cmd_matterircd_complete_replied_cache_clear {
             # Strip trailing ellipsis if copied from scrollback or statusbar
             $id =~ s/(?:…|\.\.\.)$//;
 
+            my @matches = grep { rindex($_, $id, 0) == 0 } @{$REPLIED_CACHE{$channel}};
+
+            if (@matches > 1) {
+                _wi_print($wi, "[matterircd_complete] Ambiguous thread ID prefix '${id}' (" . scalar(@matches) . " matches) in replied cache for ${channel}");
+                next;
+            }
+            if (@matches == 0) {
+                _wi_print($wi, "[matterircd_complete] No matching thread ID found for '${id}' in replied cache for ${channel}");
+                next;
+            }
+
+            my $target_msgid = $matches[0];
             for (my $i = $#{$REPLIED_CACHE{$channel}}; $i >= 0; $i--) {
-                my $msgid = $REPLIED_CACHE{$channel}[$i];
-                if (rindex($msgid, $id, 0) == 0) {
+                if ($REPLIED_CACHE{$channel}[$i] eq $target_msgid) {
                     splice(@{$REPLIED_CACHE{$channel}}, $i, 1);
                     stats_increment(\$REPLIED_CACHE_STATS);
-                    _wi_print($wi, "matterircd_complete replied cache removed ${msgid} from ${channel} cache");
+                    _wi_print($wi, "matterircd_complete replied cache removed ${target_msgid} from ${channel} cache");
+                    last;
                 }
             }
         }
