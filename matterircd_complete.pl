@@ -574,13 +574,13 @@ sub cmd_last_message_permalink {
     # Check for short or full ID in command arguments or active input prompt
     my $input = Irssi::parse_special('$L');
     my $target_id;
-    if ($data && $data =~ /^\s*(?:\@\@)?([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})\s*$/) {
+    if (defined $data && $data =~ /^\s*(?:\@\@)?([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})\s*$/) {
         $target_id = $1;
     } elsif ($input =~ /^@@([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})(?:\s|$)/) {
         $target_id = $1;
     }
 
-    if ($target_id) {
+    if (defined $target_id && length $target_id) {
         my ($full_id, $match_count) = msgthreadid_find($channel, $target_id);
         if (!$full_id && $target_id =~ /^(?:[0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43})$/) {
             $full_id = $target_id;
@@ -739,7 +739,7 @@ sub cmd_message_thread_id_last {
     my $id;
 
     # Support argument passed directly: /message_thread_id_last [@@]<id>
-    if ($data && $data =~ /^\s*(?:\@\@)?([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})\s*$/) {
+    if (defined $data && $data =~ /^\s*(?:\@\@)?([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})\s*$/) {
         $id = $1;
     } elsif ($input =~ /^@@([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})(?:\s|$)/) {
         $id = $1;
@@ -1724,7 +1724,7 @@ sub cmd_matterircd_complete_replied_cache_clear {
     my $channel;
     my @msgids = ();
     my @args = ();
-    if ($data) {
+    if (defined $data && length $data) {
         @args = split(/\s+/, $data);
     }
 
@@ -1760,7 +1760,8 @@ sub cmd_matterircd_complete_replied_cache_clear {
                 next;
             }
 
-            my @matches = grep { rindex($_, $id, 0) == 0 } @{$REPLIED_CACHE{$channel}};
+            my %seen;
+            my @matches = grep { rindex($_, $id, 0) == 0 && !$seen{$_}++ } @{$REPLIED_CACHE{$channel}};
 
             if (@matches > 1) {
                 _wi_print($wi, "[matterircd_complete] Ambiguous thread ID prefix '${id}' (" . scalar(@matches) . " matches) in replied cache for ${channel}");
@@ -1772,13 +1773,16 @@ sub cmd_matterircd_complete_replied_cache_clear {
             }
 
             my $target_msgid = $matches[0];
+            my $removed = 0;
             for (my $i = $#{$REPLIED_CACHE{$channel}}; $i >= 0; $i--) {
                 if ($REPLIED_CACHE{$channel}[$i] eq $target_msgid) {
                     splice(@{$REPLIED_CACHE{$channel}}, $i, 1);
                     stats_increment(\$REPLIED_CACHE_STATS);
-                    _wi_print($wi, "matterircd_complete replied cache removed ${target_msgid} from ${channel} cache");
-                    last;
+                    $removed++;
                 }
+            }
+            if ($removed) {
+                _wi_print($wi, "matterircd_complete replied cache removed ${target_msgid} from ${channel} cache");
             }
         }
     } else {
