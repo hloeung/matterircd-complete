@@ -2226,7 +2226,14 @@ Irssi::signal_add('send text', sub {
     my ($line, $server, $witem) = @_;
     return unless $server && $witem;
 
-    delete $last_typing_sent{$server->{tag}}{$witem->{name}};
+    my $server_tag = $server->{tag};
+    delete $last_typing_sent{$server_tag}{$witem->{name}};
+
+    # Also clear the thread target if sending an inline reply
+    if ($line =~ /^@@([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})/) {
+        my ($full_id) = msgthreadid_find($witem->{name}, $1);
+        delete $last_typing_sent{$server_tag}{"@@" . ($full_id // $1)};
+    }
 });
 
 
