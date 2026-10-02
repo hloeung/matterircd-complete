@@ -574,9 +574,9 @@ sub cmd_last_message_permalink {
     # Check for short or full ID in command arguments or active input prompt
     my $input = Irssi::parse_special('$L');
     my $target_id;
-    if ($data && $data =~ /^(?:\@\@)?([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})/) {
+    if ($data && $data =~ /^\s*(?:\@\@)?([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})\s*$/) {
         $target_id = $1;
-    } elsif ($input =~ /^@@([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})/) {
+    } elsif ($input =~ /^@@([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})(?:\s|$)/) {
         $target_id = $1;
     }
 
@@ -739,9 +739,9 @@ sub cmd_message_thread_id_last {
     my $id;
 
     # Support argument passed directly: /message_thread_id_last [@@]<id>
-    if ($data && $data =~ /^\s*(?:\@\@)?([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})/) {
+    if ($data && $data =~ /^\s*(?:\@\@)?([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})\s*$/) {
         $id = $1;
-    } elsif ($input =~ /^@@([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})/) {
+    } elsif ($input =~ /^@@([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})(?:\s|$)/) {
         $id = $1;
     } elsif (exists $MSGTHREADID_CACHE{$target} && @{$MSGTHREADID_CACHE{$target}}) {
         # Fallback to latest thread if prompt is empty
@@ -1754,6 +1754,11 @@ sub cmd_matterircd_complete_replied_cache_clear {
             }
             # Strip trailing ellipsis if copied from scrollback or statusbar
             $id =~ s/(?:…|\.\.\.)$//;
+
+            if ($id eq '') {
+                _wi_print($wi, "[matterircd_complete] Empty thread ID specified");
+                next;
+            }
 
             my @matches = grep { rindex($_, $id, 0) == 0 } @{$REPLIED_CACHE{$channel}};
 
