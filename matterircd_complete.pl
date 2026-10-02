@@ -2210,7 +2210,13 @@ Irssi::signal_add('gui key pressed', sub {
     if ($input_line =~ /^@@/) {
         if ($input_line =~ /^@@([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})/) {
             my ($full_id) = msgthreadid_find($target, $1);
-            $target = "@@" . ($full_id // $1);
+            if (!$full_id && $1 =~ /^(?:[0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43}|[0-9a-f]{3})$/) {
+                $full_id = $1;
+            }
+
+            return unless $full_id;
+
+            $target = "\@\@${full_id}";
         } else {
             # Still typing or completing @@ prefix; do not broadcast to channel
             return;
@@ -2237,10 +2243,16 @@ Irssi::signal_add('send text', sub {
     my $server_tag = $server->{tag};
     delete $last_typing_sent{$server_tag}{$witem->{name}};
 
-    # Also clear the thread target if sending an inline reply
+    # Also clear debounce timer for the thread if sending an inline reply
     if ($line =~ /^@@([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})/) {
         my ($full_id) = msgthreadid_find($witem->{name}, $1);
-        delete $last_typing_sent{$server_tag}{"@@" . ($full_id // $1)};
+        if (!$full_id && $1 =~ /^(?:[0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43}|[0-9a-f]{3})$/) {
+            $full_id = $1;
+        }
+
+        if ($full_id) {
+            delete $last_typing_sent{$server_tag}{"\@\@${full_id}"};
+        }
     }
 });
 
