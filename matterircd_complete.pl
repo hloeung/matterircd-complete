@@ -2216,6 +2216,13 @@ Irssi::signal_add('gui key pressed', sub {
     $server->send_raw("\@+typing=active TAGMSG $target");
 });
 
+Irssi::signal_add('send text', sub {
+    my ($line, $server, $witem) = @_;
+    return unless $server && $witem;
+
+    delete $last_typing_sent{$server->{tag}}{$witem->{name}};
+});
+
 
 #==============================================================================
 
