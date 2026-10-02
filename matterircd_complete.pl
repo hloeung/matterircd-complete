@@ -2203,10 +2203,18 @@ Irssi::signal_add('gui key pressed', sub {
     return if $key == 47 && $input_line eq '';
     return if $input_line =~ m{^/(?!/)};
 
+    # Do not leak typing to channel when typing @ or @@ prefix
+    return if $key == 64 && ($input_line eq '' || $input_line eq '@');
+
     # If replying to a thread inline, target the thread ID instead of the channel
-    if ($input_line =~ /^@@([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})/) {
-        my ($full_id) = msgthreadid_find($target, $1);
-        $target = "@@" . ($full_id // $1);
+    if ($input_line =~ /^@@/) {
+        if ($input_line =~ /^@@([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})/) {
+            my ($full_id) = msgthreadid_find($target, $1);
+            $target = "@@" . ($full_id // $1);
+        } else {
+            # Still typing or completing @@ prefix; do not broadcast to channel
+            return;
+        }
     }
 
     my $server_tag = $server->{tag};
