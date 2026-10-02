@@ -2198,13 +2198,6 @@ Irssi::signal_add('gui key pressed', sub {
     # Ignore local/virtual channels (e.g. &messages)
     return unless $target && substr($target, 0, 1) ne '&';
 
-    my $server_tag = $server->{tag};
-    my $now = time();
-
-    # Only send at most once every 4 seconds per window
-    return if exists $last_typing_sent{$server_tag}{$target}
-           && ($now - $last_typing_sent{$server_tag}{$target} < 4);
-
     # Ignore when typing Irssi slash commands (e.g. /win 1, /join)
     my $input_line = Irssi::parse_special('$L');
     return if $key == 47 && $input_line eq '';
@@ -2215,6 +2208,13 @@ Irssi::signal_add('gui key pressed', sub {
         my ($full_id) = msgthreadid_find($target, $1);
         $target = "@@" . ($full_id // $1);
     }
+
+    my $server_tag = $server->{tag};
+    my $now = time();
+
+    # Only send at most once every 4 seconds per target (channel or @@thread)
+    return if exists $last_typing_sent{$server_tag}{$target}
+           && ($now - $last_typing_sent{$server_tag}{$target} < 4);
 
     $last_typing_sent{$server_tag}{$target} = $now;
 
