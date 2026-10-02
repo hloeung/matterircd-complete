@@ -334,9 +334,19 @@ sub thread_color {
 }
 sub cmd_matterircd_complete_thread_id_get_color {
     my ($data, $server, $wi) = @_;
-    my ($color, $prepend) = get_thread_format($_[0]);
+    my $id = $data // '';
+    $id =~ s/^\s+|\s+$//g;
+    $id =~ s/^[\[↪\->]*(?:\@\@?)?//;
+    $id =~ s/(?:…|\.\.\.|\])+$//;
+
+    if ($wi && ($wi->{type} eq 'CHANNEL' || $wi->{type} eq 'QUERY')) {
+        my ($full_id) = msgthreadid_find($wi->{name}, $id);
+        $id = $full_id if $full_id;
+    }
+
+    my ($color, $prepend) = get_thread_format($id);
     my $n = xcolor_to_irssi($color);
-    _wi_print($wi, "Thread color for $prepend\x03$n$_[0]\x0f is $color");
+    _wi_print($wi, "Thread color for $prepend\x03$n${id}\x0f is $color");
 }
 Irssi::command_bind('matterircd_complete_thread_id_get_color', 'cmd_matterircd_complete_thread_id_get_color');
 
@@ -509,7 +519,7 @@ sub cmd_matterircd_complete_msgthreadid_cache_dump {
         _wi_print($wi, "${channel}: ${msgthread_id}");
     }
     _wi_print($wi, "${channel}: Total: " . scalar @{$MSGTHREADID_CACHE{$channel}});
-};
+}
 Irssi::command_bind('matterircd_complete_msgthreadid_cache_dump', 'cmd_matterircd_complete_msgthreadid_cache_dump');
 
 sub cmd_matterircd_complete_msgthreadid_most_recent_cache_dump {
@@ -537,7 +547,7 @@ sub cmd_matterircd_complete_msgthreadid_most_recent_cache_dump {
         _wi_print($wi, "${channel}: ${msgthread_id}");
     }
     _wi_print($wi, "${channel}: Total: " . scalar @{$MSGTHREADID_MOST_RECENT_CACHE{$channel}});
-};
+}
 Irssi::command_bind('matterircd_complete_msgthreadid_most_recent_cache_dump', 'cmd_matterircd_complete_msgthreadid_most_recent_cache_dump');
 
 sub cmd_last_message_permalink {
@@ -549,13 +559,29 @@ sub cmd_last_message_permalink {
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
     my $channel = $wi->{name};
+    my $base_url = Irssi::settings_get_str('matterircd_complete_permalink_base_url');
+
+    # Check for short or full ID in command arguments or active input prompt
+    my $input = Irssi::parse_special('$L');
+    my $target_id;
+    if ($data && $data =~ /^(?:\@\@)?([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})/) {
+        $target_id = $1;
+    } elsif ($input =~ /^@@([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})/) {
+        $target_id = $1;
+    }
+
+    if ($target_id) {
+        my ($full_id) = msgthreadid_find($channel, $target_id);
+        $full_id = $target_id unless $full_id;
+        _wi_print($wi, "Thread ID: ${base_url}${full_id}");
+        return;
+    }
 
     if (!exists($LAST_CHANNEL_MSGTHREAD{$channel})) {
         _wi_print($wi, "[matterircd_complete] No message/thread ID cached for ${channel}");
         return;
     }
 
-    my $base_url  = Irssi::settings_get_str('matterircd_complete_permalink_base_url');
     my $thread_id = $LAST_CHANNEL_MSGTHREAD{$channel}{thread_id};
     my $post_id   = $LAST_CHANNEL_MSGTHREAD{$channel}{post_id};
 
@@ -680,7 +706,7 @@ sub cmd_message_thread_id_search {
         Irssi::gui_input_set("\@\@${insert_id} ${input}");
         queue_thread_preview();
     }
-};
+}
 Irssi::command_bind('message_thread_id_search', 'cmd_message_thread_id_search');
 
 sub cmd_message_thread_id_last {
@@ -695,8 +721,10 @@ sub cmd_message_thread_id_last {
     my $pos = Irssi::gui_input_get_pos();
     my $id;
 
-    # Extract ID from the prompt if present
-    if ($input =~ /^@@([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})/) {
+    # Support argument passed directly: /message_thread_id_last [@@]<id>
+    if ($data && $data =~ /^\s*(?:\@\@)?([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})/) {
+        $id = $1;
+    } elsif ($input =~ /^@@([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})/) {
         $id = $1;
     } elsif (exists $MSGTHREADID_CACHE{$target} && @{$MSGTHREADID_CACHE{$target}}) {
         # Fallback to latest thread if prompt is empty
@@ -711,13 +739,15 @@ sub cmd_message_thread_id_last {
     my $len = Irssi::settings_get_int('matterircd_complete_shorten_message_thread_id');
     my $thread_m_style = ($id =~ /^[0-9a-f]{3}$/) ? 1 : 0;
     my $search_id = $id;
-    if (($len < 25) && ($thread_m_style != 1) && (length($search_id) > $len)) {
+    if (($len > 0) && ($len < 25) && ($thread_m_style != 1) && (length($search_id) > $len)) {
         $search_id = substr($search_id, 0, $len);
     }
 
-    # Execute /last with the short ID, then restore input buffer and cursor
-    my $reply_prefix = Irssi::settings_get_str('matterircd_complete_override_reply_prefix');
-    $window->command("last -regexp \\[(?:${reply_prefix})?${search_id}");
+    # Escape reply prefix and ID so '$' in Matrix IDs doesn't act as EOL anchor
+    my $reply_prefix = quotemeta(Irssi::settings_get_str('matterircd_complete_override_reply_prefix'));
+    my $escaped_id   = quotemeta($search_id);
+
+    $window->command("last -regexp \\[(${reply_prefix})?${escaped_id}");
     Irssi::gui_input_set($input);
     Irssi::gui_input_set_pos($pos);
     queue_thread_preview();
@@ -814,7 +844,7 @@ sub signal_gui_key_pressed_msgthreadid {
         $ESC_PRESSED = 0;
         $O_PRESSED = 0;
     }
-};
+}
 Irssi::signal_add_last('gui key pressed', 'signal_gui_key_pressed_msgthreadid');
 
 sub signal_complete_word_msgthread_id {
@@ -823,7 +853,9 @@ sub signal_complete_word_msgthread_id {
     return unless Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
     return if (substr($word, 0, 1) eq '@' and substr($word, 0, 2) ne '@@');
     return unless $window->{active} and ($window->{active}->{type} eq 'CHANNEL' || $window->{active}->{type} eq 'QUERY');
-    return unless exists($MSGTHREADID_CACHE{$window->{active}->{name}});
+
+    my $target = $window->{active}->{name};
+    return unless exists($MSGTHREADID_CACHE{$target});
 
     my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$window->{active_server}->{chatnet}};
@@ -832,22 +864,45 @@ sub signal_complete_word_msgthread_id {
         $word = substr($word, 2);
     }
 
-    if (exists($MSGTHREADID_MOST_RECENT_CACHE{$window->{active}->{name}})) {
-        # Search to include supplementary cache to see if replies to posts IDs
-        # match. This is mainly for reactions and such.
-        foreach my $msgthread_id (@{$MSGTHREADID_MOST_RECENT_CACHE{$window->{active}->{name}}}) {
-            if ($msgthread_id =~ /^\Q$word\E/) {
-                push(@$complist, "\@\@${msgthread_id}");
+    my $min_len = Irssi::settings_get_int('matterircd_complete_message_thread_id_min')
+        || Irssi::settings_get_int('matterircd_complete_shorten_message_thread_id');
+
+    my %seen;
+    my @candidates = (
+        @{$MSGTHREADID_MOST_RECENT_CACHE{$target} // []},
+        @{$MSGTHREADID_CACHE{$target} // []}
+    );
+
+    foreach my $msgthread_id (@candidates) {
+        next if $seen{$msgthread_id}++;
+        next unless index($msgthread_id, $word) == 0;
+
+        my $insert_id = $msgthread_id;
+        my $thread_m_style = ($msgthread_id =~ /^[0-9a-f]{3}$/) ? 1 : 0;
+
+        if (($min_len > 0) && ($min_len < 25) && ($thread_m_style != 1)) {
+            my $len = (length($word) > $min_len) ? length($word) : $min_len;
+            my $full_len = length($msgthread_id);
+
+            while ($len < $full_len) {
+                my $prefix = substr($msgthread_id, 0, $len);
+                my $collision = 0;
+                for my $other (@candidates) {
+                    next if $other eq $msgthread_id;
+                    if (index($other, $prefix) == 0) {
+                        $collision = 1;
+                        last;
+                    }
+                }
+                last unless $collision;
+                $len++;
             }
+            $insert_id = substr($msgthread_id, 0, $len);
         }
+
+        push(@$complist, "\@\@${insert_id}");
     }
-    # Main msg post and thread IDs in the main cache.
-    foreach my $msgthread_id (@{$MSGTHREADID_CACHE{$window->{active}->{name}}}) {
-        if ($msgthread_id =~ /^\Q$word\E/) {
-            push(@$complist, "\@\@${msgthread_id}");
-        }
-    }
-};
+}
 Irssi::signal_add_last('complete word', 'signal_complete_word_msgthread_id');
 
 my $MSGTHREADID_CACHE_STATS = 0;
@@ -948,7 +1003,7 @@ sub cache_msgthreadid {
         $LAST_CHANNEL_MSGTHREAD{$key} = {
             thread_id => $msgids[0],
             post_id   => @msgpost_ids ? $msgpost_ids[0] : '',
-        };
+        }
     }
 }
 Irssi::signal_add('message irc action', 'cache_msgthreadid');
@@ -1036,7 +1091,7 @@ sub signal_message_own_public_msgthreadid {
     $MSGTHREADID_CACHE_INDEX = 0;
 
     Irssi::signal_continue($server, $msg, $target);
-};
+}
 Irssi::signal_add_last('message own_public', 'signal_message_own_public_msgthreadid');
 
 sub signal_message_own_private {
@@ -1117,7 +1172,7 @@ sub signal_message_own_private {
     $MSGTHREADID_CACHE_INDEX = 0;
 
     Irssi::signal_continue($server, $msg, $target, $orig_target);
-};
+}
 Irssi::signal_add_last('message own_private', 'signal_message_own_private');
 
 sub msgthreadid_find {
@@ -1343,7 +1398,7 @@ sub cmd_matterircd_complete_nick_cache_dump {
         _wi_print($wi, "${channel}: ${nick}");
     }
     _wi_print($wi, "${channel}: Total: " . scalar @{$NICKNAMES_CACHE{$channel}});
-};
+}
 Irssi::command_bind('matterircd_complete_nick_cache_dump', 'cmd_matterircd_complete_nick_cache_dump');
 
 sub signal_complete_word_nicks {
@@ -1419,7 +1474,7 @@ sub signal_complete_word_nicks {
             }
         }
     }
-};
+}
 Irssi::signal_add('complete word', 'signal_complete_word_nicks');
 
 my $NICKNAMES_CACHE_STATS = 0;
@@ -1470,7 +1525,7 @@ sub signal_message_own_public_nicks {
             last;
         }
     }
-};
+}
 Irssi::signal_add_last('message own_public', 'signal_message_own_public_nicks');
 
 my @NICKNAMES_CACHE_SEARCH;
@@ -1543,7 +1598,7 @@ sub cmd_nicknames_search {
         Irssi::gui_input_set_pos(0);
         Irssi::gui_input_set("${msgid}\@${nickname}${compl_char} ${input}");
     }
-};
+}
 Irssi::command_bind('nicknames_search', 'cmd_nicknames_search');
 
 sub signal_gui_key_pressed_nicks {
@@ -1603,7 +1658,7 @@ sub signal_gui_key_pressed_nicks {
         $NICKNAMES_CACHE_SEARCH_ENABLED = 0;
         @NICKNAMES_CACHE_SEARCH = ();
     }
-};
+}
 Irssi::signal_add_last('gui key pressed', 'signal_gui_key_pressed_nicks');
 
 
@@ -1642,7 +1697,7 @@ sub cmd_matterircd_complete_replied_cache_dump {
         _wi_print($wi, "${channel}: ${threadid}");
     }
     _wi_print($wi, "${channel}: Total: " . scalar @{$REPLIED_CACHE{$channel}});
-};
+}
 Irssi::command_bind('matterircd_complete_replied_cache_dump', 'cmd_matterircd_complete_replied_cache_dump');
 
 my $REPLIED_CACHE_STATS = 0;
@@ -1657,6 +1712,7 @@ sub cmd_matterircd_complete_replied_cache_clear {
     }
 
     if (scalar(@args) == 0 || $args[0] eq '*') {
+        %REPLIED_CACHE = ();
         stats_increment(\$REPLIED_CACHE_STATS);
         _wi_print($wi, "matterircd_complete replied cache cleared");
         return;
@@ -1676,18 +1732,19 @@ sub cmd_matterircd_complete_replied_cache_clear {
 
     if (scalar(@msgids) > 0) {
         foreach my $id (@msgids) {
-            my $i = 0;
             if (rindex($id, "@@", 0) == 0) {
                 $id = substr($id, 2);
             }
-            foreach my $msgid (@{$REPLIED_CACHE{$channel}}) {
+            # Strip trailing ellipsis if copied from scrollback or statusbar
+            $id =~ s/(?:…|\.\.\.)$//;
+
+            for (my $i = $#{$REPLIED_CACHE{$channel}}; $i >= 0; $i--) {
+                my $msgid = $REPLIED_CACHE{$channel}[$i];
                 if (rindex($msgid, $id, 0) == 0) {
                     splice(@{$REPLIED_CACHE{$channel}}, $i, 1);
                     stats_increment(\$REPLIED_CACHE_STATS);
                     _wi_print($wi, "matterircd_complete replied cache removed ${msgid} from ${channel} cache");
-                    $i -= 1;
                 }
-                $i += 1;
             }
         }
     } else {
@@ -1695,7 +1752,7 @@ sub cmd_matterircd_complete_replied_cache_clear {
         stats_increment(\$REPLIED_CACHE_STATS);
         _wi_print($wi, "matterircd_complete replied cache cleared for channel ${channel}");
     }
-};
+}
 Irssi::command_bind('matterircd_complete_replied_cache_clear', 'cmd_matterircd_complete_replied_cache_clear');
 Irssi::command_bind('matterircd_complete_cache_clear_replied', 'cmd_matterircd_complete_replied_cache_clear');
 
@@ -1718,7 +1775,7 @@ sub signal_away_mode_changed {
         $REPLIED_CACHE_CLEARED = 1;
         Irssi::print("matterircd_complete replied cache cleared");
     }
-};
+}
 Irssi::signal_add('away mode changed', 'signal_away_mode_changed');
 
 sub signal_message_own_public_replied {
@@ -1737,7 +1794,7 @@ sub signal_message_own_public_replied {
     if (cache_store(\@{$REPLIED_CACHE{$target}}, $msgid, $cache_size)) {
         stats_increment(\$REPLIED_CACHE_STATS);
     }
-};
+}
 Irssi::signal_add('message own_public', 'signal_message_own_public_replied');
 
 Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_add_nick_replied', 1);
@@ -1772,7 +1829,7 @@ sub signal_message_public {
     }
 
     Irssi::signal_continue($server, $msg, $nick, $address, $target);
-};
+}
 Irssi::signal_add('message irc action', 'signal_message_public');
 Irssi::signal_add('message irc notice', 'signal_message_public');
 Irssi::signal_add('message public', 'signal_message_public');
@@ -1816,7 +1873,7 @@ sub cmd_matterircd_complete_reactions_cache_dump {
         $count += 1;
     }
     _wi_print($wi, "Total: " . $count);
-};
+}
 Irssi::command_bind('matterircd_complete_reactions_cache_dump', 'cmd_matterircd_complete_reactions_cache_dump');
 
 my $REACTIONS_CACHE_STATS = 0;
@@ -1840,7 +1897,7 @@ sub signal_message_own_public_reactions {
     if (cache_store(\@{$REACTIONS_CACHE{'#'}}, $reaction, $cache_size)) {
         stats_increment(\$REACTIONS_CACHE_STATS);
     }
-};
+}
 Irssi::signal_add('message own_public', 'signal_message_own_public_reactions');
 
 sub signal_message_own_private_reactions {
@@ -1863,7 +1920,7 @@ sub signal_message_own_private_reactions {
     if (cache_store(\@{$REACTIONS_CACHE{'#'}}, $reaction, $cache_size)) {
         stats_increment(\$REACTIONS_CACHE_STATS);
     }
-};
+}
 Irssi::signal_add('message own_private', 'signal_message_own_private_reactions');
 
 sub signal_complete_word_reaction {
@@ -1886,7 +1943,7 @@ sub signal_complete_word_reaction {
             push(@$complist, "+:${reaction}:");
         }
     }
-};
+}
 Irssi::signal_add_last('complete word', 'signal_complete_word_reaction');
 
 
