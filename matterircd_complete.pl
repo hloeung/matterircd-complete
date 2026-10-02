@@ -2206,6 +2206,9 @@ Irssi::signal_add('gui key pressed', sub {
     # Do not leak typing to channel when typing @ or @@ prefix
     return if $key == 64 && ($input_line eq '' || $input_line eq '@');
 
+    # Do not emit while entering a thread ID or its trailing separator.
+    return if $input_line =~ /^@@\S*$/;
+
     # Ignore when typing reactions (e.g. @@<id> +:+1: or @@<id> +:thumbsup:)
     return if ($key == 43 || $key == 45) && ($input_line =~ /^@@\S+\s+$/ || ($target =~ /^@@/ && $input_line eq ''));
     return if $input_line =~ /^@@\S+\s+[+-](?::|$)/;
