@@ -2198,17 +2198,23 @@ Irssi::signal_add('gui key pressed', sub {
     # Ignore local/virtual channels (e.g. &messages)
     return unless $target && substr($target, 0, 1) ne '&';
 
-    my $server_tag = $server->{tag};
-    my $now = time();
-
-    # Only send at most once every 4 seconds per window
-    return if exists $last_typing_sent{$server_tag}{$target}
-           && ($now - $last_typing_sent{$server_tag}{$target} < 4);
-
     # Ignore when typing Irssi slash commands (e.g. /win 1, /join)
     my $input_line = Irssi::parse_special('$L');
     return if $key == 47 && $input_line eq '';
     return if $input_line =~ m{^/(?!/)};
+
+    # If replying to a thread inline, target the thread ID instead of the channel
+    if ($input_line =~ /^@@([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})/) {
+        my ($full_id) = msgthreadid_find($target, $1);
+        $target = "@@" . ($full_id // $1);
+    }
+
+    my $server_tag = $server->{tag};
+    my $now = time();
+
+    # Only send at most once every 4 seconds per target (channel or @@thread)
+    return if exists $last_typing_sent{$server_tag}{$target}
+           && ($now - $last_typing_sent{$server_tag}{$target} < 4);
 
     $last_typing_sent{$server_tag}{$target} = $now;
 
@@ -2220,7 +2226,14 @@ Irssi::signal_add('send text', sub {
     my ($line, $server, $witem) = @_;
     return unless $server && $witem;
 
-    delete $last_typing_sent{$server->{tag}}{$witem->{name}};
+    my $server_tag = $server->{tag};
+    delete $last_typing_sent{$server_tag}{$witem->{name}};
+
+    # Also clear the thread target if sending an inline reply
+    if ($line =~ /^@@([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})/) {
+        my ($full_id) = msgthreadid_find($witem->{name}, $1);
+        delete $last_typing_sent{$server_tag}{"@@" . ($full_id // $1)};
+    }
 });
 
 
