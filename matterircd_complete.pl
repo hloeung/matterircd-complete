@@ -2210,6 +2210,12 @@ Irssi::signal_add('gui key pressed', sub {
     return if $key == 47 && $input_line eq '';
     return if $input_line =~ m{^/(?!/)};
 
+    # If replying to a thread inline, target the thread ID instead of the channel
+    if ($input_line =~ /^@@([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})/) {
+        my ($full_id) = msgthreadid_find($target, $1);
+        $target = "@@" . ($full_id // $1);
+    }
+
     $last_typing_sent{$server_tag}{$target} = $now;
 
     # Send IRCv3 TAGMSG directly over the raw connection
