@@ -764,7 +764,8 @@ sub cmd_message_thread_id_last {
     my $reply_prefix = quotemeta(Irssi::settings_get_str('matterircd_complete_override_reply_prefix'));
     my $escaped_id   = quotemeta($search_id);
 
-    $window->command("last -regexp \\[(${reply_prefix})?${escaped_id}");
+    # Allow optional reply indicators (configured prefix, ->, or ↪) and optional literal @@
+    $window->command("last -regexp \\[(${reply_prefix}|->|↪)?(\@\@)?${escaped_id}");
     Irssi::gui_input_set($input);
     Irssi::gui_input_set_pos($pos);
     queue_thread_preview();
