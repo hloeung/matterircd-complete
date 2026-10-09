@@ -2026,13 +2026,12 @@ sub sb_matterircd_typing {
         $len = 5 if !defined($len) || $len < 0;
 
         my $reply_prefix = Irssi::settings_get_str('matterircd_complete_override_reply_prefix');
-        $reply_prefix = '↪' if $reply_prefix eq '';
 
         my @typists;
         for my $nick (sort keys %{$typing_states{$server_tag}{$target}}) {
             my $tid = $typing_threads{$server_tag}{$target}{$nick};
             if (defined $tid && $tid ne '' && $target !~ /^@@/) {
-                my $short = ($len > 0 && length($tid) > $len) ? substr($tid, 0, $len) . "…" : $tid;
+                my $short = ($tid !~ /^[0-9a-f]{3}$/ && $len > 0 && length($tid) > $len) ? substr($tid, 0, $len) . "…" : $tid;
                 my $color = thread_color_format($tid);
                 push(@typists, "${nick} %K[${color}${reply_prefix}${short}%n%K]%G");
             } else {
@@ -2175,9 +2174,10 @@ Irssi::signal_add('server disconnected', sub {
         }
         delete $typing_states{$server_tag};
         delete $typing_threads{$server_tag};
-        delete $last_typing_sent{$server_tag};
         Irssi::statusbar_items_redraw('matterircd_typing');
     }
+
+    delete $last_typing_sent{$server_tag};
 });
 
 Irssi::settings_add_bool('matterircd_complete', 'matterircd_send_typing', 0);
