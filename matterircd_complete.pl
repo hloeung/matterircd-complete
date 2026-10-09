@@ -2261,7 +2261,7 @@ Irssi::signal_add('gui key pressed', sub {
     return if $input_line =~ /^@@\S+\s+[+-](?::|$)/;
     return if $target =~ /^@@/ && $input_line =~ /^[+-](?::|$)/;
 
-    # If replying to a thread inline, target the thread ID instead of the channel
+    # If replying to a thread inline, retain its ID alongside the channel/DM target
     my $thread = '';
     if ($input_line =~ /^@@/) {
         if ($input_line =~ /^@@([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})/) {
