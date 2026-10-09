@@ -1995,6 +1995,9 @@ Irssi::signal_add_last('complete word', 'signal_complete_word_reaction');
 
 # Track active typing states: $typing_states{server_tag}{channel_name}{nick} = timeout_tag
 our %typing_states;
+our %typing_threads;
+# Track last time a typing ping was sent per target to avoid flooding
+our %last_typing_sent;
 
 # Register the statusbar item
 Irssi::statusbar_item_register('matterircd_typing', '$0', 'sb_matterircd_typing');
@@ -2019,7 +2022,23 @@ sub sb_matterircd_typing {
     my $target     = lc($window->{active}->{name});
 
     if (exists $typing_states{$server_tag}{$target}) {
-        my @typists = sort keys %{$typing_states{$server_tag}{$target}};
+        my $len = Irssi::settings_get_int('matterircd_complete_shorten_message_thread_id');
+        $len = 5 if !defined($len) || $len < 0;
+
+        my $reply_prefix = Irssi::settings_get_str('matterircd_complete_override_reply_prefix');
+
+        my @typists;
+        for my $nick (sort keys %{$typing_states{$server_tag}{$target}}) {
+            my $tid = $typing_threads{$server_tag}{$target}{$nick};
+            if (defined $tid && $tid ne '' && $target !~ /^@@/) {
+                my $short = ($tid !~ /^[0-9a-f]{3}$/ && $len > 0 && $len < 25 && length($tid) > $len) ? substr($tid, 0, $len) . "…" : $tid;
+                my $color = thread_color_format($tid);
+                push(@typists, "${nick} %K[${color}${reply_prefix}${short}%n%K]%G");
+            } else {
+                push(@typists, $nick);
+            }
+        }
+
         if (@typists) {
             my $text = "typing: " . join(", ", @typists);
             return $item->default_handler($get_size_only, "{sb %G$text%n}", '', 1);
@@ -2032,11 +2051,17 @@ sub sb_matterircd_typing {
 
 # Sets a user as actively typing
 sub set_typing {
-    my ($server_tag, $target, $nick) = @_;
+    my ($server_tag, $target, $nick, $thread_id) = @_;
 
     # Clear existing timeout if they just sent another active ping
     if (exists $typing_states{$server_tag}{$target}{$nick}) {
         Irssi::timeout_remove($typing_states{$server_tag}{$target}{$nick});
+    }
+
+    if (defined $thread_id && $thread_id ne '') {
+        $typing_threads{$server_tag}{$target}{$nick} = $thread_id;
+    } else {
+        delete $typing_threads{$server_tag}{$target}{$nick};
     }
 
     # Set new timeout for 6 seconds (IRCv3 spec)
@@ -2056,9 +2081,12 @@ sub clear_typing {
         delete $typing_states{$server_tag}{$target}{$nick};
     }
 
+    delete $typing_threads{$server_tag}{$target}{$nick};
+
     # Clean up empty hashes
     if (keys %{$typing_states{$server_tag}{$target}} == 0) {
         delete $typing_states{$server_tag}{$target};
+        delete $typing_threads{$server_tag}{$target};
     }
 
     Irssi::statusbar_items_redraw('matterircd_typing');
@@ -2093,11 +2121,30 @@ Irssi::signal_add_first('server event tags', sub {
     # Parse the IRCv3 tags (case-insensitive)
     if (defined $tags && $tags =~ /(?:^|;)\+typing=(active|paused|done)(?:;|$)/i) {
         my $status = lc($1);
+        my $thread_id = '';
+
+        if ($tags =~ /(?:^|;)\+(?:draft\/)?thread=(?:@@)?([0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43}|[0-9a-f]{3})(?:;|$)/i) {
+            $thread_id = $1;
+        }
 
         if ($status eq 'active') {
-            set_typing($server->{tag}, $target, $nick);
+            set_typing($server->{tag}, $target, $nick, $thread_id);
+            if ($thread_id ne '') {
+                set_typing($server->{tag}, lc("\@\@$thread_id"), $nick, $thread_id);
+            }
         } else {
-            clear_typing($server->{tag}, $target, $nick);
+            my $current_tid = $typing_threads{$server->{tag}}{$target}{$nick} // '';
+
+            # Only clear the channel indicator if untagged or matching the current thread
+            if ($thread_id eq '' || $thread_id eq $current_tid) {
+                clear_typing($server->{tag}, $target, $nick);
+            }
+
+            # Clear the dedicated thread window independently
+            my $tid_to_clear = $thread_id ne '' ? $thread_id : $current_tid;
+            if ($tid_to_clear ne '') {
+                clear_typing($server->{tag}, lc("\@\@$tid_to_clear"), $nick);
+            }
         }
     }
 
@@ -2133,14 +2180,14 @@ Irssi::signal_add('server disconnected', sub {
             }
         }
         delete $typing_states{$server_tag};
+        delete $typing_threads{$server_tag};
         Irssi::statusbar_items_redraw('matterircd_typing');
     }
+
+    delete $last_typing_sent{$server_tag};
 });
 
 Irssi::settings_add_bool('matterircd_complete', 'matterircd_send_typing', 0);
-
-# Track last time a typing ping was sent per target to avoid flooding
-my %last_typing_sent;
 
 # State tracking for shortcut prefixes (Escape/Alt sequences and Ctrl+X)
 my $in_esc_seq    = 0;
@@ -2199,7 +2246,7 @@ Irssi::signal_add('gui key pressed', sub {
     return unless $target && substr($target, 0, 1) ne '&';
 
     # Ignore when typing Irssi slash commands (e.g. /win 1, /join)
-    my $input_line = Irssi::parse_special('$L');
+    my $input_line = Irssi::parse_special('$L') // '';
     return if $key == 47 && $input_line eq '';
     return if $input_line =~ m{^/(?!/)};
 
