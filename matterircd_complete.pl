@@ -2262,6 +2262,7 @@ Irssi::signal_add('gui key pressed', sub {
     return if $target =~ /^@@/ && $input_line =~ /^[+-](?::|$)/;
 
     # If replying to a thread inline, target the thread ID instead of the channel
+    my $thread = '';
     if ($input_line =~ /^@@/) {
         if ($input_line =~ /^@@([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})/) {
             my ($full_id) = msgthreadid_find($target, $1);
@@ -2271,7 +2272,7 @@ Irssi::signal_add('gui key pressed', sub {
 
             return unless $full_id;
 
-            $target = "\@\@${full_id}";
+            $thread = "\@\@${full_id}";
         } else {
             # Still typing or completing @@ prefix; do not broadcast to channel
             return;
@@ -2280,15 +2281,20 @@ Irssi::signal_add('gui key pressed', sub {
 
     my $server_tag = $server->{tag};
     my $now = time();
+    my $debounce_key = $thread ne '' ? "${target}/${thread}" : $target;
 
     # Only send at most once every 4 seconds per target (channel or @@thread)
-    return if exists $last_typing_sent{$server_tag}{$target}
-           && ($now - $last_typing_sent{$server_tag}{$target} < 4);
+    return if exists $last_typing_sent{$server_tag}{$debounce_key}
+           && ($now - $last_typing_sent{$server_tag}{$debounce_key} < 4);
 
-    $last_typing_sent{$server_tag}{$target} = $now;
+    $last_typing_sent{$server_tag}{$debounce_key} = $now;
 
     # Send IRCv3 TAGMSG directly over the raw connection
-    $server->send_raw("\@+typing=active TAGMSG $target");
+    if ($thread ne '') {
+        $server->send_raw("\@+typing=active TAGMSG $target $thread");
+    } else {
+        $server->send_raw("\@+typing=active TAGMSG $target");
+    }
 });
 
 Irssi::signal_add('send text', sub {
@@ -2307,6 +2313,7 @@ Irssi::signal_add('send text', sub {
 
         if ($full_id) {
             delete $last_typing_sent{$server_tag}{"\@\@${full_id}"};
+            delete $last_typing_sent{$server_tag}{$witem->{name} . "/\@\@${full_id}"};
         }
     }
 });
