@@ -2133,10 +2133,17 @@ Irssi::signal_add_first('server event tags', sub {
                 set_typing($server->{tag}, lc("\@\@$thread_id"), $nick, $thread_id);
             }
         } else {
-            $thread_id = $typing_threads{$server->{tag}}{$target}{$nick} // '' if $thread_id eq '';
-            clear_typing($server->{tag}, $target, $nick);
-            if ($thread_id ne '') {
-                clear_typing($server->{tag}, lc("\@\@$thread_id"), $nick);
+            my $current_tid = $typing_threads{$server->{tag}}{$target}{$nick} // '';
+
+            # Only clear the channel indicator if untagged or matching the current thread
+            if ($thread_id eq '' || $thread_id eq $current_tid) {
+                clear_typing($server->{tag}, $target, $nick);
+            }
+
+            # Clear the dedicated thread window independently
+            my $tid_to_clear = $thread_id ne '' ? $thread_id : $current_tid;
+            if ($tid_to_clear ne '') {
+                clear_typing($server->{tag}, lc("\@\@$tid_to_clear"), $nick);
             }
         }
     }
