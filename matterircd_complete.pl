@@ -1996,6 +1996,8 @@ Irssi::signal_add_last('complete word', 'signal_complete_word_reaction');
 # Track active typing states: $typing_states{server_tag}{channel_name}{nick} = timeout_tag
 our %typing_states;
 our %typing_threads;
+# Track last time a typing ping was sent per target to avoid flooding
+our %last_typing_sent;
 
 # Register the statusbar item
 Irssi::statusbar_item_register('matterircd_typing', '$0', 'sb_matterircd_typing');
@@ -2020,7 +2022,9 @@ sub sb_matterircd_typing {
     my $target     = lc($window->{active}->{name});
 
     if (exists $typing_states{$server_tag}{$target}) {
-        my $len = Irssi::settings_get_int('matterircd_complete_shorten_message_thread_id') || 5;
+        my $len = Irssi::settings_get_int('matterircd_complete_shorten_message_thread_id');
+        $len = 5 if !defined($len) || $len < 0;
+
         my $reply_prefix = Irssi::settings_get_str('matterircd_complete_override_reply_prefix');
         $reply_prefix = '↪' if $reply_prefix eq '';
 
@@ -2028,8 +2032,9 @@ sub sb_matterircd_typing {
         for my $nick (sort keys %{$typing_states{$server_tag}{$target}}) {
             my $tid = $typing_threads{$server_tag}{$target}{$nick};
             if (defined $tid && $tid ne '' && $target !~ /^@@/) {
-                my $short = length($tid) > $len ? substr($tid, 0, $len) . "…" : $tid;
-                push(@typists, "${nick} [${reply_prefix}${short}]");
+                my $short = ($len > 0 && length($tid) > $len) ? substr($tid, 0, $len) . "…" : $tid;
+                my $color = thread_color_format($tid);
+                push(@typists, "${nick} %K[${color}${reply_prefix}${short}%n%K]%G");
             } else {
                 push(@typists, $nick);
             }
@@ -2169,14 +2174,13 @@ Irssi::signal_add('server disconnected', sub {
             }
         }
         delete $typing_states{$server_tag};
+        delete $typing_threads{$server_tag};
+        delete $last_typing_sent{$server_tag};
         Irssi::statusbar_items_redraw('matterircd_typing');
     }
 });
 
 Irssi::settings_add_bool('matterircd_complete', 'matterircd_send_typing', 0);
-
-# Track last time a typing ping was sent per target to avoid flooding
-my %last_typing_sent;
 
 # State tracking for shortcut prefixes (Escape/Alt sequences and Ctrl+X)
 my $in_esc_seq    = 0;
@@ -2235,7 +2239,7 @@ Irssi::signal_add('gui key pressed', sub {
     return unless $target && substr($target, 0, 1) ne '&';
 
     # Ignore when typing Irssi slash commands (e.g. /win 1, /join)
-    my $input_line = Irssi::parse_special('$L');
+    my $input_line = Irssi::parse_special('$L') // '';
     return if $key == 47 && $input_line eq '';
     return if $input_line =~ m{^/(?!/)};
 
