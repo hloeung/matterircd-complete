@@ -2031,7 +2031,7 @@ sub sb_matterircd_typing {
         for my $nick (sort keys %{$typing_states{$server_tag}{$target}}) {
             my $tid = $typing_threads{$server_tag}{$target}{$nick};
             if (defined $tid && $tid ne '' && $target !~ /^@@/) {
-                my $short = ($tid !~ /^[0-9a-f]{3}$/ && $len > 0 && length($tid) > $len) ? substr($tid, 0, $len) . "…" : $tid;
+                my $short = ($tid !~ /^[0-9a-f]{3}$/ && $len > 0 && $len < 25 && length($tid) > $len) ? substr($tid, 0, $len) . "…" : $tid;
                 my $color = thread_color_format($tid);
                 push(@typists, "${nick} %K[${color}${reply_prefix}${short}%n%K]%G");
             } else {
