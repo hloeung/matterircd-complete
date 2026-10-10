@@ -378,6 +378,11 @@ sub update_msgthreadid {
     my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
+    # signal_continue() re-dispatches the signal and irssi's perl bindings
+    # leak a little memory on every call, so only call it for messages we
+    # actually changed (which is not the case for most).
+    my $orig_msg = $msg;
+
     # Replace tabs with spaces.
     # https://github.com/irssi/irssi/issues/1499
     $msg =~ s/\t/        /g if index($msg, "\t") != -1;
@@ -391,7 +396,7 @@ sub update_msgthreadid {
     $msg = strikethrough_to_ansi($msg) if index($msg, "\x1e") != -1;
 
     if (index($msg, '[') == -1) {
-        Irssi::signal_continue($server, $msg, $nick, $address, $target);
+        Irssi::signal_continue($server, $msg, $nick, $address, $target) if $msg ne $orig_msg;
         return;
     }
 
@@ -412,7 +417,7 @@ sub update_msgthreadid {
         $thread_m_style = 1;
     }
     if (not $msgthreadid) {
-        Irssi::signal_continue($server, $msg, $nick, $address, $target);
+        Irssi::signal_continue($server, $msg, $nick, $address, $target) if $msg ne $orig_msg;
         return;
     }
 
@@ -1899,10 +1904,9 @@ sub signal_message_public {
             } else {
                 $msg =~ s/$/ (🔔 \@$server->{nick})/;
             }
+            Irssi::signal_continue($server, $msg, $nick, $address, $target);
         }
     }
-
-    Irssi::signal_continue($server, $msg, $nick, $address, $target);
 }
 Irssi::signal_add('message irc action', 'signal_message_public');
 Irssi::signal_add('message irc notice', 'signal_message_public');
