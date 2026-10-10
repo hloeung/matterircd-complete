@@ -284,18 +284,23 @@ sub strikethrough_to_ansi {
     return $text;
 }
 
+# Built once, rather than on every get_thread_format() call.
+my @nums = (0..9,'a'..'z');
+my $chr=join('',@nums);
+my %nums = map { $nums[$_] => $_ } 0..$#nums;
+
 sub get_thread_format {
     my ($str) = @_;
-    my @nums = (0..9,'a'..'z');
-    my $chr=join('',@nums);
-    my %nums = map { $nums[$_] => $_ } 0..$#nums;
     my $n = 0;
     $str = lc $str;
     foreach ($str =~ /[$chr]/g) {
         $n += $nums{$_} * 36;
     }
-    my @colors = @thread_id_selected_colors;
-    my $color_count = @colors;
+    # Don't copy the list on every call. Fall back to all colors if it is empty
+    # (e.g. a fixed color is set, or every color was filtered out by the
+    # config), otherwise the modulus below dies and irssi unloads the script.
+    my $colors = @thread_id_selected_colors ? \@thread_id_selected_colors : \@all_colors;
+    my $color_count = @$colors;
 
     # We have normal, bold, italic, underline
     my $allow_bold = Irssi::settings_get_bool('matterircd_complete_thread_id_allow_bold');
@@ -319,7 +324,7 @@ sub get_thread_format {
         $n -= $color_count;
         $prepend = $classes_prepend[0];
     }
-    $n = $colors[$n-1];
+    $n = $colors->[$n-1];
     return $n, $prepend;
 }
 
@@ -367,6 +372,10 @@ sub update_msgthreadid {
     my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
     return unless exists $chatnets{'*'} || exists $chatnets{$server->{chatnet}};
 
+    # Only signal_continue() for messages we changed. Every call leaks a
+    # little memory in irssi's perl bindings and most messages are untouched.
+    my $orig_msg = $msg;
+
     # Replace tabs with spaces.
     # https://github.com/irssi/irssi/issues/1499
     $msg =~ s/\t/        /g if index($msg, "\t") != -1;
@@ -380,7 +389,7 @@ sub update_msgthreadid {
     $msg = strikethrough_to_ansi($msg);
 
     if (index($msg, '[') == -1) {
-        Irssi::signal_continue($server, $msg, $nick, $address, $target);
+        Irssi::signal_continue($server, $msg, $nick, $address, $target) if $msg ne $orig_msg;
         return;
     }
 
@@ -401,7 +410,7 @@ sub update_msgthreadid {
         $thread_m_style = 1;
     }
     if (not $msgthreadid) {
-        Irssi::signal_continue($server, $msg, $nick, $address, $target);
+        Irssi::signal_continue($server, $msg, $nick, $address, $target) if $msg ne $orig_msg;
         return;
     }
 
@@ -938,10 +947,10 @@ sub cache_msgthreadid {
 
     my @ignore_nicks = split(/\s+/, Irssi::settings_get_str('matterircd_complete_nick_ignore'));
     # Ignore nicks configured to be ignored such as bots.
-    if (grep(/^$nick$/, @ignore_nicks)) {
+    if (grep { $_ eq $nick } @ignore_nicks) {
         # But not if the channel is in matterircd_complete_channel_dont_ignore.
         my @channel_dont_ignore = split(/\s+/, Irssi::settings_get_str('matterircd_complete_channel_dont_ignore'));
-        if ($target !~ @channel_dont_ignore) {
+        if (!grep { lc($_) eq lc($target) } @channel_dont_ignore) {
             return;
         }
     }
@@ -1014,6 +1023,17 @@ sub cache_msgthreadid {
         if (cache_store(\@{$MSGTHREADID_MOST_RECENT_CACHE{$key}}, $msgid, $cache_size)) {
             stats_increment(\$MSGTHREADID_MOST_RECENT_CACHE_STATS);
         }
+    }
+
+    # %MSGTHREADID_LAST_NICK is only read for IDs still in the caches, don't
+    # let it grow with every ID ever seen. Once it is well past the size of
+    # the caches, only keep the IDs they still hold.
+    my $last_nick = $MSGTHREADID_LAST_NICK{$key};
+    my $cached = @{$MSGTHREADID_CACHE{$key}} + @{$MSGTHREADID_MOST_RECENT_CACHE{$key}};
+    if ($last_nick && keys(%$last_nick) > 2 * $cached + 16) {
+        my %keep = map { $_ => $last_nick->{$_} } grep { exists $last_nick->{$_} }
+            (@{$MSGTHREADID_CACHE{$key}}, @{$MSGTHREADID_MOST_RECENT_CACHE{$key}});
+        $MSGTHREADID_LAST_NICK{$key} = \%keep;
     }
 
     # Track last message's IDs per channel for permalink generation.
@@ -1445,7 +1465,7 @@ sub signal_complete_word_nicks {
             next;
         }
         # Ignore nicks configured to be ignored such as bots.
-        elsif (grep(/^$nick$/, @ignore_nicks)) {
+        elsif (grep { $_ eq $nick } @ignore_nicks) {
             next;
         }
         # Only those matching partial word.
@@ -1483,7 +1503,7 @@ sub signal_complete_word_nicks {
             next;
         }
         # Only add to completion list if user/nick is online and in channel.
-        elsif (grep(/^$nick$/, @tmp)) {
+        elsif (grep { $_ eq $nick } @tmp) {
             # Only add completion character on line start.
             if (not $linestart) {
                 unshift(@$complist, "\@${nick}${compl_char}");
@@ -1506,7 +1526,7 @@ sub cache_ircnick {
     my $cache_size = Irssi::settings_get_int('matterircd_complete_nick_cache_size');
     my @ignore_nicks = split(/\s+/, Irssi::settings_get_str('matterircd_complete_nick_ignore'));
     # Ignore nicks configured to be ignored such as bots.
-    if ($nick !~ @ignore_nicks) {
+    if (!grep { $_ eq $nick } @ignore_nicks) {
         if (cache_store(\@{$NICKNAMES_CACHE{$target}}, $nick, $cache_size)) {
             stats_increment(\$NICKNAMES_CACHE_STATS);
         }
@@ -1568,7 +1588,7 @@ sub cmd_nicknames_search {
             next;
         }
         # Ignore nicks configured to be ignored such as bots.
-        elsif (grep(/^$nick$/, @ignore_nicks)) {
+        elsif (grep { $_ eq $nick } @ignore_nicks) {
             next;
         }
         push(@NICKNAMES_CACHE_SEARCH, $nick);
@@ -1588,7 +1608,7 @@ sub cmd_nicknames_search {
             }
             # Only add to completion list if user/nick is online and
             # in channel.
-            elsif (grep(/^$nick$/, @NICKNAMES_CACHE_SEARCH)) {
+            elsif (grep { $_ eq $nick } @NICKNAMES_CACHE_SEARCH) {
                 unshift(@NICKNAMES_CACHE_SEARCH, $nick);
             }
         }
@@ -1858,16 +1878,15 @@ sub signal_message_public {
     if (grep(/^$msgthreadid$/, @{$REPLIED_CACHE{$target}})) {
         # Add user's (or our own) nick for hilighting if not in
         # message and message not from us.
-        if (($nick ne $server->{nick}) && ($msg !~ /\@$server->{nick}/)) {
+        if (($nick ne $server->{nick}) && ($msg !~ /\@\Q$server->{nick}\E/)) {
             if ($msg =~ /\(re (\@\S+): /) {
                 $msg =~ s/\(re (\@\S+): /(re \@$server->{nick}, $1: /;
             } else {
                 $msg =~ s/$/ (🔔 \@$server->{nick})/;
             }
+            Irssi::signal_continue($server, $msg, $nick, $address, $target);
         }
     }
-
-    Irssi::signal_continue($server, $msg, $nick, $address, $target);
 }
 Irssi::signal_add('message irc action', 'signal_message_public');
 Irssi::signal_add('message irc notice', 'signal_message_public');
