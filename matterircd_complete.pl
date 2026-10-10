@@ -947,10 +947,10 @@ sub cache_msgthreadid {
 
     my @ignore_nicks = split(/\s+/, Irssi::settings_get_str('matterircd_complete_nick_ignore'));
     # Ignore nicks configured to be ignored such as bots.
-    if (grep(/^\Q$nick\E$/, @ignore_nicks)) {
+    if (grep { $_ eq $nick } @ignore_nicks) {
         # But not if the channel is in matterircd_complete_channel_dont_ignore.
         my @channel_dont_ignore = split(/\s+/, Irssi::settings_get_str('matterircd_complete_channel_dont_ignore'));
-        if ($target !~ @channel_dont_ignore) {
+        if (!grep { lc($_) eq lc($target) } @channel_dont_ignore) {
             return;
         }
     }
@@ -1030,7 +1030,7 @@ sub cache_msgthreadid {
     # the caches, only keep the IDs they still hold.
     my $last_nick = $MSGTHREADID_LAST_NICK{$key};
     my $cached = @{$MSGTHREADID_CACHE{$key}} + @{$MSGTHREADID_MOST_RECENT_CACHE{$key}};
-    if (keys(%$last_nick) > 2 * $cached + 16) {
+    if ($last_nick && keys(%$last_nick) > 2 * $cached + 16) {
         my %keep = map { $_ => $last_nick->{$_} } grep { exists $last_nick->{$_} }
             (@{$MSGTHREADID_CACHE{$key}}, @{$MSGTHREADID_MOST_RECENT_CACHE{$key}});
         $MSGTHREADID_LAST_NICK{$key} = \%keep;
@@ -1465,7 +1465,7 @@ sub signal_complete_word_nicks {
             next;
         }
         # Ignore nicks configured to be ignored such as bots.
-        elsif (grep(/^\Q$nick\E$/, @ignore_nicks)) {
+        elsif (grep { $_ eq $nick } @ignore_nicks) {
             next;
         }
         # Only those matching partial word.
@@ -1503,7 +1503,7 @@ sub signal_complete_word_nicks {
             next;
         }
         # Only add to completion list if user/nick is online and in channel.
-        elsif (grep(/^\Q$nick\E$/, @tmp)) {
+        elsif (grep { $_ eq $nick } @tmp) {
             # Only add completion character on line start.
             if (not $linestart) {
                 unshift(@$complist, "\@${nick}${compl_char}");
@@ -1526,7 +1526,7 @@ sub cache_ircnick {
     my $cache_size = Irssi::settings_get_int('matterircd_complete_nick_cache_size');
     my @ignore_nicks = split(/\s+/, Irssi::settings_get_str('matterircd_complete_nick_ignore'));
     # Ignore nicks configured to be ignored such as bots.
-    if ($nick !~ @ignore_nicks) {
+    if (!grep { $_ eq $nick } @ignore_nicks) {
         if (cache_store(\@{$NICKNAMES_CACHE{$target}}, $nick, $cache_size)) {
             stats_increment(\$NICKNAMES_CACHE_STATS);
         }
@@ -1588,7 +1588,7 @@ sub cmd_nicknames_search {
             next;
         }
         # Ignore nicks configured to be ignored such as bots.
-        elsif (grep(/^\Q$nick\E$/, @ignore_nicks)) {
+        elsif (grep { $_ eq $nick } @ignore_nicks) {
             next;
         }
         push(@NICKNAMES_CACHE_SEARCH, $nick);
@@ -1608,7 +1608,7 @@ sub cmd_nicknames_search {
             }
             # Only add to completion list if user/nick is online and
             # in channel.
-            elsif (grep(/^\Q$nick\E$/, @NICKNAMES_CACHE_SEARCH)) {
+            elsif (grep { $_ eq $nick } @NICKNAMES_CACHE_SEARCH) {
                 unshift(@NICKNAMES_CACHE_SEARCH, $nick);
             }
         }
