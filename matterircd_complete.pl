@@ -53,6 +53,17 @@
 #   /set matterircd_complete_message_thread_id_cache_size 50
 #   /set matterircd_complete_nick_cache_size 20
 #
+# The cache is saved to ~/.irssi/matterircd_complete.cache when the
+# script is unloaded or irssi exits, and automatically every 15 minutes
+# so it also survives irssi crashing or being killed. To change how often
+# (in minutes), or to disable the automatic save with 0:
+#
+#   /set matterircd_complete_autosave_interval 30
+#
+# To save the cache to disk right now:
+#
+#   /matterircd_complete_cache_save
+#
 # To ignore specific nicks in autocomplete:
 #
 #   /set matterircd_complete_nick_ignore somebot anotherbot
@@ -2735,12 +2746,6 @@ sub stats_increment {
     my ($stats_ref) = @_;
 
     $$stats_ref += 1;
-
-    # autosave.
-    if (($$stats_ref % 100) == 0) {
-        my $output_stats = Irssi::settings_get_bool('matterircd_complete_stats_output') ? "true" : "false";
-        save_cache($output_stats);
-    }
 }
 
 my $STARTUP_DATE = localtime();
@@ -2880,6 +2885,53 @@ sub load_cache {
     Irssi::print("[matterircd_complete] \x03%GLoaded total of ${total} entries from disk cache…");
 }
 
+# Save the cache periodically, not only on unload/exit, so it survives
+# irssi crashing or being killed. Interval is in minutes, 0 disables.
+Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_autosave_interval', 15);
+# Irssi::timeout_add() croaks, which gets the script unloaded, if msecs
+# does not fit in an int.
+my $AUTOSAVE_MAX_MINUTES = int((2**31 - 1) / 60_000);
+my $autosave_tag;
+my $autosave_msecs = 0;
+sub autosave_cache {
+    return if $exited;
+
+    my $output_stats = Irssi::settings_get_bool('matterircd_complete_stats_output') ? "true" : "false";
+    save_cache($output_stats);
+}
+
+sub autosave_stop {
+    Irssi::timeout_remove($autosave_tag) if defined $autosave_tag;
+    $autosave_tag = undef;
+    $autosave_msecs = 0;
+}
+
+sub setup_autosave {
+    return if $exited;
+
+    my $minutes = Irssi::settings_get_int('matterircd_complete_autosave_interval');
+    $minutes = 0 if $minutes < 0;
+    $minutes = $AUTOSAVE_MAX_MINUTES if $minutes > $AUTOSAVE_MAX_MINUTES;
+    my $msecs = $minutes * 60_000;
+
+    # Called on every settings change. Leave the running timer alone unless
+    # the interval is what changed, so unrelated /set don't postpone saves.
+    return if $msecs == $autosave_msecs;
+
+    autosave_stop();
+    if ($msecs == 0) {
+        Irssi::print("[matterircd_complete] Autosave of cache to disk is disabled");
+        return;
+    }
+
+    $autosave_tag = Irssi::timeout_add($msecs, \&autosave_cache, undef);
+    $autosave_msecs = $msecs;
+    my $every = ($minutes == 1) ? "minute" : "${minutes} minutes";
+    Irssi::print("[matterircd_complete] Autosaving cache to disk every ${every}");
+}
+Irssi::signal_add('setup changed', 'setup_autosave');
+Irssi::signal_add('setup reread', 'setup_autosave');
+
 sub UNLOAD {
     return if $exited;
     exit_save();
@@ -2887,6 +2939,7 @@ sub UNLOAD {
 
 sub exit_save {
     $exited = 1;
+    autosave_stop();
     save_cache("true")
 }
 Irssi::signal_add('gui exit', 'exit_save');
@@ -2894,3 +2947,4 @@ Irssi::signal_add('gui exit', 'exit_save');
 # Set up on load!
 setup_colors();
 load_cache();
+setup_autosave();
