@@ -53,6 +53,17 @@
 #   /set matterircd_complete_message_thread_id_cache_size 50
 #   /set matterircd_complete_nick_cache_size 20
 #
+# The cache is saved to ~/.irssi/matterircd_complete.cache when the
+# script is unloaded or irssi exits, and automatically every 15 minutes
+# so it also survives irssi crashing or being killed. To change how often
+# (in minutes), or to disable the automatic save with 0:
+#
+#   /set matterircd_complete_autosave_interval 30
+#
+# To save the cache to disk right now:
+#
+#   /matterircd_complete_cache_save
+#
 # To ignore specific nicks in autocomplete:
 #
 #   /set matterircd_complete_nick_ignore somebot anotherbot
@@ -122,6 +133,8 @@
 use strict;
 use warnings;
 use experimental 'smartmatch';
+use Cwd ();
+use Fcntl qw(O_WRONLY O_CREAT O_EXCL);
 
 require Irssi::TextUI;
 require Irssi;
@@ -2735,12 +2748,6 @@ sub stats_increment {
     my ($stats_ref) = @_;
 
     $$stats_ref += 1;
-
-    # autosave.
-    if (($$stats_ref % 100) == 0) {
-        my $output_stats = Irssi::settings_get_bool('matterircd_complete_stats_output') ? "true" : "false";
-        save_cache($output_stats);
-    }
 }
 
 my $STARTUP_DATE = localtime();
@@ -2805,14 +2812,33 @@ Irssi::command_bind('matterircd_complete_stats', 'stats_show');
 
 my $CACHE_FILE = Irssi::get_irssi_dir() . '/matterircd_complete.cache';
 my $exited;
+
+sub save_cache_error {
+    my ($err) = @_;
+
+    Irssi::print("[matterircd_complete] \x03%RError saving matterircd_complete cache: $err")
+        unless $exited;
+    return;
+}
+
 sub save_cache {
     my ($output_stats) = @_;
 
-    open(FH, '>', $CACHE_FILE) or do {
-        Irssi::print("[matterircd_complete] \x03%RError saving matterircd_complete cache: $!")
-            unless $exited;
-        return;
-    };
+    # Write to a temporary file in the same directory and rename() it over the
+    # cache file (atomic within a filesystem), so being killed or crashing
+    # part way through a save can't leave a truncated cache behind. Resolve
+    # symlinks first so a symlinked cache file stays a symlink, and keep the
+    # permissions of the existing file (e.g. if it was chmod 600).
+    my $dest = Cwd::abs_path($CACHE_FILE) // $CACHE_FILE;
+    my $tmp = "${dest}.tmp.$$";
+    my $mode = (stat($dest))[2];
+    $mode = defined($mode) ? ($mode & 0666) : 0666;
+
+    # Remove any leftover and use O_EXCL so we never write through a symlink,
+    # or into a file we didn't create, at the predictable temporary name.
+    unlink($tmp);
+    sysopen(my $fh, $tmp, O_WRONLY | O_CREAT | O_EXCL, $mode)
+        or return save_cache_error($!);
 
     my %cache = (
         'MSGTHREADID' => \%MSGTHREADID_CACHE,
@@ -2831,7 +2857,7 @@ sub save_cache {
             if (scalar(@{$d}) == 0) {
                 next;
             }
-            print(FH "${key} ${channel} ${entries}\n");
+            print($fh "${key} ${channel} ${entries}\n");
         }
     }
 
@@ -2839,11 +2865,22 @@ sub save_cache {
     foreach my $tag (keys %DM_TOPIC_CACHE) {
         foreach my $target (keys %{$DM_TOPIC_CACHE{$tag}}) {
             my $topic = $DM_TOPIC_CACHE{$tag}{$target};
-            print(FH "DMTOPIC ${tag} ${target} ${topic}\n") if length($topic);
+            print($fh "DMTOPIC ${tag} ${target} ${topic}\n") if length($topic);
         }
     }
 
-    close(FH);
+    # close() fails if any earlier write did too, e.g. when the disk is full.
+    # Keep the previous cache in that case rather than replacing it.
+    if (not close($fh)) {
+        my $err = $!;
+        unlink($tmp);
+        return save_cache_error($err);
+    }
+    if (not rename($tmp, $dest)) {
+        my $err = $!;
+        unlink($tmp);
+        return save_cache_error($err);
+    }
 
     # eq "" so show stats on /matterircd_complete_cache_save command.
     if ($output_stats eq "true" || $output_stats eq "") {
@@ -2880,6 +2917,55 @@ sub load_cache {
     Irssi::print("[matterircd_complete] \x03%GLoaded total of ${total} entries from disk cache…");
 }
 
+# Save the cache periodically, not only on unload/exit, so it survives
+# irssi crashing or being killed. Interval is in minutes, 0 disables.
+Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_autosave_interval', 15);
+# Irssi::timeout_add() croaks, which gets the script unloaded, if msecs
+# does not fit in an int.
+my $AUTOSAVE_MAX_MINUTES = int((2**31 - 1) / 60_000);
+my $autosave_tag;
+# -1 until the first setup_autosave(), as 0 means disabled (and announced),
+# so an interval saved as 0 is still reported as disabled on startup.
+my $autosave_msecs = -1;
+sub autosave_cache {
+    return if $exited;
+
+    my $output_stats = Irssi::settings_get_bool('matterircd_complete_stats_output') ? "true" : "false";
+    save_cache($output_stats);
+}
+
+sub autosave_stop {
+    Irssi::timeout_remove($autosave_tag) if defined $autosave_tag;
+    $autosave_tag = undef;
+    $autosave_msecs = 0;
+}
+
+sub setup_autosave {
+    return if $exited;
+
+    my $minutes = Irssi::settings_get_int('matterircd_complete_autosave_interval');
+    $minutes = 0 if $minutes < 0;
+    $minutes = $AUTOSAVE_MAX_MINUTES if $minutes > $AUTOSAVE_MAX_MINUTES;
+    my $msecs = $minutes * 60_000;
+
+    # Called on every settings change. Leave the running timer alone unless
+    # the interval is what changed, so unrelated /set don't postpone saves.
+    return if $msecs == $autosave_msecs;
+
+    autosave_stop();
+    if ($msecs == 0) {
+        Irssi::print("[matterircd_complete] Autosave of cache to disk is disabled");
+        return;
+    }
+
+    $autosave_tag = Irssi::timeout_add($msecs, \&autosave_cache, undef);
+    $autosave_msecs = $msecs;
+    my $every = ($minutes == 1) ? "minute" : "${minutes} minutes";
+    Irssi::print("[matterircd_complete] Autosaving cache to disk every ${every}");
+}
+Irssi::signal_add('setup changed', 'setup_autosave');
+Irssi::signal_add('setup reread', 'setup_autosave');
+
 sub UNLOAD {
     return if $exited;
     exit_save();
@@ -2887,6 +2973,7 @@ sub UNLOAD {
 
 sub exit_save {
     $exited = 1;
+    autosave_stop();
     save_cache("true")
 }
 Irssi::signal_add('gui exit', 'exit_save');
@@ -2894,3 +2981,4 @@ Irssi::signal_add('gui exit', 'exit_save');
 # Set up on load!
 setup_colors();
 load_cache();
+setup_autosave();
