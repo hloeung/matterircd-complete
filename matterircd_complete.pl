@@ -480,13 +480,14 @@ my %CHATNETS;
 sub chatnet_enabled {
     my ($server_or_chatnet) = @_;
 
+    return 0 unless defined $server_or_chatnet;
+
     my $raw = Irssi::settings_get_str('matterircd_complete_networks');
     if (!defined($CHATNETS_RAW) || $raw ne $CHATNETS_RAW) {
         $CHATNETS_RAW = $raw;
         %CHATNETS = map { $_ => 1 } split(/\s+/, $raw);
     }
     return 1 if exists $CHATNETS{'*'};
-    return 0 unless defined $server_or_chatnet;
 
     my $chatnet = ref($server_or_chatnet) ? $server_or_chatnet->{chatnet} : $server_or_chatnet;
     return defined($chatnet) && exists $CHATNETS{$chatnet};
