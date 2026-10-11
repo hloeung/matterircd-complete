@@ -133,6 +133,8 @@
 use strict;
 use warnings;
 use experimental 'smartmatch';
+use Cwd ();
+use Fcntl qw(O_WRONLY O_CREAT O_EXCL);
 
 require Irssi::TextUI;
 require Irssi;
@@ -2810,14 +2812,33 @@ Irssi::command_bind('matterircd_complete_stats', 'stats_show');
 
 my $CACHE_FILE = Irssi::get_irssi_dir() . '/matterircd_complete.cache';
 my $exited;
+
+sub save_cache_error {
+    my ($err) = @_;
+
+    Irssi::print("[matterircd_complete] \x03%RError saving matterircd_complete cache: $err")
+        unless $exited;
+    return;
+}
+
 sub save_cache {
     my ($output_stats) = @_;
 
-    open(FH, '>', $CACHE_FILE) or do {
-        Irssi::print("[matterircd_complete] \x03%RError saving matterircd_complete cache: $!")
-            unless $exited;
-        return;
-    };
+    # Write to a temporary file in the same directory and rename() it over the
+    # cache file (atomic within a filesystem), so being killed or crashing
+    # part way through a save can't leave a truncated cache behind. Resolve
+    # symlinks first so a symlinked cache file stays a symlink, and keep the
+    # permissions of the existing file (e.g. if it was chmod 600).
+    my $dest = Cwd::abs_path($CACHE_FILE) // $CACHE_FILE;
+    my $tmp = "${dest}.tmp.$$";
+    my $mode = (stat($dest))[2];
+    $mode = defined($mode) ? ($mode & 0666) : 0666;
+
+    # Remove any leftover and use O_EXCL so we never write through a symlink,
+    # or into a file we didn't create, at the predictable temporary name.
+    unlink($tmp);
+    sysopen(my $fh, $tmp, O_WRONLY | O_CREAT | O_EXCL, $mode)
+        or return save_cache_error($!);
 
     my %cache = (
         'MSGTHREADID' => \%MSGTHREADID_CACHE,
@@ -2836,7 +2857,7 @@ sub save_cache {
             if (scalar(@{$d}) == 0) {
                 next;
             }
-            print(FH "${key} ${channel} ${entries}\n");
+            print($fh "${key} ${channel} ${entries}\n");
         }
     }
 
@@ -2844,11 +2865,22 @@ sub save_cache {
     foreach my $tag (keys %DM_TOPIC_CACHE) {
         foreach my $target (keys %{$DM_TOPIC_CACHE{$tag}}) {
             my $topic = $DM_TOPIC_CACHE{$tag}{$target};
-            print(FH "DMTOPIC ${tag} ${target} ${topic}\n") if length($topic);
+            print($fh "DMTOPIC ${tag} ${target} ${topic}\n") if length($topic);
         }
     }
 
-    close(FH);
+    # close() fails if any earlier write did too, e.g. when the disk is full.
+    # Keep the previous cache in that case rather than replacing it.
+    if (not close($fh)) {
+        my $err = $!;
+        unlink($tmp);
+        return save_cache_error($err);
+    }
+    if (not rename($tmp, $dest)) {
+        my $err = $!;
+        unlink($tmp);
+        return save_cache_error($err);
+    }
 
     # eq "" so show stats on /matterircd_complete_cache_save command.
     if ($output_stats eq "true" || $output_stats eq "") {
@@ -2892,7 +2924,9 @@ Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_autosave_int
 # does not fit in an int.
 my $AUTOSAVE_MAX_MINUTES = int((2**31 - 1) / 60_000);
 my $autosave_tag;
-my $autosave_msecs = 0;
+# -1 until the first setup_autosave(), as 0 means disabled (and announced),
+# so an interval saved as 0 is still reported as disabled on startup.
+my $autosave_msecs = -1;
 sub autosave_cache {
     return if $exited;
 
