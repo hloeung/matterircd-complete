@@ -1383,11 +1383,11 @@ sub update_thread_preview {
 
             # Full preview with author for window bar
             my $author = $MSGTHREADID_LAST_NICK{$target}{$full_id};
-            my $author_fmt = (defined $author && length $author) ? " %K(\@${author}%K)" : "";
-            $new_preview_full = "%K[${thread_color_fmt}${reply_prefix}${full_id}${author_fmt}%n%K]";
+            my $author_fmt = (defined $author && length $author) ? " %K(%n\@${author}%K)%n" : "";
+            $new_preview_full = "%K[%N${thread_color_fmt}${reply_prefix}${full_id}%n${author_fmt}%K]%n";
         } else {
             $new_preview = "%K[%R${reply_prefix}${id}?%n%K] ";
-            $new_preview_full = "%K[%R${reply_prefix}${id}?%n%K]";
+            $new_preview_full = "%K[%N%R${reply_prefix}${id}?%n%K]%n";
         }
     }
 
@@ -2080,7 +2080,7 @@ sub sb_matterircd_typing {
             my $nicks = join(",", @{$thread_nicks{$tid}});
             my $short = ($tid !~ /^[0-9a-f]{3}$/ && $len > 0 && $len < 25 && length($tid) > $len) ? substr($tid, 0, $len) . "…" : $tid;
             my $color = thread_color_format($tid);
-            push(@typists, "${nicks} %K(${color}${reply_prefix}${short}%n%K)%G");
+            push(@typists, "${nicks} (%N%K${color}${reply_prefix}${short}%N%K%n)%G");
         }
 
         if (@typists) {
