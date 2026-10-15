@@ -601,8 +601,11 @@ sub cmd_matterircd_complete_msgthreadid_cache_dump {
     }
 
     foreach my $msgthread_id (@{$MSGTHREADID_CACHE{$channel}}) {
-        _wi_print($wi, "${channel}: ${msgthread_id}");
+        my $nick = $MSGTHREADID_LAST_NICK{$channel}{$msgthread_id};
+        my $nick_str = (defined $nick && length $nick) ? " (\@${nick})" : "";
+        _wi_print($wi, "${channel}: ${msgthread_id}${nick_str}");
     }
+
     _wi_print($wi, "${channel}: Total: " . scalar @{$MSGTHREADID_CACHE{$channel}});
 }
 Irssi::command_bind('matterircd_complete_msgthreadid_cache_dump', 'cmd_matterircd_complete_msgthreadid_cache_dump');
@@ -628,8 +631,11 @@ sub cmd_matterircd_complete_msgthreadid_most_recent_cache_dump {
     }
 
     foreach my $msgthread_id (@{$MSGTHREADID_MOST_RECENT_CACHE{$channel}}) {
-        _wi_print($wi, "${channel}: ${msgthread_id}");
-    }
+         my $nick = $MSGTHREADID_LAST_NICK{$channel}{$msgthread_id};
+         my $nick_str = (defined $nick && length $nick) ? " (\@${nick})" : "";
+         _wi_print($wi, "${channel}: ${msgthread_id}${nick_str}");
+     }
+
     _wi_print($wi, "${channel}: Total: " . scalar @{$MSGTHREADID_MOST_RECENT_CACHE{$channel}});
 }
 Irssi::command_bind('matterircd_complete_msgthreadid_most_recent_cache_dump', 'cmd_matterircd_complete_msgthreadid_most_recent_cache_dump');
@@ -2856,9 +2862,19 @@ sub save_cache {
             if (not $d) {
                 next;
             }
-            my $entries = join(',', @{$d});
             if (scalar(@{$d}) == 0) {
                 next;
+            }
+            my $entries;
+            if ($key eq 'MSGTHREADID' || $key eq 'MSGTHREADID_MOST_RECENT_CACHE') {
+                my $last_nick = $MSGTHREADID_LAST_NICK{$channel};
+                $entries = join(',', map {
+                    ($last_nick && defined $last_nick->{$_} && length $last_nick->{$_})
+                        ? "$_:$last_nick->{$_}"
+                        : $_
+                } @{$d});
+            } else {
+                $entries = join(',', @{$d});
             }
             print($fh "${key} ${channel} ${entries}\n");
         }
@@ -2922,6 +2938,13 @@ sub load_cache {
         my ($key, $channel, $entries) = split;
         next unless defined($entries) && exists $cache{$key};
         my @d = split(',', $entries);
+        if ($key eq 'MSGTHREADID' || $key eq 'MSGTHREADID_MOST_RECENT_CACHE') {
+            for my $item (@d) {
+                if ($item =~ s/:(.+)$//) {
+                    $MSGTHREADID_LAST_NICK{$channel}{$item} = $1;
+                }
+            }
+        }
         $cache{$key}->{$channel} = \@d;
         $total += scalar(@d);
     }
