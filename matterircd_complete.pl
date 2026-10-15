@@ -1012,8 +1012,8 @@ sub cache_msgthreadid {
     }
 
     my $key;
-    if (substr($target, 0, 1) eq '#') {
-        # It's a channel, so use $target
+    if (substr($target, 0, 1) eq '#' || $nick eq $server->{nick}) {
+        # It's a channel, or a self-message in a private query, so use $target
         $key = $target;
     } else {
         # It's a private query so use $nick
@@ -1072,6 +1072,45 @@ Irssi::signal_add('message irc action', 'cache_msgthreadid');
 Irssi::signal_add('message irc notice', 'cache_msgthreadid');
 Irssi::signal_add('message private', 'cache_msgthreadid');
 Irssi::signal_add('message public', 'cache_msgthreadid');
+
+sub cmd_matterircd_complete_msgthreadid_cache_clear {
+    my ($data, $server, $wi) = @_;
+
+    if (not $data) {
+        return unless ref $wi and ($wi->{type} eq 'CHANNEL' or $wi->{type} eq 'QUERY');
+    }
+
+    return unless chatnet_enabled($server);
+
+    my $channel = $data ? $data : $wi->{name};
+    # Remove leading and trailing whitespace.
+    $channel =~ tr/ \t//d;
+
+    if ($channel eq '*') {
+        %MSGTHREADID_CACHE = ();
+        %MSGTHREADID_MOST_RECENT_CACHE = ();
+        %MSGTHREADID_LAST_NICK = ();
+        %LAST_CHANNEL_MSGTHREAD = ();
+        %MSGTHREADID_CACHE_SEARCH_RECENT = ();
+        %MSGTHREADID_CACHE_SEARCH_RECENT_TIME = ();
+        stats_increment(\$MSGTHREADID_CACHE_STATS);
+        stats_increment(\$MSGTHREADID_MOST_RECENT_CACHE_STATS);
+        _wi_print($wi, "matterircd_complete message/thread ID cache cleared");
+        return;
+    }
+
+    delete $MSGTHREADID_CACHE{$channel};
+    delete $MSGTHREADID_MOST_RECENT_CACHE{$channel};
+    delete $MSGTHREADID_LAST_NICK{$channel};
+    delete $LAST_CHANNEL_MSGTHREAD{$channel};
+    delete $MSGTHREADID_CACHE_SEARCH_RECENT{$channel};
+    delete $MSGTHREADID_CACHE_SEARCH_RECENT_TIME{$channel};
+    stats_increment(\$MSGTHREADID_CACHE_STATS);
+    stats_increment(\$MSGTHREADID_MOST_RECENT_CACHE_STATS);
+    _wi_print($wi, "matterircd_complete message/thread ID cache cleared for ${channel}");
+}
+Irssi::command_bind('matterircd_complete_msgthreadid_cache_clear', 'cmd_matterircd_complete_msgthreadid_cache_clear');
+#Irssi::command_bind('matterircd_complete_cache_clear_msgthreadid', 'cmd_matterircd_complete_msgthreadid_cache_clear');
 
 Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_reply_msg_thread_id_at_start', 1);
 
@@ -1884,6 +1923,14 @@ sub signal_message_public {
     $msg =~ /\[(?:->|↪)?([0-9a-f]{3})[\],]/;
     my $msgthreadid = $1;
     return unless $msgthreadid;
+
+    if ($nick eq $server->{nick}) {
+        my $cache_size = Irssi::settings_get_int('matterircd_complete_replied_cache_size');
+        if (cache_store(\@{$REPLIED_CACHE{$target}}, $msgthreadid, $cache_size)) {
+            stats_increment(\$REPLIED_CACHE_STATS);
+        }
+        return;
+    }
 
     return unless Irssi::settings_get_bool('matterircd_complete_add_nick_replied');
 
