@@ -908,8 +908,9 @@ sub signal_complete_word_msgthread_id {
     return unless $window->{active} and ($window->{active}->{type} eq 'CHANNEL' || $window->{active}->{type} eq 'QUERY');
 
     my $target = $window->{active}->{name};
-    # If the command line references a specific channel, complete IDs for that channel
-    if ($linestart && $linestart =~ /^\s*\/\S+.*?\s(#[^\s,:]+)/) {
+    # Allow explicit channel arguments in commands (e.g. /cmd #chan or /msg <bot> [subcmd] #chan)
+    # while preserving the active window target for pure message commands (/say, /me, /action)
+    if ($linestart && $linestart =~ /^\s*\/(?!say\b|me\b|action\b)(?:(?:msg|notice)\s+[^#\s]\S*\s+(?:\S+\s+)?|\S+\s+)(#[^\s,:]+)/i) {
         $target = $1;
     }
     return unless exists($MSGTHREADID_CACHE{$target});
@@ -965,7 +966,7 @@ sub signal_complete_word_msgthread_id {
 
         push(@$complist, "\@\@${insert_id}");
     }
-};
+}
 Irssi::signal_add_last('complete word', 'signal_complete_word_msgthread_id');
 
 my $MSGTHREADID_CACHE_STATS = 0;
