@@ -132,7 +132,6 @@
 
 use strict;
 use warnings;
-use experimental 'smartmatch';
 use Cwd ();
 use Fcntl qw(O_WRONLY O_CREAT O_EXCL);
 
@@ -324,7 +323,7 @@ sub get_thread_format {
     push @classes_prepend, "\x1d" if $allow_italic;
     push @classes_prepend, "\x1f" if $allow_underline;
     my $classes = 1 + @classes_prepend;
-    $n = $n % $color_count*$classes;
+    $n = $n % ($color_count * $classes);
     my $random = $n;
     my $prepend = "";
     if ($classes == 4 and $n >= $color_count*3) {
@@ -534,7 +533,7 @@ sub cache_store {
     return unless $item ne '';
 
     my $changed = 0;
-    if ((@$cache_ref[0]) && (@$cache_ref[0] eq $item)) {
+    if (($cache_ref->[0]) && ($cache_ref->[0] eq $item)) {
         return $changed;
     }
     $changed = 1;
@@ -551,7 +550,7 @@ sub cache_store {
     my $limit = 16;
     my $max = ($#$cache_ref < $limit)? $#$cache_ref : $limit;
     for my $i (1 .. $max) {
-        if ((@$cache_ref[$i]) && (@$cache_ref[$i] eq $item)) {
+        if (($cache_ref->[$i]) && ($cache_ref->[$i] eq $item)) {
             splice(@$cache_ref, $i, 1);
         }
     }
@@ -1073,6 +1072,10 @@ sub cache_msgthreadid {
     # Parent / thread IDs only.
     for my $msgid (@msgids) {
         $MSGTHREADID_LAST_NICK{$key}{$msgid} = $nick;
+        if ($nick eq $server->{nick}) {
+            $MSGTHREADID_CACHE_SEARCH_RECENT{$key} = $msgid;
+            $MSGTHREADID_CACHE_SEARCH_RECENT_TIME{$key} = time();
+        }
         if (cache_store(\@{$MSGTHREADID_CACHE{$key}}, $msgid, $cache_size)) {
             stats_increment(\$MSGTHREADID_CACHE_STATS);
         }
@@ -1306,6 +1309,9 @@ sub _sb_matterircd_thread_render {
 }
 
 sub queue_thread_preview {
+    my $server = Irssi::active_server();
+    return unless chatnet_enabled($server);
+
     Irssi::timeout_remove($preview_tag) if $preview_tag;
     # 10ms delay allows Irssi's input buffer to update after the keystroke
     $preview_tag = Irssi::timeout_add_once(10, \&update_thread_preview, undef);
@@ -2648,12 +2654,18 @@ sub setup_colors {
     my $fixed_color = Irssi::settings_get_int('matterircd_complete_thread_id_color');
     return if $fixed_color ne -1;
 
-    my $allowed_colors = Irssi::settings_get_str('matterircd_complete_thread_id_allowed_colors');
-    $allowed_colors = uc $allowed_colors;
-    my $unwanted_colors = Irssi::settings_get_str('matterircd_complete_thread_id_unwanted_colors');
-    $unwanted_colors = uc $unwanted_colors;
-    my $color_theme = Irssi::settings_get_str('matterircd_complete_thread_id_color_theme');
-    $color_theme = lc $color_theme;
+    my $allowed_colors = uc Irssi::settings_get_str('matterircd_complete_thread_id_allowed_colors');
+    my $unwanted_colors = uc Irssi::settings_get_str('matterircd_complete_thread_id_unwanted_colors');
+    my $color_theme = lc Irssi::settings_get_str('matterircd_complete_thread_id_color_theme');
+
+    # Only recompute if settings actually changed or on initial startup
+    if (@thread_id_selected_colors
+        && $allowed_colors eq $color_config{'allowed_colors'}
+        && $unwanted_colors eq $color_config{'unwanted_colors'}
+        && $color_theme eq $color_config{'color_theme'}) {
+        return;
+    }
+
     my @colors;
 
     if ($allowed_colors =~ /^[0-9A-Z]{2}( [0-9A-Z]{2})*$/) {
@@ -2850,11 +2862,14 @@ sub save_cache {
         }
     }
 
-    # Save DM topics
+    # Save DM topics (newlines escaped to preserve single-line cache records)
     foreach my $tag (keys %DM_TOPIC_CACHE) {
         foreach my $target (keys %{$DM_TOPIC_CACHE{$tag}}) {
             my $topic = $DM_TOPIC_CACHE{$tag}{$target};
-            print($fh "DMTOPIC ${tag} ${target} ${topic}\n") if length($topic);
+            if (length($topic)) {
+                (my $escaped_topic = $topic) =~ s/\n/\\n/g;
+                print($fh "DMTOPIC ${tag} ${target} ${escaped_topic}\n");
+            }
         }
     }
 
@@ -2892,7 +2907,8 @@ sub load_cache {
     while(<FH>) {
         chomp;
         if (/^DMTOPIC\s+(\S+)\s+(\S+)\s+(.*)$/) {
-            $DM_TOPIC_CACHE{$1}{$2} = $3;
+            (my $topic = $3) =~ s/\\n/\n/g;
+            $DM_TOPIC_CACHE{$1}{$2} = $topic;
             $total += 1;
             next;
         }
