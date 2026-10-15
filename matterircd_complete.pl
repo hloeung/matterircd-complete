@@ -2102,15 +2102,23 @@ sub sb_matterircd_typing {
         my $reply_prefix = Irssi::settings_get_str('matterircd_complete_override_reply_prefix');
 
         my @typists;
+        my @threads;
+        my %thread_nicks;
         for my $nick (sort keys %{$typing_states{$server_tag}{$target}}) {
             my $tid = $typing_threads{$server_tag} && $typing_threads{$server_tag}{$target} ? $typing_threads{$server_tag}{$target}{$nick} : undef;
             if (defined $tid && $tid ne '' && $target !~ /^@@/) {
-                my $short = ($tid !~ /^[0-9a-f]{3}$/ && $len > 0 && $len < 25 && length($tid) > $len) ? substr($tid, 0, $len) . "…" : $tid;
-                my $color = thread_color_format($tid);
-                push(@typists, "${nick} %K[${color}${reply_prefix}${short}%n%K]%G");
+                push(@threads, $tid) unless exists $thread_nicks{$tid};
+                push(@{$thread_nicks{$tid}}, $nick);
             } else {
                 push(@typists, $nick);
             }
+        }
+
+        for my $tid (@threads) {
+            my $nicks = join(",", @{$thread_nicks{$tid}});
+            my $short = ($tid !~ /^[0-9a-f]{3}$/ && $len > 0 && $len < 25 && length($tid) > $len) ? substr($tid, 0, $len) . "…" : $tid;
+            my $color = thread_color_format($tid);
+            push(@typists, "${nicks} %K(${color}${reply_prefix}${short}%n%K)%G");
         }
 
         if (@typists) {
