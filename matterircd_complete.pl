@@ -908,16 +908,28 @@ sub signal_complete_word_msgthread_id {
     return unless $window->{active} and ($window->{active}->{type} eq 'CHANNEL' || $window->{active}->{type} eq 'QUERY');
 
     my $target = $window->{active}->{name};
+    # Allow explicit channel arguments in commands (e.g. /cmd #chan or /msg <bot> [subcmd] #chan)
+    # while preserving the active window target for pure message commands (/say, /me, /action)
+    if ($linestart && $linestart =~ /^\s*\/(?!say\b|me\b|action\b)(?:(?:msg|notice)\s+[^#\s]\S*\s+(?:\S+\s+)?|\S+\s+)(#[^\s,:]+)/i) {
+        $target = $1;
+    }
     return unless exists($MSGTHREADID_CACHE{$target});
 
-    return unless chatnet_enabled($window->{active_server});
+    my %chatnets = map { $_ => 1 } split(/\s+/, Irssi::settings_get_str('matterircd_complete_networks'));
+    return unless exists $chatnets{'*'} || exists $chatnets{$window->{active_server}->{chatnet}};
 
     if (substr($word, 0, 2) eq '@@') {
         $word = substr($word, 2);
     }
 
-    my $min_len = Irssi::settings_get_int('matterircd_complete_message_thread_id_min')
-        || Irssi::settings_get_int('matterircd_complete_shorten_message_thread_id');
+    # Only shorten when replying at line start. In commands (like /msg mattermost scrollback)
+    # or mid-line references, matterircd requires the full canonical ID.
+    my $is_reply = (!defined($linestart) || $linestart !~ /\S/);
+    my $min_len = 0;
+    if ($is_reply) {
+        $min_len = Irssi::settings_get_int('matterircd_complete_message_thread_id_min')
+            || Irssi::settings_get_int('matterircd_complete_shorten_message_thread_id');
+    }
 
     my %seen;
     my @candidates = (
