@@ -2711,12 +2711,12 @@ sub setup_colors {
             if $allowed_colors ne $color_config{"allowed_colors"}
                     or $unwanted_colors ne $color_config{"unwanted_colors"}
                     or $color_theme ne $color_config{"color_theme"};
-        $color_config{"allowed_colors"} = $allowed_colors;
-        $color_config{"unwanted_colors"} = $unwanted_colors;
-        $color_config{"color_theme"} = $color_theme;
     } else {
         Irssi::print("[matterircd_complete] Thread colors have been set per your config");
     }
+    $color_config{"allowed_colors"} = $allowed_colors;
+    $color_config{"unwanted_colors"} = $unwanted_colors;
+    $color_config{"color_theme"} = $color_theme;
     Irssi::print("[matterircd_complete] You can check colors in use with /matterircd_complete_thread_id_get_colors");
     @thread_id_selected_colors = @colors;
 }
@@ -2867,8 +2867,10 @@ sub save_cache {
         foreach my $target (keys %{$DM_TOPIC_CACHE{$tag}}) {
             my $topic = $DM_TOPIC_CACHE{$tag}{$target};
             if (length($topic)) {
-                (my $escaped_topic = $topic) =~ s/\n/\\n/g;
-                print($fh "DMTOPIC ${tag} ${target} ${escaped_topic}\n");
+                my $escaped_topic = $topic;
+                $escaped_topic =~ s/\\/\\\\/g;
+                $escaped_topic =~ s/\n/\\n/g;
+                print($fh "DMTOPIC2 ${tag} ${target} ${escaped_topic}\n");
             }
         }
     }
@@ -2906,9 +2908,14 @@ sub load_cache {
     my $total = 0;
     while(<FH>) {
         chomp;
-        if (/^DMTOPIC\s+(\S+)\s+(\S+)\s+(.*)$/) {
-            (my $topic = $3) =~ s/\\n/\n/g;
-            $DM_TOPIC_CACHE{$1}{$2} = $topic;
+        if (/^DMTOPIC(2)?\s+(\S+)\s+(\S+)\s+(.*)$/) {
+            my ($version, $tag, $target, $topic) = ($1, $2, $3, $4);
+            if ($version) {
+                $topic =~ s/\\([\\n])/$1 eq 'n' ? "\n" : '\\'/ge;
+            } else {
+                $topic =~ s/\\n/\n/g;
+            }
+            $DM_TOPIC_CACHE{$tag}{$target} = $topic;
             $total += 1;
             next;
         }
