@@ -224,6 +224,7 @@ Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_thread_id_un
 $color_config{'color_theme'} = '';
 $color_config{'allowed_colors'} = '';
 $color_config{'unwanted_colors'} = '';
+my $COLOR_CONFIG_INITIALIZED = 0;
 # Initialize
 my @thread_id_selected_colors = ();
 
@@ -2659,7 +2660,7 @@ sub setup_colors {
     my $color_theme = lc Irssi::settings_get_str('matterircd_complete_thread_id_color_theme');
 
     # Only recompute if settings actually changed or on initial startup
-    if (@thread_id_selected_colors
+    if ($COLOR_CONFIG_INITIALIZED
         && $allowed_colors eq $color_config{'allowed_colors'}
         && $unwanted_colors eq $color_config{'unwanted_colors'}
         && $color_theme eq $color_config{'color_theme'}) {
@@ -2706,7 +2707,7 @@ sub setup_colors {
         Irssi::print("[matterircd_complete] Ignoring matterircd_complete_thread_id_unwanted_colors: invalid format ($unwanted_colors)");
     }
 
-    if (@thread_id_selected_colors) {
+    if ($COLOR_CONFIG_INITIALIZED) {
         Irssi::print("[matterircd_complete] Config changed, existing threads might change colors!")
             if $allowed_colors ne $color_config{"allowed_colors"}
                     or $unwanted_colors ne $color_config{"unwanted_colors"}
@@ -2717,6 +2718,7 @@ sub setup_colors {
     $color_config{"allowed_colors"} = $allowed_colors;
     $color_config{"unwanted_colors"} = $unwanted_colors;
     $color_config{"color_theme"} = $color_theme;
+    $COLOR_CONFIG_INITIALIZED = 1;
     Irssi::print("[matterircd_complete] You can check colors in use with /matterircd_complete_thread_id_get_colors");
     @thread_id_selected_colors = @colors;
 }
@@ -2912,8 +2914,6 @@ sub load_cache {
             my ($version, $tag, $target, $topic) = ($1, $2, $3, $4);
             if ($version) {
                 $topic =~ s/\\([\\n])/$1 eq 'n' ? "\n" : '\\'/ge;
-            } else {
-                $topic =~ s/\\n/\n/g;
             }
             $DM_TOPIC_CACHE{$tag}{$target} = $topic;
             $total += 1;
