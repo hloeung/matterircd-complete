@@ -1392,7 +1392,8 @@ sub update_thread_preview {
 
             # Full preview with author for window bar
             my $author = $MSGTHREADID_LAST_NICK{$target}{$full_id};
-            my $author_fmt = (defined $author && length $author) ? " %K(%n\@${author}%K)%n" : "";
+            my $hide_nick = Irssi::settings_get_bool('matterircd_complete_live_thread_preview_hide_nick');
+            my $author_fmt = (!$hide_nick && defined $author && length $author) ? " %K(%n\@${author}%K)%n" : "";
             $new_preview_full = "%N${thread_color_fmt}[${reply_prefix}${full_id}]%n${author_fmt}";
         } else {
             $new_preview = "%K[%R${reply_prefix}${id}?%n%K] ";
@@ -1894,6 +1895,9 @@ sub signal_message_public {
 
     return unless Irssi::settings_get_int('matterircd_complete_replied_cache_size');
     return unless chatnet_enabled($server);
+
+    clear_typing($server->{tag}, lc($target), $nick);
+
     return if index($msg, '[') == -1;
 
     # For '/me' actions, it has trailing space so we need to use
@@ -2129,9 +2133,12 @@ sub _typing_window_activity_clear {
     return unless Irssi::settings_get_bool('matterircd_complete_typing_window_activity');
 
     my $server = Irssi::server_find_tag($server_tag);
-    return unless $server;
-
-    my $win = $server->window_find_item($target);
+    my $win;
+    if ($server) {
+        $win = $server->window_find_item($target);
+    } else {
+        $win = Irssi::window_find_item($target);
+    }
     return unless $win;
 
     my $active_win = Irssi::active_win();
@@ -2148,7 +2155,9 @@ sub set_typing {
     my ($server_tag, $target, $nick, $thread_id) = @_;
 
     # Clear existing timeout if they just sent another active ping
-    if (exists $typing_states{$server_tag}{$target}{$nick}) {
+    if (exists $typing_states{$server_tag} &&
+        exists $typing_states{$server_tag}{$target} &&
+        exists $typing_states{$server_tag}{$target}{$nick}) {
         Irssi::timeout_remove($typing_states{$server_tag}{$target}{$nick});
     }
 
@@ -2174,17 +2183,23 @@ sub set_typing {
 sub clear_typing {
     my ($server_tag, $target, $nick) = @_;
 
+    return unless (exists $typing_states{$server_tag} && exists $typing_states{$server_tag}{$target})
+               || (exists $typing_threads{$server_tag} && exists $typing_threads{$server_tag}{$target});
+
     if (exists $typing_states{$server_tag}{$target}{$nick}) {
         Irssi::timeout_remove($typing_states{$server_tag}{$target}{$nick});
         delete $typing_states{$server_tag}{$target}{$nick};
     }
 
-    delete $typing_threads{$server_tag}{$target}{$nick};
+    delete $typing_threads{$server_tag}{$target}{$nick} if exists $typing_threads{$server_tag}{$target};
 
     # Clean up empty hashes
     if (keys %{$typing_states{$server_tag}{$target}} == 0) {
         delete $typing_states{$server_tag}{$target};
         delete $typing_threads{$server_tag}{$target};
+
+        delete $typing_states{$server_tag} if keys %{$typing_states{$server_tag}} == 0;
+        delete $typing_threads{$server_tag} if keys %{$typing_threads{$server_tag}} == 0;
 
         _typing_window_activity_clear($server_tag, $target);
     }
@@ -2273,6 +2288,9 @@ Irssi::signal_add('server disconnected', sub {
     if (exists $typing_states{$server_tag}) {
         # Remove all pending timeouts for this server
         foreach my $target (keys %{$typing_states{$server_tag}}) {
+            # Clear level-1 activity for each target window before removing tracking state
+            _typing_window_activity_clear($server_tag, $target);
+
             foreach my $nick (keys %{$typing_states{$server_tag}{$target}}) {
                 Irssi::timeout_remove($typing_states{$server_tag}{$target}{$nick});
             }
@@ -3050,8 +3068,22 @@ sub setup_autosave {
 Irssi::signal_add('setup changed', 'setup_autosave');
 Irssi::signal_add('setup reread', 'setup_autosave');
 
+sub typing_cleanup_all {
+    foreach my $server_tag (keys %typing_states) {
+        foreach my $target (keys %{$typing_states{$server_tag}}) {
+            _typing_window_activity_clear($server_tag, $target);
+            foreach my $nick (keys %{$typing_states{$server_tag}{$target}}) {
+                Irssi::timeout_remove($typing_states{$server_tag}{$target}{$nick});
+            }
+        }
+    }
+    %typing_states = ();
+    %typing_threads = ();
+}
+
 sub UNLOAD {
     return if $exited;
+    typing_cleanup_all();
     exit_save();
 }
 
