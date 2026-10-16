@@ -1289,16 +1289,16 @@ Irssi::statusbar_item_register('matterircd_thread_full', '$0', 'sb_matterircd_th
 
 sub sb_matterircd_thread {
     my ($item, $get_size_only) = @_;
-    _sb_matterircd_thread_render($item, $get_size_only, $current_thread_preview);
+    return _sb_matterircd_thread_render($item, $get_size_only, $current_thread_preview, 0);
 }
 
 sub sb_matterircd_thread_full {
     my ($item, $get_size_only) = @_;
-    _sb_matterircd_thread_render($item, $get_size_only, $current_thread_preview_full);
+    return _sb_matterircd_thread_render($item, $get_size_only, $current_thread_preview_full, 1);
 }
 
 sub _sb_matterircd_thread_render {
-    my ($item, $get_size_only, $text) = @_;
+    my ($item, $get_size_only, $text, $use_sb) = @_;
     my $window = Irssi::active_win();
 
     return $item->default_handler($get_size_only, '', '', 1)
@@ -1309,6 +1309,9 @@ sub _sb_matterircd_thread_render {
         unless chatnet_enabled($server);
 
     if (length($text)) {
+        if ($use_sb) {
+            return $item->default_handler($get_size_only, "{sb $text%n}", '', 0);
+        }
         return $item->default_handler($get_size_only, $text, '', 1);
     }
 
@@ -1385,15 +1388,15 @@ sub update_thread_preview {
             if (($len < 25) && ($thread_m_style != 1)) {
                 $display_id = substr($full_id, 0, $len) . '…';
             }
-            $new_preview = "%K[${thread_color_fmt}${reply_prefix}${display_id}%n%K] ";
+            $new_preview = "${thread_color_fmt}[${reply_prefix}${display_id}]%n ";
 
             # Full preview with author for window bar
             my $author = $MSGTHREADID_LAST_NICK{$target}{$full_id};
             my $author_fmt = (defined $author && length $author) ? " %K(%n\@${author}%K)%n" : "";
-            $new_preview_full = "%K[%N${thread_color_fmt}${reply_prefix}${full_id}%n${author_fmt}%K]%n";
+            $new_preview_full = "%N${thread_color_fmt}[${reply_prefix}${full_id}]%n${author_fmt}";
         } else {
             $new_preview = "%K[%R${reply_prefix}${id}?%n%K] ";
-            $new_preview_full = "%K[%N%R${reply_prefix}${id}?%n%K]%n";
+            $new_preview_full = "%N%R[${reply_prefix}${id}?]%n";
         }
     }
 
@@ -2036,6 +2039,8 @@ Irssi::signal_add_last('complete word', 'signal_complete_word_reaction');
 # /statusbar window add -alignment right matterircd_typing
 # /save
 
+Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_typing_window_activity', 1);
+
 # Track active typing states: $typing_states{server_tag}{channel_name}{nick} = timeout_tag
 our %typing_states;
 our %typing_threads;
@@ -2086,17 +2091,56 @@ sub sb_matterircd_typing {
             my $nicks = join(",", @{$thread_nicks{$tid}});
             my $short = ($tid !~ /^[0-9a-f]{3}$/ && $len > 0 && $len < 25 && length($tid) > $len) ? substr($tid, 0, $len) . "…" : $tid;
             my $color = thread_color_format($tid);
-            push(@typists, "${nicks} (%N%K${color}${reply_prefix}${short}%N%K%n)%G");
+            push(@typists, "${nicks} %N${color}[${reply_prefix}${short}]%n%G");
         }
 
         if (@typists) {
-            my $text = "typing: " . join(", ", @typists);
-            return $item->default_handler($get_size_only, "{sb %G$text%n}", '', 1);
+            my $text = "%Gtyping: " . join(", ", @typists);
+            return $item->default_handler($get_size_only, "{sb $text%n}", '', 1);
         }
     }
 
     # Reverted to 1 so Irssi natively hides the empty space
     $item->default_handler($get_size_only, '', '', 1);
+}
+
+sub _typing_window_activity_set {
+    my ($server_tag, $target) = @_;
+    return unless Irssi::settings_get_bool('matterircd_complete_typing_window_activity');
+
+    my $server = Irssi::server_find_tag($server_tag);
+    return unless $server;
+
+    my $win = $server->window_find_item($target);
+    return unless $win;
+
+    my $active_win = Irssi::active_win();
+    # Only notify for inactive/background windows
+    if (!$active_win || $win->{refnum} != $active_win->{refnum}) {
+        # Only set if there is no existing unread activity (data_level 0)
+        if ($win->{data_level} == 0) {
+            $win->activity(1);
+        }
+    }
+}
+
+sub _typing_window_activity_clear {
+    my ($server_tag, $target) = @_;
+    return unless Irssi::settings_get_bool('matterircd_complete_typing_window_activity');
+
+    my $server = Irssi::server_find_tag($server_tag);
+    return unless $server;
+
+    my $win = $server->window_find_item($target);
+    return unless $win;
+
+    my $active_win = Irssi::active_win();
+    if (!$active_win || $win->{refnum} != $active_win->{refnum}) {
+        # Only clear if the window is strictly at level 1 (typing) and no real messages arrived
+        if ($win->{data_level} == 1) {
+            $win->activity(0);
+        }
+    }
 }
 
 # Sets a user as actively typing
@@ -2121,6 +2165,8 @@ sub set_typing {
         clear_typing($server_tag, $target, $nick);
     }, []);
 
+    _typing_window_activity_set($server_tag, $target);
+
     Irssi::statusbar_items_redraw('matterircd_typing');
 }
 
@@ -2139,6 +2185,8 @@ sub clear_typing {
     if (keys %{$typing_states{$server_tag}{$target}} == 0) {
         delete $typing_states{$server_tag}{$target};
         delete $typing_threads{$server_tag}{$target};
+
+        _typing_window_activity_clear($server_tag, $target);
     }
 
     Irssi::statusbar_items_redraw('matterircd_typing');
