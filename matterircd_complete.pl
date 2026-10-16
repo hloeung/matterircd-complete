@@ -2126,10 +2126,12 @@ sub _typing_window_activity_set {
     my $server = Irssi::server_find_tag($server_tag);
     return unless $server;
 
-    my $win = $server->window_find_item($target);
-    return unless $win;
+    my $wi = $server->window_item_find($target);
+    return unless $wi && $wi->{window};
 
+    my $win = $wi->{window};
     my $active_win = Irssi::active_win();
+
     # Only notify for inactive/background windows
     if (!$active_win || $win->{refnum} != $active_win->{refnum}) {
         # Only set if there is no existing unread activity (data_level 0)
@@ -2146,15 +2148,17 @@ sub _typing_window_activity_clear {
     my $server = Irssi::server_find_tag($server_tag);
     my $win;
     if ($server) {
-        $win = $server->window_find_item($target);
+        my $wi = $server->window_item_find($target);
+        $win = $wi->{window} if $wi;
     } else {
         $win = Irssi::window_find_item($target);
     }
-    return unless $win;
 
     my $promoted = delete $typing_window_activity_promoted{$server_tag}{$target};
     delete $typing_window_activity_promoted{$server_tag}
         if exists $typing_window_activity_promoted{$server_tag} && !keys %{$typing_window_activity_promoted{$server_tag}};
+
+    return unless $win;
 
     # Only reset activity if this script explicitly set it and no real message arrived
     if ($promoted) {
