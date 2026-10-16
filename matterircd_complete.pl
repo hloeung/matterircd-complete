@@ -1885,6 +1885,12 @@ sub signal_message_public {
 
     clear_typing($server->{tag}, lc($target), $nick);
 
+    # If this message is a reply to a thread, also clear the dedicated @@thread window
+    if ($msg =~ /\[(?:->|↪)?\@?\@?([0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43}|[0-9a-f]{3})/) {
+        my $tid = lc($1);
+        clear_typing($server->{tag}, "\@\@${tid}", $nick);
+    }
+
     return unless Irssi::settings_get_int('matterircd_complete_replied_cache_size');
     return if index($msg, '[') == -1;
 
@@ -2126,7 +2132,6 @@ sub _typing_window_activity_set {
 
 sub _typing_window_activity_clear {
     my ($server_tag, $target) = @_;
-    return unless Irssi::settings_get_bool('matterircd_complete_typing_window_activity');
 
     my $server = Irssi::server_find_tag($server_tag);
     my $win;
