@@ -1886,8 +1886,15 @@ sub signal_message_public {
     clear_typing($server->{tag}, lc($target), $nick);
 
     # If this message is a reply to a thread, also clear the dedicated @@thread window
-    if ($msg =~ /\[(?:->|↪)?\@?\@?([0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43}|[0-9a-f]{3})/) {
-        my $tid = lc($1);
+    my $tid;
+    if ($msg =~ /\[(?:->|↪)?\@\@([0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43})[\],]/) {
+        $tid = $1;
+    } elsif ($msg =~ /\[(?:->|↪)?([0-9a-f]{3})[\],]/) {
+        $tid = $1;
+    }
+
+    if (defined $tid) {
+        $tid = lc($tid);
         clear_typing($server->{tag}, "\@\@${tid}", $nick);
     }
 
@@ -2110,6 +2117,8 @@ sub sb_matterircd_typing {
     $item->default_handler($get_size_only, '', '', 1);
 }
 
+our %typing_window_activity_promoted;
+
 sub _typing_window_activity_set {
     my ($server_tag, $target) = @_;
     return unless Irssi::settings_get_bool('matterircd_complete_typing_window_activity');
@@ -2126,6 +2135,7 @@ sub _typing_window_activity_set {
         # Only set if there is no existing unread activity (data_level 0)
         if ($win->{data_level} == 0) {
             $win->activity(1);
+            $typing_window_activity_promoted{$server_tag}{$target} = 1;
         }
     }
 }
@@ -2142,11 +2152,17 @@ sub _typing_window_activity_clear {
     }
     return unless $win;
 
-    my $active_win = Irssi::active_win();
-    if (!$active_win || $win->{refnum} != $active_win->{refnum}) {
-        # Only clear if the window is strictly at level 1 (typing) and no real messages arrived
-        if ($win->{data_level} == 1) {
-            $win->activity(0);
+    my $promoted = delete $typing_window_activity_promoted{$server_tag}{$target};
+    delete $typing_window_activity_promoted{$server_tag}
+        if exists $typing_window_activity_promoted{$server_tag} && !keys %{$typing_window_activity_promoted{$server_tag}};
+
+    # Only reset activity if this script explicitly set it and no real message arrived
+    if ($promoted) {
+        my $active_win = Irssi::active_win();
+        if (!$active_win || $win->{refnum} != $active_win->{refnum}) {
+            if ($win->{data_level} == 1) {
+                $win->activity(0);
+            }
         }
     }
 }
@@ -3083,6 +3099,7 @@ sub typing_cleanup_all {
     }
     %typing_states = ();
     %typing_threads = ();
+    %typing_window_activity_promoted = ();
 }
 
 sub UNLOAD {
