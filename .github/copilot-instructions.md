@@ -28,3 +28,23 @@
 - Regex Performance: Precompile regular expressions where appropriate (`qr//`). Avoid expensive, unanchored regexes in high-frequency signal hooks like `message public` or completion triggers.
 - Safe I/O & TOCTOU: Prevent time-of-check to time-of-use (TOCTOU) race conditions during cache read/write operations. When persisting cache or state to disk, use atomic writes (write to temporary file and `rename`) with explicit open modes.
 - Comments: Document only non-obvious Irssi quirks, edge cases, protocol handling, and intent. Do not write self-evident comments that restate the code.
+
+## When Reviewing Pull Requests
+
+- Lead with the most critical issue first. Do not bury blockers under minor comments.
+- Distinguish blockers (must fix before merge) from suggestions (nice to have / non-blocking).
+- Explain *why* a change is needed, not just *what* to change. Include context regarding runtime behavior or long-term maintainability.
+- Reference project conventions from this document and the existing codebase rather than invoking personal stylistic preferences.
+
+## Review Tone & Feedback Style
+
+- Keep feedback direct, collaborative, and respectful. Avoid directive phrasing like "you should" — prefer objective framing like "this function could", "consider", or "doing X avoids Y".
+- Provide concrete Perl code snippets in review comments whenever suggesting non-trivial logic changes, signal adjustments, or regex refactors.
+
+## What to Always Check
+
+- Context safety: Are `$server`, `$witem`, or hash lookups checked before dereferencing to prevent fatal runtime crashes inside Irssi?
+- Error handling: Is error handling complete around file I/O, IPC, and JSON parsing without silently swallowing unexpected failures?
+- Unbounded collections: Do loops, arrays, or hashes grow with incoming chat traffic without size capping or eviction?
+- Input sanitization & security: Are IRC/Mattermost inputs properly escaped before regex evaluation, shell execution, or formatting interpolation?
+- TOCTOU & concurrency: Are state files written atomically without race windows between existence checks and file operations?
