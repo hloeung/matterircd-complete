@@ -436,8 +436,8 @@ sub channel_dont_ignore {
 sub update_msgthreadid {
     my($server, $msg, $nick, $address, $target) = @_;
 
-    return unless Irssi::settings_get_int('matterircd_complete_shorten_message_thread_id');
     return unless chatnet_enabled($server);
+    return unless Irssi::settings_get_int('matterircd_complete_shorten_message_thread_id');
 
     # Only signal_continue() for messages we changed. Every call leaks a
     # little memory in irssi's perl bindings and most messages are untouched.
@@ -583,11 +583,10 @@ my %LAST_CHANNEL_MSGTHREAD;
 sub cmd_matterircd_complete_msgthreadid_cache_dump {
     my ($data, $server, $wi) = @_;
 
+    return unless chatnet_enabled($server);
     if (not $data) {
         return unless ref $wi and ($wi->{type} eq 'CHANNEL' or $wi->{type} eq 'QUERY');
     }
-
-    return unless chatnet_enabled($server);
 
     my $channel = $data ? $data : $wi->{name};
     # Remove leading and trailing whitespace.
@@ -613,11 +612,10 @@ Irssi::command_bind('matterircd_complete_msgthreadid_cache_dump', 'cmd_matterirc
 sub cmd_matterircd_complete_msgthreadid_most_recent_cache_dump {
     my ($data, $server, $wi) = @_;
 
+    return unless chatnet_enabled($server);
     if (not $data) {
         return unless ref $wi and ($wi->{type} eq 'CHANNEL' or $wi->{type} eq 'QUERY');
     }
-
-    return unless chatnet_enabled($server);
 
     my $channel = $data ? $data : $wi->{name};
     # Remove leading and trailing whitespace.
@@ -643,9 +641,8 @@ Irssi::command_bind('matterircd_complete_msgthreadid_most_recent_cache_dump', 'c
 sub cmd_last_message_permalink {
     my ($data, $server, $wi) = @_;
 
-    return unless ref $wi and ($wi->{type} eq 'CHANNEL' or $wi->{type} eq 'QUERY');
-
     return unless chatnet_enabled($server);
+    return unless ref $wi and ($wi->{type} eq 'CHANNEL' or $wi->{type} eq 'QUERY');
 
     my $channel = $wi->{name};
     my $base_url = Irssi::settings_get_str('matterircd_complete_permalink_base_url');
@@ -694,9 +691,8 @@ Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_service_acco
 sub cmd_matterircd_complete_scrollback {
     my ($data, $server, $wi) = @_;
 
-    return unless ref $wi and ($wi->{type} eq 'CHANNEL' or $wi->{type} eq 'QUERY');
-
     return unless chatnet_enabled($server);
+    return unless ref $wi and ($wi->{type} eq 'CHANNEL' or $wi->{type} eq 'QUERY');
 
     my $channel = $wi->{name};
     my $lines = ($data && $data =~ /^\s*(\d+)\s*$/) ? $1
@@ -717,11 +713,10 @@ my $MSGTHREADID_CACHE_INDEX = 0;
 sub cmd_message_thread_id_search {
     my ($data, $server, $wi) = @_;
 
+    return unless chatnet_enabled($server);
     return unless Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
     return unless ref $wi and ($wi->{type} eq 'CHANNEL' or $wi->{type} eq 'QUERY');
     return unless exists($MSGTHREADID_CACHE{$wi->{name}});
-
-    return unless chatnet_enabled($server);
 
     # Use frozen snapshot on the first cmd_message_thread_id_search call.
     if (! $MSGTHREADID_CACHE_SEARCH_ENABLED) {
@@ -944,6 +939,7 @@ Irssi::signal_add_last('gui key pressed', 'signal_gui_key_pressed_msgthreadid');
 sub signal_complete_word_msgthread_id {
     my ($complist, $window, $word, $linestart, $want_space) = @_;
 
+    return unless chatnet_enabled($window->{active_server});
     return unless Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
     return if (substr($word, 0, 1) eq '@' and substr($word, 0, 2) ne '@@');
     return unless $window->{active} and ($window->{active}->{type} eq 'CHANNEL' || $window->{active}->{type} eq 'QUERY');
@@ -955,8 +951,6 @@ sub signal_complete_word_msgthread_id {
         $target = $1;
     }
     return unless exists($MSGTHREADID_CACHE{$target});
-
-    return unless chatnet_enabled($window->{active_server});
 
     if (substr($word, 0, 2) eq '@@') {
         $word = substr($word, 2);
@@ -1014,8 +1008,8 @@ my $MSGTHREADID_MOST_RECENT_CACHE_STATS = 0;
 sub cache_msgthreadid {
     my($server, $msg, $nick, $address, $target) = @_;
 
-    return unless Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
     return unless chatnet_enabled($server);
+    return unless Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
     return if index($msg, '[') == -1;
 
     my @msgids = ();
@@ -1130,11 +1124,10 @@ Irssi::signal_add('message public', 'cache_msgthreadid');
 sub cmd_matterircd_complete_msgthreadid_cache_clear {
     my ($data, $server, $wi) = @_;
 
+    return unless chatnet_enabled($server);
     if (not $data) {
         return unless ref $wi and ($wi->{type} eq 'CHANNEL' or $wi->{type} eq 'QUERY');
     }
-
-    return unless chatnet_enabled($server);
 
     my $channel = $data ? $data : $wi->{name};
     # Remove leading and trailing whitespace.
@@ -1171,8 +1164,8 @@ Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_reply_msg_t
 sub signal_message_own_msgthreadid {
     my($server, $msg, $target, @rest) = @_;
 
-    return unless Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
     return unless chatnet_enabled($server);
+    return unless Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
 
     if ($msg !~ /^@@((?:[0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43})|(?:[0-9a-f]{3}))\s+([+-]:\S+:)?/) {
         return;
@@ -1416,11 +1409,10 @@ Irssi::signal_add('window item changed', \&queue_thread_preview);
 sub signal_send_text {
     my ($line, $server, $wi) = @_;
 
+    return unless chatnet_enabled($server);
     return unless $server && $wi;
     return unless $wi->{type} eq 'CHANNEL' || $wi->{type} eq 'QUERY';
     return unless Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
-
-    return unless chatnet_enabled($server);
 
     if ($current_thread_preview ne '' || $current_thread_preview_full ne '') {
         $current_thread_preview = '';
@@ -1457,11 +1449,10 @@ my %NICKNAMES_CACHE;
 sub cmd_matterircd_complete_nick_cache_dump {
     my ($data, $server, $wi) = @_;
 
+    return unless chatnet_enabled($server);
     if (not $data) {
         return unless ref $wi and ($wi->{type} eq 'CHANNEL' or $wi->{type} eq 'QUERY');
     }
-
-    return unless chatnet_enabled($server);
 
     my $channel = $data ? $data : $wi->{name};
     # Remove leading and trailing whitespace.
@@ -1484,10 +1475,9 @@ Irssi::command_bind('matterircd_complete_nick_cache_dump', 'cmd_matterircd_compl
 sub signal_complete_word_nicks {
     my ($complist, $window, $word, $linestart, $want_space) = @_;
 
+    return unless chatnet_enabled($window->{active_server});
     return if substr($word, 0, 2) eq '@@';
     return unless $window->{active} and $window->{active}->{type} eq 'CHANNEL';
-
-    return unless chatnet_enabled($window->{active_server});
 
     if (substr($word, 0, 1) eq '@') {
         $word = substr($word, 1);
@@ -1560,8 +1550,8 @@ my $NICKNAMES_CACHE_STATS = 0;
 sub cache_ircnick {
     my($server, $msg, $nick, $address, $target) = @_;
 
-    return unless Irssi::settings_get_int('matterircd_complete_nick_cache_size');
     return unless chatnet_enabled($server);
+    return unless Irssi::settings_get_int('matterircd_complete_nick_cache_size');
 
     my $cache_size = Irssi::settings_get_int('matterircd_complete_nick_cache_size');
     # Ignore nicks configured to be ignored such as bots.
@@ -1578,8 +1568,8 @@ Irssi::signal_add('message public', 'cache_ircnick');
 sub signal_message_own_public_nicks {
     my($server, $msg, $target) = @_;
 
-    return unless Irssi::settings_get_int('matterircd_complete_nick_cache_size');
     return unless chatnet_enabled($server);
+    return unless Irssi::settings_get_int('matterircd_complete_nick_cache_size');
 
     if ($msg !~ /^@([^@ \t:,\)]+)/) {
         return;
@@ -1610,9 +1600,8 @@ my $NICKNAMES_CACHE_INDEX = 0;
 sub cmd_nicknames_search {
     my ($data, $server, $wi) = @_;
 
-    return unless ref $wi and $wi->{type} eq 'CHANNEL';
-
     return unless chatnet_enabled($server);
+    return unless ref $wi and $wi->{type} eq 'CHANNEL';
 
     my $own_nick = $wi->{ownnick}->{nick};
 
@@ -1748,11 +1737,10 @@ my %REPLIED_CACHE;
 sub cmd_matterircd_complete_replied_cache_dump {
     my ($data, $server, $wi) = @_;
 
+    return unless chatnet_enabled($server);
     if (not $data) {
         return unless ref $wi and ($wi->{type} eq 'CHANNEL' or $wi->{type} eq 'QUERY');
     }
-
-    return unless chatnet_enabled($server);
 
     my $channel = $data ? $data : $wi->{name};
     # Remove leading and trailing whitespace.
@@ -1873,8 +1861,8 @@ Irssi::signal_add('away mode changed', 'signal_away_mode_changed');
 sub signal_message_own_public_replied {
     my($server, $msg, $target) = @_;
 
-    return unless Irssi::settings_get_int('matterircd_complete_replied_cache_size');
     return unless chatnet_enabled($server);
+    return unless Irssi::settings_get_int('matterircd_complete_replied_cache_size');
 
     if ($msg !~ /^@@([0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43}|[0-9a-f]{3})/) {
         return;
@@ -1893,11 +1881,11 @@ Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_add_nick_re
 sub signal_message_public {
     my($server, $msg, $nick, $address, $target) = @_;
 
-    return unless Irssi::settings_get_int('matterircd_complete_replied_cache_size');
     return unless chatnet_enabled($server);
 
     clear_typing($server->{tag}, lc($target), $nick);
 
+    return unless Irssi::settings_get_int('matterircd_complete_replied_cache_size');
     return if index($msg, '[') == -1;
 
     # For '/me' actions, it has trailing space so we need to use
@@ -1937,6 +1925,15 @@ sub signal_message_public {
 Irssi::signal_add('message irc action', 'signal_message_public');
 Irssi::signal_add('message irc notice', 'signal_message_public');
 Irssi::signal_add('message public', 'signal_message_public');
+
+sub signal_message_private_typing_clear {
+    my ($server, $msg, $nick, $address) = @_;
+
+    return unless chatnet_enabled($server);
+
+    clear_typing($server->{tag}, lc($nick), $nick);
+}
+Irssi::signal_add('message private', 'signal_message_private_typing_clear');
 
 #==============================================================================
 
@@ -1992,8 +1989,8 @@ my $REACTIONS_CACHE_STATS = 0;
 sub signal_message_own_reactions {
     my($server, $msg, $target) = @_;
 
-    return unless Irssi::settings_get_int('matterircd_complete_reactions_cache_size');
     return unless chatnet_enabled($server);
+    return unless Irssi::settings_get_int('matterircd_complete_reactions_cache_size');
 
     if ($msg !~ /^@@([0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43}|[0-9a-f]{3})\s*\+:(.*):\s*/) {
         return;
@@ -2015,11 +2012,10 @@ Irssi::signal_add('message own_private', 'signal_message_own_reactions');
 sub signal_complete_word_reaction {
     my ($complist, $window, $word, $linestart, $want_space) = @_;
 
+    return unless chatnet_enabled($window->{active_server});
     return unless Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
     return if (substr($word, 0, 1) eq '+' and substr($word, 0, 2) ne '+:');
     return unless $window->{active} and ($window->{active}->{type} eq 'CHANNEL' || $window->{active}->{type} eq 'QUERY');
-
-    return unless chatnet_enabled($window->{active_server});
 
     if (substr($word, 0, 2) eq '+:') {
         $word = substr($word, 2);
@@ -2486,14 +2482,14 @@ sub request_channel_mode {
     my ($channel) = @_;
     return unless $channel;
 
-    # Check if mode requesting is enabled
-    return unless Irssi::settings_get_bool('matterircd_request_channel_mode');
-
     my $server = $channel->{server};
     return unless $server;
 
     # Restrict to configured chatnets
     return unless chatnet_enabled($server);
+
+    # Check if mode requesting is enabled
+    return unless Irssi::settings_get_bool('matterircd_request_channel_mode');
 
     my $target = lc($channel->{name});
     my $internal_mode = defined $channel->{mode} ? $channel->{mode} : "";
@@ -2634,6 +2630,7 @@ Irssi::command_bind('matterircd_complete_dm_topic_dump', 'cmd_matterircd_complet
 
 sub check_action_topic_change {
     my ($server, $msg, $nick, $address, $target) = @_;
+
     return unless chatnet_enabled($server);
     return unless defined $msg && defined $target;
 
@@ -2661,6 +2658,7 @@ Irssi::signal_add('message private',    'check_action_topic_change');
 
 Irssi::signal_add('event topic', sub {
     my ($server, $data, $nick, $address) = @_;
+
     return unless chatnet_enabled($server);
 
     my ($target, $topic);
@@ -2684,6 +2682,7 @@ Irssi::signal_add('event topic', sub {
 
 Irssi::signal_add('event 332', sub {
     my ($server, $data) = @_;
+
     return unless chatnet_enabled($server);
 
     my ($me, $target, $topic) = split(/\s+/, $data, 3);
