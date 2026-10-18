@@ -310,7 +310,7 @@ sub get_thread_format {
     my ($str) = @_;
     my $n = 0;
     $str = lc $str;
-    foreach ($str =~ /[$chr]/g) {
+    foreach ($str =~ /[0-9a-z]/g) {
         $n += $nums{$_} * 36;
     }
     # Don't copy the list on every call. Fall back to all colors if it is empty
@@ -334,10 +334,10 @@ sub get_thread_format {
     if ($classes == 4 and $n >= $color_count*3) {
         $n -= $color_count*3;
         $prepend = $classes_prepend[2];
-    } elsif ($classes ge 3 and $n >= $color_count*2) {
+    } elsif ($classes >= 3 and $n >= $color_count*2) {
         $n -= $color_count*2;
         $prepend = $classes_prepend[1];
-    } elsif ($classes ge 2 and $n >= $color_count) {
+    } elsif ($classes >= 2 and $n >= $color_count) {
         $n -= $color_count;
         $prepend = $classes_prepend[0];
     }
