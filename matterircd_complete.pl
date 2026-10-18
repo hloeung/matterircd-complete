@@ -2769,9 +2769,9 @@ sub sig_server_event_whois_start {
 
     # IRC numeric parameter structure: "<client_nick> <target_nick> :<text>" or "<target_nick> :<text>"
     my ($target, $text);
-    if ($data =~ /^\S+\s+(\S+)\s*:(.*)$/s) {
+    if ($data =~ /^\S+\s+([^:\s]+)\s*:(.*)$/s) {
         ($target, $text) = ($1, $2);
-    } elsif ($data =~ /^(\S+)\s*:(.*)$/s) {
+    } elsif ($data =~ /^([^:\s]+)\s*:(.*)$/s) {
         ($target, $text) = ($1, $2);
     } else {
         return;
