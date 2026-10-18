@@ -2779,13 +2779,18 @@ sub sig_print_text_whois_special {
     my $server = $text_dest->{server};
     return unless $server && chatnet_enabled($server);
 
-    my $pending = $pending_whois{lc($server->{tag} // '')} or return;
+    my $server_tag = lc($server->{tag} // '');
+    my $pending = $pending_whois{$server_tag} or return;
 
     for my $item (keys %$pending) {
-        next if index($stripped, $item) == -1;
+        next if index($stripped, Irssi::strip_codes($item)) == -1;
 
         my $label = delete $pending->{$item};
-        my $win   = $text_dest->{window} // Irssi::active_win();
+        delete $pending_whois{$server_tag} unless keys %$pending;
+
+        # Honor Irssi's resolved WHOIS window destination
+        my $win = $text_dest->{window};
+        return unless $win;
 
         $win->printformat(Irssi::MSGLEVEL_CRAP(), 'whois_special_field', $label, $item);
         Irssi::signal_stop();
