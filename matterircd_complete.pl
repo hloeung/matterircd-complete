@@ -2813,10 +2813,15 @@ sub sig_print_text_whois_special {
         Irssi::timeout_remove($timer);
     }
 
-    my $win = $text_dest->{window};
-    return unless $win;
-
-    $win->printformat(Irssi::MSGLEVEL_CRAP(), 'whois_special_field', $item->{label}, $item->{text});
+    # Print through $server with original target and level to preserve
+    # server tags in shared windows and network/target log routing.
+    $server->printformat(
+        $text_dest->{target},
+        $text_dest->{level},
+        'whois_special_field',
+        $item->{label},
+        $item->{text}
+    );
     Irssi::signal_stop();
 }
 Irssi::signal_add_first('print text', 'sig_print_text_whois_special');
