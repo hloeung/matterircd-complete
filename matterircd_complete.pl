@@ -382,15 +382,15 @@ Irssi::command_bind('matterircd_complete_thread_id_get_color', 'cmd_matterircd_c
 # rather than on every message/keypress/completion.
 my $CHATNETS_RAW;
 my %CHATNETS;
+
 sub chatnet_enabled {
     my ($server_or_chatnet) = @_;
 
     return 0 unless defined $server_or_chatnet;
 
-    my $raw = Irssi::settings_get_str('matterircd_complete_networks');
-    if (!defined($CHATNETS_RAW) || $raw ne $CHATNETS_RAW) {
-        $CHATNETS_RAW = $raw;
-        %CHATNETS = map { lc($_) => 1 } split(/\s+/, $raw);
+    if (!defined($CHATNETS_RAW)) {
+        $CHATNETS_RAW = Irssi::settings_get_str('matterircd_complete_networks');
+        %CHATNETS = map { lc($_) => 1 } split(/\s+/, $CHATNETS_RAW);
     }
     return 1 if exists $CHATNETS{'*'};
 
@@ -410,10 +410,9 @@ sub nick_ignored {
 
     return 0 unless defined $nick;
 
-    my $raw = Irssi::settings_get_str('matterircd_complete_nick_ignore');
-    if (!defined($NICK_IGNORE_RAW) || $raw ne $NICK_IGNORE_RAW) {
-        $NICK_IGNORE_RAW = $raw;
-        %NICK_IGNORE = map { $_ => 1 } split(/\s+/, $raw);
+    if (!defined($NICK_IGNORE_RAW)) {
+        $NICK_IGNORE_RAW = Irssi::settings_get_str('matterircd_complete_nick_ignore');
+        %NICK_IGNORE = map { $_ => 1 } split(/\s+/, $NICK_IGNORE_RAW);
     }
     return exists $NICK_IGNORE{$nick};
 }
@@ -425,10 +424,9 @@ sub channel_dont_ignore {
 
     return 0 unless defined $target;
 
-    my $raw = Irssi::settings_get_str('matterircd_complete_channel_dont_ignore');
-    if (!defined($CHANNEL_DONT_IGNORE_RAW) || $raw ne $CHANNEL_DONT_IGNORE_RAW) {
-        $CHANNEL_DONT_IGNORE_RAW = $raw;
-        %CHANNEL_DONT_IGNORE = map { lc($_) => 1 } split(/\s+/, $raw);
+    if (!defined($CHANNEL_DONT_IGNORE_RAW)) {
+        $CHANNEL_DONT_IGNORE_RAW = Irssi::settings_get_str('matterircd_complete_channel_dont_ignore');
+        %CHANNEL_DONT_IGNORE = map { lc($_) => 1 } split(/\s+/, $CHANNEL_DONT_IGNORE_RAW);
     }
     return exists $CHANNEL_DONT_IGNORE{lc($target)};
 }
@@ -1982,10 +1980,9 @@ Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_reactions', 
 my $REACTIONS_DEFAULT_RAW;
 my @REACTIONS_DEFAULT;
 sub default_reactions {
-    my $raw = Irssi::settings_get_str('matterircd_complete_reactions');
-    if (!defined($REACTIONS_DEFAULT_RAW) || $raw ne $REACTIONS_DEFAULT_RAW) {
-        $REACTIONS_DEFAULT_RAW = $raw;
-        @REACTIONS_DEFAULT = split(/\s+/, $raw);
+    if (!defined($REACTIONS_DEFAULT_RAW)) {
+        $REACTIONS_DEFAULT_RAW = Irssi::settings_get_str('matterircd_complete_reactions');
+        @REACTIONS_DEFAULT = split(/\s+/, $REACTIONS_DEFAULT_RAW);
     }
     return @REACTIONS_DEFAULT;
 }
@@ -3125,6 +3122,19 @@ sub typing_cleanup_all {
     %typing_threads = ();
     %typing_window_activity_promoted = ();
 }
+
+Irssi::signal_add('setup changed', sub {
+    $CHATNETS_RAW            = undef;
+    $NICK_IGNORE_RAW         = undef;
+    $CHANNEL_DONT_IGNORE_RAW = undef;
+    $REACTIONS_DEFAULT_RAW   = undef;
+});
+Irssi::signal_add('setup reread', sub {
+    $CHATNETS_RAW            = undef;
+    $NICK_IGNORE_RAW         = undef;
+    $CHANNEL_DONT_IGNORE_RAW = undef;
+    $REACTIONS_DEFAULT_RAW   = undef;
+});
 
 sub UNLOAD {
     return if $exited;
