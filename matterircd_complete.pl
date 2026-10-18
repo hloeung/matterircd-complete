@@ -2749,6 +2749,140 @@ Irssi::signal_add('query created',       sub { Irssi::statusbar_items_redraw('ma
 
 #==============================================================================
 
+# Format WHOIS bot / special numerics (335 RPL_WHOISBOT / 320 RPL_WHOISSPECIAL)
+
+our %active_whois;
+our %active_whois_timers;
+our $in_whois_print = 0;
+
+sub sig_server_event_whois {
+    my ($server, $raw_data, $sender_nick, $sender_address) = @_;
+
+    return unless $server && chatnet_enabled($server);
+    return unless defined $raw_data;
+
+    # Fast C-level scan: ignore anything that isn't numeric 320 or 335
+    return if index($raw_data, '320') == -1 && index($raw_data, '335') == -1;
+
+    my ($numeric, $data) = split(/\s+/, $raw_data, 2);
+    return unless defined $numeric && ($numeric eq '320' || $numeric eq '335');
+    return unless defined $data;
+
+    # Strip raw trailing CR/LF
+    $data =~ tr/\r\n//d;
+
+    # IRC parameter structure: "[<client_nick>] <target_nick> :<text>"
+    my $colon = index($data, ' :');
+    return if $colon == -1;
+
+    my $text   = substr($data, $colon + 2);
+    my $params = substr($data, 0, $colon);
+
+    # Extract target nick: either "<client> <target>" or "<target>"
+    my @p = split(' ', $params);
+    return unless @p >= 1;
+
+    my $target = (@p >= 2) ? $p[1] : $p[0];
+    return if index($target, ':') != -1;
+
+    my $server_tag = lc($server->{tag} // '');
+    # 1 leading space + 9-char padded label = 10 chars (aligns with " channels :" and " away     :")
+    my $label = ($numeric eq '335') ? ' bot      ' : ' special  ';
+
+    push @{$active_whois{$server_tag}}, {
+        target   => lc($target),
+        label    => $label,
+        text     => $text,
+        stripped => Irssi::strip_codes($text),
+    };
+
+    if (my $timer = delete $active_whois_timers{$server_tag}) {
+        Irssi::timeout_remove($timer);
+    }
+    $active_whois_timers{$server_tag} = Irssi::timeout_add_once(200, sub {
+        delete $active_whois{$server_tag};
+        delete $active_whois_timers{$server_tag};
+    }, undef);
+}
+Irssi::signal_add_first('server event', \&sig_server_event_whois);
+
+sub sig_print_text_whois_special {
+    my ($text_dest, $text, $stripped) = @_;
+
+    return if $in_whois_print;
+    return unless $text_dest->{level} & Irssi::MSGLEVEL_CRAP();
+
+    # Fast check: fe-whois.c formats unknown numerics with 8+ blank spaces before the colon
+    return unless $stripped =~ /\s{8,}:/ || $text =~ /\s{8,}:/;
+
+    my $server = $text_dest->{server};
+    my $server_tag = $server ? lc($server->{tag} // '') : '';
+
+    my $item;
+    if ($server_tag ne '' && exists $active_whois{$server_tag} && @{$active_whois{$server_tag}}) {
+        my $queue = $active_whois{$server_tag};
+        for (my $i = 0; $i < @$queue; $i++) {
+            if (length($queue->[$i]{stripped}) && index($stripped, $queue->[$i]{stripped}) != -1) {
+                $item = splice(@$queue, $i, 1);
+                if (!@$queue) {
+                    delete $active_whois{$server_tag};
+                    if (my $timer = delete $active_whois_timers{$server_tag}) {
+                        Irssi::timeout_remove($timer);
+                    }
+                }
+                last;
+            }
+        }
+    }
+
+    # Fallback to payload signatures if numeric was consumed before redirection
+    if (!$item) {
+        if ($stripped =~ /is a bot\b/i) {
+            my $payload = $stripped;
+            $payload =~ s/^.*?\s:\s*//;
+            $item = {
+                label => ' bot      ',
+                text  => $payload,
+            };
+        } elsif ($stripped =~ /\b(?:online|offline|away)\b/i) {
+            my $payload = $stripped;
+            $payload =~ s/^.*?\s:\s*//;
+            $item = {
+                label => ' special  ',
+                text  => $payload,
+            };
+        }
+    }
+
+    return unless $item;
+
+    # Write directly to $text_dest->{window} to preserve output routing
+    # without triggering target lookup into open query windows
+    my $win = $text_dest->{window} // Irssi::active_win();
+    return unless $win;
+
+    $in_whois_print = 1;
+    $win->print("$item->{label}: $item->{text}", $text_dest->{level});
+    $in_whois_print = 0;
+
+    Irssi::signal_stop();
+}
+Irssi::signal_add_first('print text', \&sig_print_text_whois_special);
+
+Irssi::signal_add('server disconnected', sub {
+    my ($server) = @_;
+    return unless $server;
+
+    my $server_tag = lc($server->{tag} // '');
+    delete $active_whois{$server_tag};
+    if (my $timer = delete $active_whois_timers{$server_tag}) {
+        Irssi::timeout_remove($timer);
+    }
+});
+
+
+#==============================================================================
+
 # Remove an array's elements per their values
 sub array_splice_values {
     my ($ar_ref, $uw_ref) = @_;
@@ -3143,6 +3277,12 @@ sub UNLOAD {
     return if $exited;
     typing_cleanup_all();
     exit_save();
+
+    for my $timer (values %active_whois_timers) {
+        Irssi::timeout_remove($timer);
+    }
+    %active_whois_timers = ();
+    %active_whois        = ();
 }
 
 sub exit_save {
