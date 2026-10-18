@@ -2755,77 +2755,80 @@ Irssi::theme_register([
     'whois_special_field', '%# $0: %|$1',
 ]);
 
-our $active_whois;
+our %active_whois;
+our %active_whois_timers;
 our $in_whois_print = 0;
 
-sub sig_server_event_whois_start {
-    my ($server, $raw_data, $sender_nick, $sender_address) = @_;
+sub sig_server_incoming_whois {
+    my ($server, $line) = @_;
 
     return unless $server && chatnet_enabled($server);
-    return unless defined $raw_data;
 
-    my ($event, $data) = split(/\s+/, $raw_data, 2);
-    return unless defined $event && ($event eq '320' || $event eq '335');
-
-    # IRC numeric parameter structure: "<client_nick> <target_nick> :<text>" or "<target_nick> :<text>"
-    my ($target, $text);
-    if ($data =~ /^\S+\s+([^:\s]+)\s*:(.*)$/s) {
-        ($target, $text) = ($1, $2);
-    } elsif ($data =~ /^([^:\s]+)\s*:(.*)$/s) {
-        ($target, $text) = ($1, $2);
+    # Raw IRC format with optional IRCv3 tags:
+    #   [@tags] :server 335 <client_nick> <target_nick> :<text>
+    #   [@tags] :server 320 <client_nick> <target_nick> :<text>
+    my ($numeric, $target, $text);
+    if ($line =~ /^(?:@\S+\s+)?:\S+\s+(320|335)\s+\S+\s+([^:\s]+)\s*:(.*)$/) {
+        ($numeric, $target, $text) = ($1, $2, $3);
+    } elsif ($line =~ /^(?:@\S+\s+)?:\S+\s+(320|335)\s+([^:\s]+)\s*:(.*)$/) {
+        ($numeric, $target, $text) = ($1, $2, $3);
     } else {
         return;
     }
 
-    my $label = ($event eq '335') ? 'bot      ' : 'special  ';
+    my $server_tag = lc($server->{tag} // '');
 
-    $active_whois = {
-        server_tag => lc($server->{tag} // ''),
-        target     => lc($target),
-        label      => $label,
-        text       => $text,
-        stripped   => Irssi::strip_codes($text),
+    # Cancel any previous pending cleanup timer for this server
+    if (my $timer = delete $active_whois_timers{$server_tag}) {
+        Irssi::timeout_remove($timer);
+    }
+
+    my $label = ($numeric eq '335') ? 'bot      ' : 'special  ';
+
+    $active_whois{$server_tag} = {
+        target   => lc($target),
+        label    => $label,
+        text     => $text,
+        stripped => Irssi::strip_codes($text),
     };
+
+    # Scope lifecycle: clear unmatched state once control returns to event loop
+    $active_whois_timers{$server_tag} = Irssi::timeout_add_once(10, sub {
+        delete $active_whois{$server_tag};
+        delete $active_whois_timers{$server_tag};
+    }, undef);
+
+    # Do not call signal_stop() here: raw line dispatch proceeds to redirection,
+    # other scripts, and irssi PROXY clients.
 }
-
-sub sig_server_event_whois_end {
-    my ($server, $raw_data, $sender_nick, $sender_address) = @_;
-
-    return unless defined $raw_data;
-
-    my ($event, $data) = split(/\s+/, $raw_data, 2);
-    return unless defined $event && ($event eq '320' || $event eq '335');
-
-    $active_whois = undef;
-}
-
-# Capture numeric context before Irssi's redirection routing runs
-Irssi::signal_add_first('server event', \&sig_server_event_whois_start);
-
-# Clear context immediately after that numeric's event dispatch finishes
-Irssi::signal_add_last('server event', \&sig_server_event_whois_end);
+Irssi::signal_add('server incoming', \&sig_server_incoming_whois);
 
 sub sig_print_text_whois_special {
     my ($text_dest, $text, $stripped) = @_;
 
     return if $in_whois_print;
-    return unless $active_whois;
     return unless $text_dest->{level} & Irssi::MSGLEVEL_CRAP();
 
     my $server = $text_dest->{server};
     return unless $server;
 
-    # Correlate strictly with the active numeric's server tag and target nick
-    return unless lc($server->{tag} // '') eq $active_whois->{server_tag};
-    return unless lc($text_dest->{target} // '') eq $active_whois->{target};
+    my $server_tag = lc($server->{tag} // '');
+    my $item = $active_whois{$server_tag} or return;
 
-    if (length($active_whois->{stripped})) {
-        return if index($stripped, $active_whois->{stripped}) == -1;
+    # Correlate strictly with the active numeric's target nick
+    return unless lc($text_dest->{target} // '') eq $item->{target};
+
+    if (length($item->{stripped})) {
+        return if index($stripped, $item->{stripped}) == -1;
     }
 
-    my $item = $active_whois;
-    $active_whois = undef;
+    delete $active_whois{$server_tag};
+    if (my $timer = delete $active_whois_timers{$server_tag}) {
+        Irssi::timeout_remove($timer);
+    }
 
+    # Print through $server with original destination metadata to preserve
+    # server tags in shared windows and network/target log routing.
     $in_whois_print = 1;
     $server->printformat(
         $text_dest->{target},
@@ -2843,10 +2846,12 @@ Irssi::signal_add_first('print text', \&sig_print_text_whois_special);
 
 Irssi::signal_add('server disconnected', sub {
     my ($server) = @_;
-    return unless $server && $active_whois;
+    return unless $server;
 
-    if (lc($server->{tag} // '') eq $active_whois->{server_tag}) {
-        $active_whois = undef;
+    my $server_tag = lc($server->{tag} // '');
+    delete $active_whois{$server_tag};
+    if (my $timer = delete $active_whois_timers{$server_tag}) {
+        Irssi::timeout_remove($timer);
     }
 });
 
@@ -3234,6 +3239,12 @@ sub UNLOAD {
     return if $exited;
     typing_cleanup_all();
     exit_save();
+
+    for my $timer (values %active_whois_timers) {
+        Irssi::timeout_remove($timer);
+    }
+    %active_whois_timers = ();
+    %active_whois        = ();
 }
 
 sub exit_save {
