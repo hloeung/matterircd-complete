@@ -2755,22 +2755,16 @@ Irssi::theme_register([
     'whois_special_field', '%# $0: %|$1',
 ]);
 
+# Queue of pending WHOIS numerics waiting for the presentation layer to render:
+#   $pending_whois{server_tag} = [ { numeric => '335', text => '...', stripped => '...', label => '...' }, ... ]
 our %pending_whois;
 our %pending_whois_timers;
+our $in_whois_print = 0;
 
 sub sig_server_incoming_whois {
     my ($server, $line) = @_;
 
     return unless $server && chatnet_enabled($server);
-
-    my $server_tag = lc($server->{tag} // '');
-
-    # Clear any unmatched state left from a previous line before processing new input
-    if (delete $pending_whois{$server_tag}) {
-        if (my $timer = delete $pending_whois_timers{$server_tag}) {
-            Irssi::timeout_remove($timer);
-        }
-    }
 
     # Raw IRC format with optional IRCv3 tags:
     #   [@tags] :server 335 <my_nick> <target_nick> :<text>
@@ -2779,50 +2773,68 @@ sub sig_server_incoming_whois {
 
     my ($numeric, $text) = ($1, $2);
     my $label = ($numeric eq '335') ? 'bot      ' : 'special  ';
+    my $server_tag = lc($server->{tag} // '');
 
-    $pending_whois{$server_tag} = {
+    push @{$pending_whois{$server_tag}}, {
+        numeric  => $numeric,
         text     => $text,
         stripped => Irssi::strip_codes($text),
         label    => $label,
     };
 
-    # Scope replacement strictly to this numeric's processing turn and clear
-    # unmatched state once control returns to the event loop (>= 10ms required by Irssi).
-    $pending_whois_timers{$server_tag} = Irssi::timeout_add_once(10, sub {
-        delete $pending_whois{$server_tag};
-        delete $pending_whois_timers{$server_tag};
-    }, undef);
+    # Schedule cleanup if unmatched after this event-loop turn (>= 10ms required by Irssi)
+    if (!exists $pending_whois_timers{$server_tag}) {
+        $pending_whois_timers{$server_tag} = Irssi::timeout_add_once(10, sub {
+            delete $pending_whois{$server_tag};
+            delete $pending_whois_timers{$server_tag};
+        }, undef);
+    }
 }
 Irssi::signal_add('server incoming', 'sig_server_incoming_whois');
 
 sub sig_print_text_whois_special {
     my ($text_dest, $text, $stripped) = @_;
 
+    # Prevent reentrant invocation when printformat emits print text below
+    return if $in_whois_print;
+
+    # fe-whois.c renders unhandled whois numerics with MSGLEVEL_CRAP
     return unless $text_dest->{level} & Irssi::MSGLEVEL_CRAP();
 
     my $server = $text_dest->{server};
     return unless $server && chatnet_enabled($server);
 
     my $server_tag = lc($server->{tag} // '');
-    my $item = $pending_whois{$server_tag} or return;
+    my $queue = $pending_whois{$server_tag} or return;
 
-    return if index($stripped, $item->{stripped}) == -1;
+    for (my $i = 0; $i < @$queue; $i++) {
+        my $item = $queue->[$i];
+        next if index($stripped, $item->{stripped}) == -1;
 
-    delete $pending_whois{$server_tag};
-    if (my $timer = delete $pending_whois_timers{$server_tag}) {
-        Irssi::timeout_remove($timer);
+        # Match found: remove from pending queue
+        splice(@$queue, $i, 1);
+        if (!@$queue) {
+            delete $pending_whois{$server_tag};
+            if (my $timer = delete $pending_whois_timers{$server_tag}) {
+                Irssi::timeout_remove($timer);
+            }
+        }
+
+        # Guard reentrancy while printing through $server with original destination metadata
+        $in_whois_print = 1;
+        $server->printformat(
+            $text_dest->{target},
+            $text_dest->{level},
+            'whois_special_field',
+            $item->{label},
+            $item->{text}
+        );
+        $in_whois_print = 0;
+
+        # Suppress Irssi's default empty-labeled presentation line
+        Irssi::signal_stop();
+        return;
     }
-
-    # Print through $server with original target and level to preserve
-    # server tags in shared windows and network/target log routing.
-    $server->printformat(
-        $text_dest->{target},
-        $text_dest->{level},
-        'whois_special_field',
-        $item->{label},
-        $item->{text}
-    );
-    Irssi::signal_stop();
 }
 Irssi::signal_add_first('print text', 'sig_print_text_whois_special');
 
