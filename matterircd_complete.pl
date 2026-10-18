@@ -1314,15 +1314,6 @@ sub _sb_matterircd_thread_render {
 }
 
 sub queue_thread_preview {
-    # When triggered by 'gui key pressed', $_[0] is the integer key code.
-    # Avoid scheduling a 10ms timer on every keystroke during normal typing.
-    if (@_ == 1 && defined $_[0] && !ref($_[0])) {
-        if ($current_thread_preview eq '' && $current_thread_preview_full eq '' && $_[0] != 64) {
-            my $input = Irssi::parse_special('$L');
-            return if substr($input, 0, 1) ne '@';
-        }
-    }
-
     my $server = Irssi::active_server();
     return unless chatnet_enabled($server);
 
@@ -2269,6 +2260,10 @@ Irssi::signal_add_first('server event tags', sub {
     # Restrict to configured chatnets
     return unless chatnet_enabled($server);
 
+    # Fast C-level string search: bail out immediately on non-TAGMSG traffic
+    return if !defined($data) || index(lc($data), 'tagmsg') != 0;
+    return if !defined($tags) || index(lc($tags), '+typing=') == -1;
+
     # data format: "TAGMSG #channel" or "TAGMSG my_nick"
     return unless $data =~ /^TAGMSG\s+(.+)$/i;
     my $target = lc($1);
@@ -2312,6 +2307,9 @@ Irssi::signal_add_first('server event tags', sub {
 Irssi::signal_add('default event', sub {
     my ($server, $data, $nick, $address) = @_;
     return unless $server && $data && chatnet_enabled($server);
+
+    # Fast C-level string search: bail out immediately on non-TAGMSG events
+    return if index(lc($data), 'tagmsg') != 0;
 
     if ($data =~ /^TAGMSG\b/i) {
         Irssi::signal_stop();
