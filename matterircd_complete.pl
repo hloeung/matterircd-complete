@@ -2749,6 +2749,42 @@ Irssi::signal_add('query created',       sub { Irssi::statusbar_items_redraw('ma
 
 #==============================================================================
 
+# Format WHOIS bot / special numerics (335 RPL_WHOISBOT / 320 RPL_WHOISSPECIAL)
+
+Irssi::theme_register([
+    'whois_special_field', '%# $0: %|$1',
+]);
+
+sub sig_server_incoming_whois {
+    my ($server, $line) = @_;
+
+    return unless $server && chatnet_enabled($server);
+
+    # Raw IRC format: ":matterircd 335 <my_nick> <target_nick> :<text>"
+    # or ":matterircd 320 <my_nick> <target_nick> :<text>"
+    return unless $line =~ /^:\S+\s+(320|335)\s+\S+\s+(\S+)\s+:(.*)$/;
+    my ($numeric, $target, $text) = ($1, $2, $3);
+
+    my $label = ($numeric eq '335' || $text =~ /\bbot\b/i) ? 'bot' : 'special';
+    my $padded_label = sprintf("%-9s", $label);
+
+    my $win = $server->window_item_find($target);
+    my $w   = $win ? $win->{window} : Irssi::active_win();
+
+    if ($w) {
+        $w->printformat(Irssi::MSGLEVEL_CRAP(), 'whois_special_field', $padded_label, $text);
+    } else {
+        $server->printformat($target, Irssi::MSGLEVEL_CRAP(), 'whois_special_field', $padded_label, $text);
+    }
+
+    Irssi::signal_stop();
+}
+
+Irssi::signal_add_first('server incoming', 'sig_server_incoming_whois');
+
+
+#==============================================================================
+
 # Remove an array's elements per their values
 sub array_splice_values {
     my ($ar_ref, $uw_ref) = @_;
