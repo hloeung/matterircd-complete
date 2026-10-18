@@ -2821,11 +2821,11 @@ sub sig_server_event_whois {
 }
 Irssi::signal_add_first('server event', \&sig_server_event_whois);
 
-# Clear unmatched state immediately after synchronous numeric dispatch completes
-Irssi::signal_add_last('whois default event', sub { clear_active_whois($_[0]); });
-Irssi::signal_add_last('event 320',           sub { clear_active_whois($_[0]); });
-Irssi::signal_add_last('event 335',           sub { clear_active_whois($_[0]); });
-Irssi::signal_add('server disconnected',      sub { clear_active_whois($_[0]); });
+# Clear unmatched state at the end of raw incoming line dispatch (after irc_parse_incoming_line
+# and server event dispatch complete) without registering 'event 320'/'event 335' handlers
+# that would suppress Irssi's 'default event' fallback on unredirected /quote WHOIS replies.
+Irssi::signal_add_last('server incoming',   sub { clear_active_whois($_[0]); });
+Irssi::signal_add('server disconnected',    sub { clear_active_whois($_[0]); });
 
 sub sig_print_text_whois_special {
     my ($text_dest, $text, $stripped) = @_;
@@ -2863,17 +2863,11 @@ sub sig_print_text_whois_special {
     }
     return unless $item;
 
-    # Write directly to $text_dest->{window} to preserve output routing
-    # without triggering target lookup into open query windows
-    my $win = $text_dest->{window} // Irssi::active_win();
-    return unless $win;
-
-    # Escape literal % characters so Window::print does not parse them as theme codes
-    my $escaped = $item->{text};
-    $escaped =~ s/%/%%/g;
-
+    # Print directly through $text_dest->print to preserve the original destination's
+    # window, server, server-tag attribution, and target-scoped logging metadata.
+    # TextDest::print passes a literal "%s" format in C, so % escaping is not needed.
     $in_whois_print = 1;
-    $win->print("$item->{label}: $escaped", $text_dest->{level});
+    $text_dest->print("$item->{label}: $item->{text}");
     $in_whois_print = 0;
 
     Irssi::signal_stop();
