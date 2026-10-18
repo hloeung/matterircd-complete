@@ -3130,12 +3130,6 @@ sub UNLOAD {
     return if $exited;
     typing_cleanup_all();
     exit_save();
-
-    for my $timer (values %active_whois_timers) {
-        Irssi::timeout_remove($timer);
-    }
-    %active_whois_timers = ();
-    %active_whois        = ();
 }
 
 sub exit_save {
