@@ -2759,10 +2759,13 @@ our $active_whois;
 our $in_whois_print = 0;
 
 sub sig_server_event_whois_start {
-    my ($server, $event, $data, $sender_nick, $sender_address) = @_;
+    my ($server, $raw_data, $sender_nick, $sender_address) = @_;
 
     return unless $server && chatnet_enabled($server);
-    return unless $event eq '320' || $event eq '335';
+    return unless defined $raw_data;
+
+    my ($event, $data) = split(/\s+/, $raw_data, 2);
+    return unless defined $event && ($event eq '320' || $event eq '335');
 
     # IRC numeric parameter structure: "<client_nick> <target_nick> :<text>" or "<target_nick> :<text>"
     my ($target, $text);
@@ -2786,9 +2789,13 @@ sub sig_server_event_whois_start {
 }
 
 sub sig_server_event_whois_end {
-    my ($server, $event, $data, $sender_nick, $sender_address) = @_;
+    my ($server, $raw_data, $sender_nick, $sender_address) = @_;
 
-    return unless $event eq '320' || $event eq '335';
+    return unless defined $raw_data;
+
+    my ($event, $data) = split(/\s+/, $raw_data, 2);
+    return unless defined $event && ($event eq '320' || $event eq '335');
+
     $active_whois = undef;
 }
 
