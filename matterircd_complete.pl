@@ -264,6 +264,8 @@ sub xcolor_to_irssi {
 # https://github.com/irssi/irssi/issues/1508
 # https://modern.ircdocs.horse/formatting#hex-color
 sub hex_to_ansi {
+    return $_[0] if index($_[0], "\x04") == -1;
+
     $_[0] =~ s{
         \x04 ([[:xdigit:]]{2}) ([[:xdigit:]]{2}) ([[:xdigit:]]{2})
         ( ,  ([[:xdigit:]]{2}) ([[:xdigit:]]{2}) ([[:xdigit:]]{2}) )?
@@ -282,6 +284,8 @@ sub hex_to_ansi {
 # Convert modern IRC strikethrough (0x1e) to ANSI escape sequences
 # https://modern.ircdocs.horse/formatting.html#strikethrough
 sub strikethrough_to_ansi {
+    return $_[0] if index($_[0], "\x1e") == -1;
+
     my $text = $_[0];
     my $toggle = 0;
 
@@ -306,7 +310,7 @@ sub get_thread_format {
     my ($str) = @_;
     my $n = 0;
     $str = lc $str;
-    foreach ($str =~ /[$chr]/g) {
+    foreach ($str =~ /[0-9a-z]/g) {
         $n += $nums{$_} * 36;
     }
     # Don't copy the list on every call. Fall back to all colors if it is empty
@@ -330,10 +334,10 @@ sub get_thread_format {
     if ($classes == 4 and $n >= $color_count*3) {
         $n -= $color_count*3;
         $prepend = $classes_prepend[2];
-    } elsif ($classes ge 3 and $n >= $color_count*2) {
+    } elsif ($classes >= 3 and $n >= $color_count*2) {
         $n -= $color_count*2;
         $prepend = $classes_prepend[1];
-    } elsif ($classes ge 2 and $n >= $color_count) {
+    } elsif ($classes >= 2 and $n >= $color_count) {
         $n -= $color_count;
         $prepend = $classes_prepend[0];
     }
@@ -382,15 +386,15 @@ Irssi::command_bind('matterircd_complete_thread_id_get_color', 'cmd_matterircd_c
 # rather than on every message/keypress/completion.
 my $CHATNETS_RAW;
 my %CHATNETS;
+
 sub chatnet_enabled {
     my ($server_or_chatnet) = @_;
 
     return 0 unless defined $server_or_chatnet;
 
-    my $raw = Irssi::settings_get_str('matterircd_complete_networks');
-    if (!defined($CHATNETS_RAW) || $raw ne $CHATNETS_RAW) {
-        $CHATNETS_RAW = $raw;
-        %CHATNETS = map { lc($_) => 1 } split(/\s+/, $raw);
+    if (!defined($CHATNETS_RAW)) {
+        $CHATNETS_RAW = Irssi::settings_get_str('matterircd_complete_networks');
+        %CHATNETS = map { lc($_) => 1 } split(/\s+/, $CHATNETS_RAW);
     }
     return 1 if exists $CHATNETS{'*'};
 
@@ -410,10 +414,9 @@ sub nick_ignored {
 
     return 0 unless defined $nick;
 
-    my $raw = Irssi::settings_get_str('matterircd_complete_nick_ignore');
-    if (!defined($NICK_IGNORE_RAW) || $raw ne $NICK_IGNORE_RAW) {
-        $NICK_IGNORE_RAW = $raw;
-        %NICK_IGNORE = map { $_ => 1 } split(/\s+/, $raw);
+    if (!defined($NICK_IGNORE_RAW)) {
+        $NICK_IGNORE_RAW = Irssi::settings_get_str('matterircd_complete_nick_ignore');
+        %NICK_IGNORE = map { $_ => 1 } split(/\s+/, $NICK_IGNORE_RAW);
     }
     return exists $NICK_IGNORE{$nick};
 }
@@ -425,10 +428,9 @@ sub channel_dont_ignore {
 
     return 0 unless defined $target;
 
-    my $raw = Irssi::settings_get_str('matterircd_complete_channel_dont_ignore');
-    if (!defined($CHANNEL_DONT_IGNORE_RAW) || $raw ne $CHANNEL_DONT_IGNORE_RAW) {
-        $CHANNEL_DONT_IGNORE_RAW = $raw;
-        %CHANNEL_DONT_IGNORE = map { lc($_) => 1 } split(/\s+/, $raw);
+    if (!defined($CHANNEL_DONT_IGNORE_RAW)) {
+        $CHANNEL_DONT_IGNORE_RAW = Irssi::settings_get_str('matterircd_complete_channel_dont_ignore');
+        %CHANNEL_DONT_IGNORE = map { lc($_) => 1 } split(/\s+/, $CHANNEL_DONT_IGNORE_RAW);
     }
     return exists $CHANNEL_DONT_IGNORE{lc($target)};
 }
@@ -1905,20 +1907,6 @@ sub signal_message_public {
 
     clear_typing($server->{tag}, lc($target), $nick);
 
-    # If this message is a reply to a thread, also clear the dedicated @@thread window
-    my $tid;
-    if ($msg =~ /\[(?:->|↪)?\@\@([0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43})[\],]/) {
-        $tid = $1;
-    } elsif ($msg =~ /\[(?:->|↪)?([0-9a-f]{3})[\],]/) {
-        $tid = $1;
-    }
-
-    if (defined $tid) {
-        $tid = lc($tid);
-        clear_typing($server->{tag}, "\@\@${tid}", $nick);
-    }
-
-    return unless Irssi::settings_get_int('matterircd_complete_replied_cache_size');
     return if index($msg, '[') == -1;
 
     # For '/me' actions, it has trailing space so we need to use
@@ -1931,6 +1919,12 @@ sub signal_message_public {
     } else {
         return;
     }
+
+    # If this message is a reply to a thread, also clear the dedicated @@thread window
+    my $tid = lc($msgthreadid);
+    clear_typing($server->{tag}, "\@\@${tid}", $nick);
+
+    return unless Irssi::settings_get_int('matterircd_complete_replied_cache_size');
 
     if ($nick eq $server->{nick}) {
         my $cache_size = Irssi::settings_get_int('matterircd_complete_replied_cache_size');
@@ -1982,10 +1976,9 @@ Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_reactions', 
 my $REACTIONS_DEFAULT_RAW;
 my @REACTIONS_DEFAULT;
 sub default_reactions {
-    my $raw = Irssi::settings_get_str('matterircd_complete_reactions');
-    if (!defined($REACTIONS_DEFAULT_RAW) || $raw ne $REACTIONS_DEFAULT_RAW) {
-        $REACTIONS_DEFAULT_RAW = $raw;
-        @REACTIONS_DEFAULT = split(/\s+/, $raw);
+    if (!defined($REACTIONS_DEFAULT_RAW)) {
+        $REACTIONS_DEFAULT_RAW = Irssi::settings_get_str('matterircd_complete_reactions');
+        @REACTIONS_DEFAULT = split(/\s+/, $REACTIONS_DEFAULT_RAW);
     }
     return @REACTIONS_DEFAULT;
 }
@@ -2267,6 +2260,10 @@ Irssi::signal_add_first('server event tags', sub {
     # Restrict to configured chatnets
     return unless chatnet_enabled($server);
 
+    # Fast C-level string search: bail out immediately on non-TAGMSG traffic
+    return if !defined($data) || index(lc($data), 'tagmsg') != 0;
+    return if !defined($tags) || index(lc($tags), '+typing=') == -1;
+
     # data format: "TAGMSG #channel" or "TAGMSG my_nick"
     return unless $data =~ /^TAGMSG\s+(.+)$/i;
     my $target = lc($1);
@@ -2310,6 +2307,9 @@ Irssi::signal_add_first('server event tags', sub {
 Irssi::signal_add('default event', sub {
     my ($server, $data, $nick, $address) = @_;
     return unless $server && $data && chatnet_enabled($server);
+
+    # Fast C-level string search: bail out immediately on non-TAGMSG events
+    return if index(lc($data), 'tagmsg') != 0;
 
     if ($data =~ /^TAGMSG\b/i) {
         Irssi::signal_stop();
@@ -3125,6 +3125,19 @@ sub typing_cleanup_all {
     %typing_threads = ();
     %typing_window_activity_promoted = ();
 }
+
+Irssi::signal_add('setup changed', sub {
+    $CHATNETS_RAW            = undef;
+    $NICK_IGNORE_RAW         = undef;
+    $CHANNEL_DONT_IGNORE_RAW = undef;
+    $REACTIONS_DEFAULT_RAW   = undef;
+});
+Irssi::signal_add('setup reread', sub {
+    $CHATNETS_RAW            = undef;
+    $NICK_IGNORE_RAW         = undef;
+    $CHANNEL_DONT_IGNORE_RAW = undef;
+    $REACTIONS_DEFAULT_RAW   = undef;
+});
 
 sub UNLOAD {
     return if $exited;
