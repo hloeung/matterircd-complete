@@ -2755,32 +2755,49 @@ Irssi::theme_register([
     'whois_special_field', '%# $0: %|$1',
 ]);
 
+# Maps $server_tag -> { $payload_text => $padded_label }
+our %pending_whois;
+
 sub sig_server_incoming_whois {
     my ($server, $line) = @_;
 
     return unless $server && chatnet_enabled($server);
+    return unless $line =~ /^:\S+\s+(320|335)\s+\S+\s+\S+\s+:(.*)$/;
 
-    # Raw IRC format: ":matterircd 335 <my_nick> <target_nick> :<text>"
-    # or ":matterircd 320 <my_nick> <target_nick> :<text>"
-    return unless $line =~ /^:\S+\s+(320|335)\s+\S+\s+(\S+)\s+:(.*)$/;
-    my ($numeric, $target, $text) = ($1, $2, $3);
+    my ($numeric, $text) = ($1, $2);
+    my $label = ($numeric eq '335') ? 'bot      ' : 'special  ';
 
-    my $label = ($numeric eq '335' || $text =~ /\bbot\b/i) ? 'bot' : 'special';
-    my $padded_label = sprintf("%-9s", $label);
-
-    my $win = $server->window_item_find($target);
-    my $w   = $win ? $win->{window} : Irssi::active_win();
-
-    if ($w) {
-        $w->printformat(Irssi::MSGLEVEL_CRAP(), 'whois_special_field', $padded_label, $text);
-    } else {
-        $server->printformat($target, Irssi::MSGLEVEL_CRAP(), 'whois_special_field', $padded_label, $text);
-    }
-
-    Irssi::signal_stop();
+    $pending_whois{lc($server->{tag} // '')}{$text} = $label;
 }
+Irssi::signal_add('server incoming', 'sig_server_incoming_whois');
 
-Irssi::signal_add_first('server incoming', 'sig_server_incoming_whois');
+sub sig_print_text_whois_special {
+    my ($text_dest, $text, $stripped) = @_;
+
+    return unless $text_dest->{level} & Irssi::MSGLEVEL_CRAP();
+
+    my $server = $text_dest->{server};
+    return unless $server && chatnet_enabled($server);
+
+    my $pending = $pending_whois{lc($server->{tag} // '')} or return;
+
+    for my $item (keys %$pending) {
+        next if index($stripped, $item) == -1;
+
+        my $label = delete $pending->{$item};
+        my $win   = $text_dest->{window} // Irssi::active_win();
+
+        $win->printformat(Irssi::MSGLEVEL_CRAP(), 'whois_special_field', $label, $item);
+        Irssi::signal_stop();
+        return;
+    }
+}
+Irssi::signal_add_first('print text', 'sig_print_text_whois_special');
+
+Irssi::signal_add('server disconnected', sub {
+    my ($server) = @_;
+    delete $pending_whois{lc($server->{tag} // '')} if $server;
+});
 
 
 #==============================================================================
