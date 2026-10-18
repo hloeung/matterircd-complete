@@ -2755,19 +2755,43 @@ Irssi::theme_register([
     'whois_special_field', '%# $0: %|$1',
 ]);
 
-# Maps $server_tag -> { $payload_text => $padded_label }
 our %pending_whois;
+our %pending_whois_timers;
 
 sub sig_server_incoming_whois {
     my ($server, $line) = @_;
 
     return unless $server && chatnet_enabled($server);
-    return unless $line =~ /^:\S+\s+(320|335)\s+\S+\s+\S+\s+:(.*)$/;
+
+    my $server_tag = lc($server->{tag} // '');
+
+    # Clear any unmatched state left from a previous line before processing new input
+    if (delete $pending_whois{$server_tag}) {
+        if (my $timer = delete $pending_whois_timers{$server_tag}) {
+            Irssi::timeout_remove($timer);
+        }
+    }
+
+    # Raw IRC format with optional IRCv3 tags:
+    #   [@tags] :server 335 <my_nick> <target_nick> :<text>
+    #   [@tags] :server 320 <my_nick> <target_nick> :<text>
+    return unless $line =~ /^(?:@\S+\s+)?:\S+\s+(320|335)\s+\S+\s+\S+\s+:(.*)$/;
 
     my ($numeric, $text) = ($1, $2);
     my $label = ($numeric eq '335') ? 'bot      ' : 'special  ';
 
-    $pending_whois{lc($server->{tag} // '')}{$text} = $label;
+    $pending_whois{$server_tag} = {
+        text     => $text,
+        stripped => Irssi::strip_codes($text),
+        label    => $label,
+    };
+
+    # Scope replacement strictly to this numeric's processing turn and clear
+    # unmatched state once control returns to the event loop (>= 10ms required by Irssi).
+    $pending_whois_timers{$server_tag} = Irssi::timeout_add_once(10, sub {
+        delete $pending_whois{$server_tag};
+        delete $pending_whois_timers{$server_tag};
+    }, undef);
 }
 Irssi::signal_add('server incoming', 'sig_server_incoming_whois');
 
@@ -2780,28 +2804,32 @@ sub sig_print_text_whois_special {
     return unless $server && chatnet_enabled($server);
 
     my $server_tag = lc($server->{tag} // '');
-    my $pending = $pending_whois{$server_tag} or return;
+    my $item = $pending_whois{$server_tag} or return;
 
-    for my $item (keys %$pending) {
-        next if index($stripped, Irssi::strip_codes($item)) == -1;
+    return if index($stripped, $item->{stripped}) == -1;
 
-        my $label = delete $pending->{$item};
-        delete $pending_whois{$server_tag} unless keys %$pending;
-
-        # Honor Irssi's resolved WHOIS window destination
-        my $win = $text_dest->{window};
-        return unless $win;
-
-        $win->printformat(Irssi::MSGLEVEL_CRAP(), 'whois_special_field', $label, $item);
-        Irssi::signal_stop();
-        return;
+    delete $pending_whois{$server_tag};
+    if (my $timer = delete $pending_whois_timers{$server_tag}) {
+        Irssi::timeout_remove($timer);
     }
+
+    my $win = $text_dest->{window};
+    return unless $win;
+
+    $win->printformat(Irssi::MSGLEVEL_CRAP(), 'whois_special_field', $item->{label}, $item->{text});
+    Irssi::signal_stop();
 }
 Irssi::signal_add_first('print text', 'sig_print_text_whois_special');
 
 Irssi::signal_add('server disconnected', sub {
     my ($server) = @_;
-    delete $pending_whois{lc($server->{tag} // '')} if $server;
+    return unless $server;
+
+    my $server_tag = lc($server->{tag} // '');
+    delete $pending_whois{$server_tag};
+    if (my $timer = delete $pending_whois_timers{$server_tag}) {
+        Irssi::timeout_remove($timer);
+    }
 });
 
 
