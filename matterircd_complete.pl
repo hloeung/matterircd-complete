@@ -1414,23 +1414,35 @@ sub signal_send_text {
     return unless $wi->{type} eq 'CHANNEL' || $wi->{type} eq 'QUERY';
     return unless Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
 
-    if ($current_thread_preview ne '' || $current_thread_preview_full ne '') {
-        $current_thread_preview = '';
-        $current_thread_preview_full = '';
-        Irssi::statusbar_items_redraw('matterircd_thread');
-        Irssi::statusbar_items_redraw('matterircd_thread_full');
-    }
-
     if ($line =~ /^@@([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})(\s.*)?$/) {
         my $id = $1;
         my $rest = $2 // '';
         my $target = $wi->{name};
+
+        # Prevent sending an accidental bare thread ID without message content
+        if ($rest !~ /\S/) {
+            Irssi::signal_stop();
+            Irssi::gui_input_set($line =~ /\s$/ ? $line : "${line} ");
+            return;
+        }
+
+        if ($current_thread_preview ne '' || $current_thread_preview_full ne '') {
+            $current_thread_preview = '';
+            $current_thread_preview_full = '';
+            Irssi::statusbar_items_redraw('matterircd_thread');
+            Irssi::statusbar_items_redraw('matterircd_thread_full');
+        }
 
         my $full_id = msgthreadid_find($target, $id);
         if ($full_id && $full_id ne $id) {
             $line = "\@\@${full_id}${rest}";
             Irssi::signal_continue($line, $server, $wi);
         }
+    } elsif ($current_thread_preview ne '' || $current_thread_preview_full ne '') {
+        $current_thread_preview = '';
+        $current_thread_preview_full = '';
+        Irssi::statusbar_items_redraw('matterircd_thread');
+        Irssi::statusbar_items_redraw('matterircd_thread_full');
     }
 }
 Irssi::signal_add_first('send text', 'signal_send_text');
