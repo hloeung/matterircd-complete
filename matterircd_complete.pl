@@ -1353,7 +1353,7 @@ sub update_thread_preview {
     }
 
     my $window = Irssi::active_win();
-    unless ($window && $window->{active_server} && $window->{active} && chatnet_enabled($window->{active_server})) {
+    unless ($window && $window->{active} && chatnet_enabled($window->{active_server})) {
         if ($current_thread_preview ne '' || $current_thread_preview_full ne '') {
             $current_thread_preview = '';
             $current_thread_preview_full = '';
@@ -2306,7 +2306,7 @@ Irssi::signal_add_first('server event tags', sub {
 # Silence unknown command TAGMSG warnings without breaking signal flow
 Irssi::signal_add('default event', sub {
     my ($server, $data, $nick, $address) = @_;
-    return unless $server && $data && chatnet_enabled($server);
+    return unless $data && chatnet_enabled($server);
 
     # Fast C-level string search: bail out immediately on non-TAGMSG events
     return if index(lc($data), 'tagmsg') != 0;
@@ -2758,7 +2758,7 @@ our $in_whois_print = 0;
 sub sig_server_event_whois {
     my ($server, $raw_data, $sender_nick, $sender_address) = @_;
 
-    return unless $server && chatnet_enabled($server);
+    return unless chatnet_enabled($server);
     return unless defined $raw_data;
 
     # Fast C-level scan: ignore anything that isn't numeric 320 or 335
@@ -2796,13 +2796,13 @@ sub sig_server_event_whois {
         stripped => Irssi::strip_codes($text),
     };
 
-    if (my $timer = delete $active_whois_timers{$server_tag}) {
-        Irssi::timeout_remove($timer);
+    # Schedule cleanup timeout only if one isn't already active to prevent starvation
+    if (!exists $active_whois_timers{$server_tag}) {
+        $active_whois_timers{$server_tag} = Irssi::timeout_add_once(200, sub {
+            delete $active_whois{$server_tag};
+            delete $active_whois_timers{$server_tag};
+        }, undef);
     }
-    $active_whois_timers{$server_tag} = Irssi::timeout_add_once(200, sub {
-        delete $active_whois{$server_tag};
-        delete $active_whois_timers{$server_tag};
-    }, undef);
 }
 Irssi::signal_add_first('server event', \&sig_server_event_whois);
 
@@ -2816,7 +2816,8 @@ sub sig_print_text_whois_special {
     return unless $stripped =~ /\s{8,}:/ || $text =~ /\s{8,}:/;
 
     my $server = $text_dest->{server};
-    my $server_tag = $server ? lc($server->{tag} // '') : '';
+    return unless chatnet_enabled($server);
+    my $server_tag = lc($server->{tag} // '');
 
     my $item;
     if ($server_tag ne '' && exists $active_whois{$server_tag} && @{$active_whois{$server_tag}}) {
