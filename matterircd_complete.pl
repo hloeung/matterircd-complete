@@ -1314,6 +1314,15 @@ sub _sb_matterircd_thread_render {
 }
 
 sub queue_thread_preview {
+    # When triggered by 'gui key pressed', $_[0] is the integer key code.
+    # Avoid scheduling a 10ms timer on every keystroke during normal typing.
+    if (@_ == 1 && defined $_[0] && !ref($_[0])) {
+        if ($current_thread_preview eq '' && $current_thread_preview_full eq '' && $_[0] != 64) {
+            my $input = Irssi::parse_special('$L');
+            return if substr($input, 0, 1) ne '@';
+        }
+    }
+
     my $server = Irssi::active_server();
     return unless chatnet_enabled($server);
 
