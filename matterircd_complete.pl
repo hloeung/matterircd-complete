@@ -1517,12 +1517,20 @@ sub signal_complete_word_nicks {
     }
     @tmp = sort @tmp;
     my %in_channel = map { $_ => 1 } @tmp;
+
+    my $prefix = '@';
+    # Commands taking standard IRC nicknames without the Mattermost '@' prefix.
+    # Irssi omits trailing whitespace from $linestart, so \b is used instead of \s+.
+    if ($linestart && $linestart =~ /^\s*\/(?:whois|wii?|w)\b/i) {
+        $prefix = '';
+    }
+
     foreach my $nick (@tmp) {
         # Only add completion character on line start.
         if (not $linestart) {
-            push(@$complist, "\@${nick}${compl_char}");
+            push(@$complist, "${prefix}${nick}${compl_char}");
         } else {
-            push(@$complist, "\@${nick}");
+            push(@$complist, "${prefix}${nick}");
         }
     }
 
@@ -1537,9 +1545,9 @@ sub signal_complete_word_nicks {
         my $nick_compl;
         # Only add completion character on line start.
         if (not $linestart) {
-            $nick_compl = "\@${nick}${compl_char}";
+            $nick_compl = "${prefix}${nick}${compl_char}";
         } else {
-            $nick_compl = "\@${nick}";
+            $nick_compl = "${prefix}${nick}";
         }
         # Skip over if nick is already first in completion list.
         if ((scalar(@{$complist}) > 0) and ($nick_compl eq @{$complist}[0])) {
@@ -1549,9 +1557,9 @@ sub signal_complete_word_nicks {
         elsif ($in_channel{$nick}) {
             # Only add completion character on line start.
             if (not $linestart) {
-                unshift(@$complist, "\@${nick}${compl_char}");
+                unshift(@$complist, "${prefix}${nick}${compl_char}");
             } else {
-                unshift(@$complist, "\@${nick}");
+                unshift(@$complist, "${prefix}${nick}");
             }
         }
     }
