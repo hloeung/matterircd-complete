@@ -264,6 +264,8 @@ sub xcolor_to_irssi {
 # https://github.com/irssi/irssi/issues/1508
 # https://modern.ircdocs.horse/formatting#hex-color
 sub hex_to_ansi {
+    return $_[0] if index($_[0], "\x04") == -1;
+
     $_[0] =~ s{
         \x04 ([[:xdigit:]]{2}) ([[:xdigit:]]{2}) ([[:xdigit:]]{2})
         ( ,  ([[:xdigit:]]{2}) ([[:xdigit:]]{2}) ([[:xdigit:]]{2}) )?
@@ -282,6 +284,8 @@ sub hex_to_ansi {
 # Convert modern IRC strikethrough (0x1e) to ANSI escape sequences
 # https://modern.ircdocs.horse/formatting.html#strikethrough
 sub strikethrough_to_ansi {
+    return $_[0] if index($_[0], "\x1e") == -1;
+
     my $text = $_[0];
     my $toggle = 0;
 
