@@ -2812,49 +2812,27 @@ sub sig_print_text_whois_special {
     return if $in_whois_print;
     return unless $text_dest->{level} & Irssi::MSGLEVEL_CRAP();
 
-    # Fast check: fe-whois.c formats unknown numerics with 8+ blank spaces before the colon
-    return unless $stripped =~ /\s{8,}:/ || $text =~ /\s{8,}:/;
-
     my $server = $text_dest->{server};
     return unless chatnet_enabled($server);
+
     my $server_tag = lc($server->{tag} // '');
+    my $queue = $active_whois{$server_tag} or return;
+    return unless @$queue;
 
+    # Correlate strictly through captured numeric dispatch context
     my $item;
-    if ($server_tag ne '' && exists $active_whois{$server_tag} && @{$active_whois{$server_tag}}) {
-        my $queue = $active_whois{$server_tag};
-        for (my $i = 0; $i < @$queue; $i++) {
-            if (length($queue->[$i]{stripped}) && index($stripped, $queue->[$i]{stripped}) != -1) {
-                $item = splice(@$queue, $i, 1);
-                if (!@$queue) {
-                    delete $active_whois{$server_tag};
-                    if (my $timer = delete $active_whois_timers{$server_tag}) {
-                        Irssi::timeout_remove($timer);
-                    }
+    for (my $i = 0; $i < @$queue; $i++) {
+        if (length($queue->[$i]{stripped}) && index($stripped, $queue->[$i]{stripped}) != -1) {
+            $item = splice(@$queue, $i, 1);
+            if (!@$queue) {
+                delete $active_whois{$server_tag};
+                if (my $timer = delete $active_whois_timers{$server_tag}) {
+                    Irssi::timeout_remove($timer);
                 }
-                last;
             }
+            last;
         }
     }
-
-    # Fallback to payload signatures if numeric was consumed before redirection
-    if (!$item) {
-        if ($stripped =~ /is a bot\b/i) {
-            my $payload = $stripped;
-            $payload =~ s/^.*?\s:\s*//;
-            $item = {
-                label => ' bot      ',
-                text  => $payload,
-            };
-        } elsif ($stripped =~ /\b(?:online|offline|away)\b/i) {
-            my $payload = $stripped;
-            $payload =~ s/^.*?\s:\s*//;
-            $item = {
-                label => ' special  ',
-                text  => $payload,
-            };
-        }
-    }
-
     return unless $item;
 
     # Write directly to $text_dest->{window} to preserve output routing
@@ -2862,8 +2840,13 @@ sub sig_print_text_whois_special {
     my $win = $text_dest->{window} // Irssi::active_win();
     return unless $win;
 
+    # Escape literal % characters so Window::print does not parse them as theme codes
+    my $escaped = $item->{text};
+    $escaped =~ s/%/%%/g;
+
+    # Print label and escaped payload; Irssi's crap format prepends '-!- ' once
     $in_whois_print = 1;
-    $win->print("$item->{label}: $item->{text}", $text_dest->{level});
+    $win->print("$item->{label}: $escaped", $text_dest->{level});
     $in_whois_print = 0;
 
     Irssi::signal_stop();
