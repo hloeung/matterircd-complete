@@ -1907,20 +1907,6 @@ sub signal_message_public {
 
     clear_typing($server->{tag}, lc($target), $nick);
 
-    # If this message is a reply to a thread, also clear the dedicated @@thread window
-    my $tid;
-    if ($msg =~ /\[(?:->|↪)?\@\@([0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43})[\],]/) {
-        $tid = $1;
-    } elsif ($msg =~ /\[(?:->|↪)?([0-9a-f]{3})[\],]/) {
-        $tid = $1;
-    }
-
-    if (defined $tid) {
-        $tid = lc($tid);
-        clear_typing($server->{tag}, "\@\@${tid}", $nick);
-    }
-
-    return unless Irssi::settings_get_int('matterircd_complete_replied_cache_size');
     return if index($msg, '[') == -1;
 
     # For '/me' actions, it has trailing space so we need to use
@@ -1933,6 +1919,12 @@ sub signal_message_public {
     } else {
         return;
     }
+
+    # If this message is a reply to a thread, also clear the dedicated @@thread window
+    my $tid = lc($msgthreadid);
+    clear_typing($server->{tag}, "\@\@${tid}", $nick);
+
+    return unless Irssi::settings_get_int('matterircd_complete_replied_cache_size');
 
     if ($nick eq $server->{nick}) {
         my $cache_size = Irssi::settings_get_int('matterircd_complete_replied_cache_size');
