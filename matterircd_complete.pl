@@ -2764,6 +2764,9 @@ sub sig_server_incoming_whois {
 
     return unless $server && chatnet_enabled($server);
 
+    # Fast C-level string search: bail out immediately on non-target traffic
+    return if index($line, ' 320 ') == -1 && index($line, ' 335 ') == -1;
+
     # Raw IRC format with optional IRCv3 tags:
     #   [@tags] :server 335 <client_nick> <target_nick> :<text>
     #   [@tags] :server 320 <client_nick> <target_nick> :<text>
