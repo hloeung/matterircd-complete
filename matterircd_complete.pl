@@ -2796,9 +2796,11 @@ sub sig_server_event_whois {
         stripped => Irssi::strip_codes($text),
     };
 
-    # Schedule cleanup timeout only if one isn't already active to prevent starvation
+    # Scope lifecycle strictly to the synchronous numeric dispatch:
+    # 10 ms is Irssi's API minimum. It runs as soon as control returns to the event loop,
+    # purging any unprinted captures before unrelated network traffic is handled.
     if (!exists $active_whois_timers{$server_tag}) {
-        $active_whois_timers{$server_tag} = Irssi::timeout_add_once(200, sub {
+        $active_whois_timers{$server_tag} = Irssi::timeout_add_once(10, sub {
             delete $active_whois{$server_tag};
             delete $active_whois_timers{$server_tag};
         }, undef);
@@ -2814,14 +2816,20 @@ sub sig_print_text_whois_special {
 
     my $server = $text_dest->{server};
     return unless chatnet_enabled($server);
-
     my $server_tag = lc($server->{tag} // '');
+
     my $queue = $active_whois{$server_tag} or return;
     return unless @$queue;
+
+    my $dest_target = lc($text_dest->{target} // '');
 
     # Correlate strictly through captured numeric dispatch context
     my $item;
     for (my $i = 0; $i < @$queue; $i++) {
+        if ($dest_target ne '' && $dest_target ne $queue->[$i]{target}) {
+            next;
+        }
+
         if (length($queue->[$i]{stripped}) && index($stripped, $queue->[$i]{stripped}) != -1) {
             $item = splice(@$queue, $i, 1);
             if (!@$queue) {
@@ -2835,8 +2843,6 @@ sub sig_print_text_whois_special {
     }
     return unless $item;
 
-    # Write directly to $text_dest->{window} to preserve output routing
-    # without triggering target lookup into open query windows
     my $win = $text_dest->{window} // Irssi::active_win();
     return unless $win;
 
