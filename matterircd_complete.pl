@@ -2758,12 +2758,13 @@ Irssi::theme_register([
 our $active_whois;
 our $in_whois_print = 0;
 
-sub whois_special_start {
-    my ($server, $data, $label) = @_;
+sub sig_server_event_whois_start {
+    my ($server, $event, $data, $sender_nick, $sender_address) = @_;
 
     return unless $server && chatnet_enabled($server);
+    return unless $event eq '320' || $event eq '335';
 
-    # Irssi delivers $data as: "<my_nick> <target_nick> :<text>" or "<target_nick> :<text>"
+    # IRC numeric parameter structure: "<client_nick> <target_nick> :<text>" or "<target_nick> :<text>"
     my ($target, $text);
     if ($data =~ /^\S+\s+(\S+)\s*:(.*)$/s) {
         ($target, $text) = ($1, $2);
@@ -2772,6 +2773,8 @@ sub whois_special_start {
     } else {
         return;
     }
+
+    my $label = ($event eq '335') ? 'bot      ' : 'special  ';
 
     $active_whois = {
         server_tag => lc($server->{tag} // ''),
@@ -2782,17 +2785,18 @@ sub whois_special_start {
     };
 }
 
-sub whois_special_end {
+sub sig_server_event_whois_end {
+    my ($server, $event, $data, $sender_nick, $sender_address) = @_;
+
+    return unless $event eq '320' || $event eq '335';
     $active_whois = undef;
 }
 
-# Preserve protocol dispatch: record active numeric context before fe-whois.c runs
-Irssi::signal_add_first('event 320', sub { whois_special_start($_[0], $_[1], 'special  '); });
-Irssi::signal_add_first('event 335', sub { whois_special_start($_[0], $_[1], 'bot      '); });
+# Capture numeric context before Irssi's redirection routing runs
+Irssi::signal_add_first('server event', \&sig_server_event_whois_start);
 
-# Clear active state immediately after numeric processing finishes
-Irssi::signal_add_last('event 320', \&whois_special_end);
-Irssi::signal_add_last('event 335', \&whois_special_end);
+# Clear context immediately after that numeric's event dispatch finishes
+Irssi::signal_add_last('server event', \&sig_server_event_whois_end);
 
 sub sig_print_text_whois_special {
     my ($text_dest, $text, $stripped) = @_;
@@ -2804,7 +2808,7 @@ sub sig_print_text_whois_special {
     my $server = $text_dest->{server};
     return unless $server;
 
-    # Correlate strictly with the active numeric's server and target
+    # Correlate strictly with the active numeric's server tag and target nick
     return unless lc($server->{tag} // '') eq $active_whois->{server_tag};
     return unless lc($text_dest->{target} // '') eq $active_whois->{target};
 
@@ -2825,10 +2829,19 @@ sub sig_print_text_whois_special {
     );
     $in_whois_print = 0;
 
-    # Suppress fe-whois.c's default empty-labeled line
+    # Suppress fe-whois.c's default empty-labeled presentation line
     Irssi::signal_stop();
 }
-Irssi::signal_add_first('print text', 'sig_print_text_whois_special');
+Irssi::signal_add_first('print text', \&sig_print_text_whois_special);
+
+Irssi::signal_add('server disconnected', sub {
+    my ($server) = @_;
+    return unless $server && $active_whois;
+
+    if (lc($server->{tag} // '') eq $active_whois->{server_tag}) {
+        $active_whois = undef;
+    }
+});
 
 
 #==============================================================================
