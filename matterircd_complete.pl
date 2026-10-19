@@ -2788,26 +2788,49 @@ sub sig_server_event_whois {
     my $colon = index($data, ' :');
     return if $colon == -1;
 
-    my $text   = substr($data, $colon + 2);
-    my $params = substr($data, 0, $colon);
+    my $raw_payload = substr($data, $colon + 2);
+    my $params      = substr($data, 0, $colon);
 
-    # Extract target nick: either "<client> <target>" or "<target>"
     my @p = split(' ', $params);
     return unless @p >= 1;
 
     my $target = (@p >= 2) ? $p[1] : $p[0];
     return if index($target, ':') != -1;
 
-    my $server_tag = lc($server->{tag} // '');
-    # 1 leading space + 9-char padded label = 10 chars (aligns with " channels :" and " away     :")
-    my $label = ($numeric eq '335') ? ' bot      ' : ' special  ';
+    my $server_tag   = lc($server->{tag} // '');
+    my $display_text = $raw_payload;
+    my $label;
+
+    if ($numeric eq '335') {
+        $label = ' bot      ';
+    } else {
+        # Inspect 320 RPL_WHOISSPECIAL payload prefix for key-value pairs (e.g. "position: ...", "photo: ...")
+        my $kv_colon = index($raw_payload, ': ');
+        if ($kv_colon > 0 && $kv_colon <= 12) {
+            my $k = lc(substr($raw_payload, 0, $kv_colon));
+            if ($k eq 'position' || $k eq 'photo' || $k eq 'avatar' || $k eq 'email' || $k eq 'role') {
+                my $display_key = ($k eq 'avatar') ? 'photo' : $k;
+                $label        = sprintf(' %-8.9s ', $display_key);
+                $display_text = substr($raw_payload, $kv_colon + 2);
+            }
+        }
+
+        # If not a key-value prefix, check if it's the online/last-activity status line
+        if (!defined $label) {
+            if ($raw_payload =~ /\b(?:online|offline|away)\b/i || index($raw_payload, 'Last activity') != -1) {
+                $label = ' online   ';
+            } else {
+                $label = ' special  ';
+            }
+        }
+    }
 
     push @{$active_whois{$server_tag}}, {
         target   => lc($target),
         sender   => lc($sender_nick // ''),
         label    => $label,
-        text     => $text,
-        stripped => Irssi::strip_codes($text),
+        text     => $display_text,
+        stripped => Irssi::strip_codes($raw_payload),
     };
 
     # Non-resetting 10 ms backstop timer (Irssi's API minimum) in case a script
