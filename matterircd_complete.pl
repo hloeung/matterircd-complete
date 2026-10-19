@@ -1353,7 +1353,7 @@ sub update_thread_preview {
     }
 
     my $window = Irssi::active_win();
-    unless ($window && $window->{active_server} && $window->{active} && chatnet_enabled($window->{active_server})) {
+    unless ($window && $window->{active} && chatnet_enabled($window->{active_server})) {
         if ($current_thread_preview ne '' || $current_thread_preview_full ne '') {
             $current_thread_preview = '';
             $current_thread_preview_full = '';
@@ -2306,7 +2306,7 @@ Irssi::signal_add_first('server event tags', sub {
 # Silence unknown command TAGMSG warnings without breaking signal flow
 Irssi::signal_add('default event', sub {
     my ($server, $data, $nick, $address) = @_;
-    return unless $server && $data && chatnet_enabled($server);
+    return unless $data && chatnet_enabled($server);
 
     # Fast C-level string search: bail out immediately on non-TAGMSG events
     return if index(lc($data), 'tagmsg') != 0;
@@ -2749,6 +2749,134 @@ Irssi::signal_add('query created',       sub { Irssi::statusbar_items_redraw('ma
 
 #==============================================================================
 
+# Format WHOIS bot / special numerics (335 RPL_WHOISBOT / 320 RPL_WHOISSPECIAL)
+
+our %active_whois;
+our %active_whois_timers;
+our $in_whois_print = 0;
+
+sub clear_active_whois {
+    my ($server) = @_;
+    return unless $server;
+
+    my $server_tag = lc($server->{tag} // '');
+    delete $active_whois{$server_tag};
+    if (my $timer = delete $active_whois_timers{$server_tag}) {
+        Irssi::timeout_remove($timer);
+    }
+}
+
+sub sig_server_event_whois {
+    my ($server, $raw_data, $sender_nick, $sender_address) = @_;
+
+    return unless chatnet_enabled($server);
+    return unless defined $raw_data;
+
+    my ($numeric, $data) = split(/\s+/, $raw_data, 2);
+    if (!defined $numeric || ($numeric ne '320' && $numeric ne '335')) {
+        # Any subsequent IRC event (e.g. 318 End of WHOIS, 301 RPL_AWAY) immediately
+        # purges unprinted captures so redirected/swallowed numerics never match later lines.
+        clear_active_whois($server);
+        return;
+    }
+    return unless defined $data;
+
+    # Strip raw trailing CR/LF
+    $data =~ tr/\r\n//d;
+
+    # IRC parameter structure: "[<client_nick>] <target_nick> :<text>"
+    my $colon = index($data, ' :');
+    return if $colon == -1;
+
+    my $text   = substr($data, $colon + 2);
+    my $params = substr($data, 0, $colon);
+
+    # Extract target nick: either "<client> <target>" or "<target>"
+    my @p = split(' ', $params);
+    return unless @p >= 1;
+
+    my $target = (@p >= 2) ? $p[1] : $p[0];
+    return if index($target, ':') != -1;
+
+    my $server_tag = lc($server->{tag} // '');
+    # 1 leading space + 9-char padded label = 10 chars (aligns with " channels :" and " away     :")
+    my $label = ($numeric eq '335') ? ' bot      ' : ' special  ';
+
+    push @{$active_whois{$server_tag}}, {
+        target   => lc($target),
+        sender   => lc($sender_nick // ''),
+        label    => $label,
+        text     => $text,
+        stripped => Irssi::strip_codes($text),
+    };
+
+    # Non-resetting 10 ms backstop timer (Irssi's API minimum) in case a script
+    # redirects and suppresses the numeric with no subsequent server traffic.
+    if (!exists $active_whois_timers{$server_tag}) {
+        $active_whois_timers{$server_tag} = Irssi::timeout_add_once(10, sub {
+            delete $active_whois{$server_tag};
+            delete $active_whois_timers{$server_tag};
+        }, undef);
+    }
+}
+Irssi::signal_add_first('server event', \&sig_server_event_whois);
+
+# Clear unmatched state at the end of raw incoming line dispatch (after irc_parse_incoming_line
+# and server event dispatch complete) without registering 'event 320'/'event 335' handlers
+# that would suppress Irssi's 'default event' fallback on unredirected /quote WHOIS replies.
+Irssi::signal_add_last('server incoming',   sub { clear_active_whois($_[0]); });
+Irssi::signal_add('server disconnected',    sub { clear_active_whois($_[0]); });
+
+sub sig_print_text_whois_special {
+    my ($text_dest, $text, $stripped) = @_;
+
+    return if $in_whois_print;
+    return unless $text_dest->{level} & Irssi::MSGLEVEL_CRAP();
+
+    my $server = $text_dest->{server};
+    return unless chatnet_enabled($server);
+    my $server_tag = lc($server->{tag} // '');
+
+    my $queue = $active_whois{$server_tag} or return;
+    return unless @$queue;
+
+    my $dest_target = lc($text_dest->{target} // '');
+
+    # Correlate strictly through captured numeric dispatch context.
+    # Note: fe-whois.c event_whois_default passes the server prefix ($sender_nick)
+    # as $text_dest->{target}, whereas other handlers pass the target nick.
+    my $item;
+    for (my $i = 0; $i < @$queue; $i++) {
+        if ($dest_target ne ''
+            && $dest_target ne $queue->[$i]{target}
+            && $dest_target ne $queue->[$i]{sender}) {
+            next;
+        }
+
+        if (length($queue->[$i]{stripped}) && index($stripped, $queue->[$i]{stripped}) != -1) {
+            $item = splice(@$queue, $i, 1);
+            if (!@$queue) {
+                clear_active_whois($server);
+            }
+            last;
+        }
+    }
+    return unless $item;
+
+    # Print directly through $text_dest->print to preserve the original destination's
+    # window, server, server-tag attribution, and target-scoped logging metadata.
+    # TextDest::print passes a literal "%s" format in C, so % escaping is not needed.
+    $in_whois_print = 1;
+    $text_dest->print("$item->{label}: $item->{text}");
+    $in_whois_print = 0;
+
+    Irssi::signal_stop();
+}
+Irssi::signal_add_first('print text', \&sig_print_text_whois_special);
+
+
+#==============================================================================
+
 # Remove an array's elements per their values
 sub array_splice_values {
     my ($ar_ref, $uw_ref) = @_;
@@ -3143,6 +3271,12 @@ sub UNLOAD {
     return if $exited;
     typing_cleanup_all();
     exit_save();
+
+    for my $timer (values %active_whois_timers) {
+        Irssi::timeout_remove($timer);
+    }
+    %active_whois_timers = ();
+    %active_whois        = ();
 }
 
 sub exit_save {
