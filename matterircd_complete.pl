@@ -2791,7 +2791,6 @@ sub sig_server_event_whois {
     my $text   = substr($data, $colon + 2);
     my $params = substr($data, 0, $colon);
 
-    # Extract target nick: either "<client> <target>" or "<target>"
     my @p = split(' ', $params);
     return unless @p >= 1;
 
@@ -2799,8 +2798,31 @@ sub sig_server_event_whois {
     return if index($target, ':') != -1;
 
     my $server_tag = lc($server->{tag} // '');
-    # 1 leading space + 9-char padded label = 10 chars (aligns with " channels :" and " away     :")
-    my $label = ($numeric eq '335') ? ' bot      ' : ' special  ';
+    my $label;
+
+    if ($numeric eq '335') {
+        $label = '  bot      ';
+    } else {
+        # Inspect 320 RPL_WHOISSPECIAL payload prefix for key-value pairs (e.g. "position: ...", "photo: ...")
+        my $kv_colon = index($text, ': ');
+        if ($kv_colon > 0 && $kv_colon <= 12) {
+            my $k = lc(substr($text, 0, $kv_colon));
+            if ($k eq 'position' || $k eq 'photo' || $k eq 'avatar' || $k eq 'email' || $k eq 'role') {
+                my $display_key = ($k eq 'avatar') ? 'photo' : $k;
+                $label = sprintf(' %-9.9s ', $display_key);
+                $text  = substr($text, $kv_colon + 2);
+            }
+        }
+
+        # If not a key-value prefix, check if it's the online/last-activity status line
+        if (!defined $label) {
+            if ($text =~ /\b(?:online|offline|away)\b/i || index($text, 'Last activity') != -1) {
+                $label = '  online   ';
+            } else {
+                $label = '  special  ';
+            }
+        }
+    }
 
     push @{$active_whois{$server_tag}}, {
         target   => lc($target),
