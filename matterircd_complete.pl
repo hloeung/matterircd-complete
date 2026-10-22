@@ -2766,6 +2766,16 @@ sub clear_active_whois {
     }
 }
 
+# Supported 320 RPL_WHOISSPECIAL key-value field mapping (key => canonical display label)
+our %whois_supported_keys = (
+    'avatar'    => 'photo',
+    'directory' => 'directory',
+    'email'     => 'email',
+    'photo'     => 'photo',
+    'position'  => 'position',
+    'role'      => 'role',
+);
+
 sub sig_server_event_whois {
     my ($server, $raw_data, $sender_nick, $sender_address) = @_;
 
@@ -2808,9 +2818,9 @@ sub sig_server_event_whois {
         my $kv_colon = index($raw_payload, ': ');
         if ($kv_colon > 0 && $kv_colon <= 12) {
             my $k = lc(substr($raw_payload, 0, $kv_colon));
-            if ($k eq 'position' || $k eq 'photo' || $k eq 'avatar' || $k eq 'email' || $k eq 'role') {
-                my $display_key = ($k eq 'avatar') ? 'photo' : $k;
-                $label        = sprintf(' %-8.9s ', $display_key);
+            if (exists $whois_supported_keys{$k}) {
+                my $display_key = $whois_supported_keys{$k};
+                $label        = sprintf(' %-9.9s ', $display_key);
                 $display_text = substr($raw_payload, $kv_colon + 2);
             }
         }
