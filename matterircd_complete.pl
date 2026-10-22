@@ -1158,7 +1158,8 @@ sub cmd_matterircd_complete_msgthreadid_cache_clear {
     stats_increment(\$MSGTHREADID_MOST_RECENT_CACHE_STATS);
     _wi_print($wi, "matterircd_complete message/thread ID cache cleared for ${channel}");
 }
-Irssi::command_bind('matterircd_complete_msgthreadid_cache_clear', 'cmd_matterircd_complete_msgthreadid_cache_clear');
+# Using _purge instead of _clear to avoid accidentally clearing on first tab-completion.
+Irssi::command_bind('matterircd_complete_msgthreadid_cache_purge', 'cmd_matterircd_complete_msgthreadid_cache_clear');
 #Irssi::command_bind('matterircd_complete_cache_clear_msgthreadid', 'cmd_matterircd_complete_msgthreadid_cache_clear');
 
 Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_reply_msg_thread_id_at_start', 1);
@@ -1856,7 +1857,9 @@ sub cmd_matterircd_complete_replied_cache_clear {
         _wi_print($wi, "matterircd_complete replied cache cleared for channel ${channel}");
     }
 }
-Irssi::command_bind('matterircd_complete_replied_cache_clear', 'cmd_matterircd_complete_replied_cache_clear');
+# Using _purge instead of _clear to avoid accidentally clearing on first tab-completion.
+Irssi::command_bind('matterircd_complete_replied_cache_purge', 'cmd_matterircd_complete_replied_cache_clear');
+# Intentionally to allow first tab-completion to be this.
 Irssi::command_bind('matterircd_complete_cache_clear_replied', 'cmd_matterircd_complete_replied_cache_clear');
 
 my $REPLIED_CACHE_CLEARED = 0;
