@@ -2823,7 +2823,7 @@ sub sig_server_event_whois {
             my $k = lc(substr($raw_payload, 0, $kv_colon));
             if (exists $whois_supported_keys{$k}) {
                 my $display_key = $whois_supported_keys{$k};
-                $label        = sprintf(' %-9.9s ', $display_key);
+                $label        = sprintf(' %-9.9s', $display_key);
                 $display_text = substr($raw_payload, $kv_colon + 2);
             }
         }
