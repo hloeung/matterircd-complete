@@ -813,9 +813,9 @@ sub cmd_message_thread_id_last {
     my $id;
 
     # Support argument passed directly: /message_thread_id_last [@@]<id>
-    if (defined $data && $data =~ /^\s*(?:\@\@)?([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})\s*$/) {
+    if (defined $data && $data =~ /^\s*(?:\@\@)?([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.\+\/]{1,43})\s*$/) {
         $id = $1;
-    } elsif ($input =~ /^@@([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})(?:\s|$)/) {
+    } elsif ($input =~ /^@@([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.\+\/]{1,43})(?:\s|$)/) {
         $id = $1;
     } elsif (exists $MSGTHREADID_CACHE{$target} && @{$MSGTHREADID_CACHE{$target}}) {
         # Fallback to latest thread if prompt is empty
@@ -831,15 +831,19 @@ sub cmd_message_thread_id_last {
     my $thread_m_style = ($id =~ /^[0-9a-f]{3}$/) ? 1 : 0;
     my $search_id = $id;
     if (($len > 0) && ($len < 25) && ($thread_m_style != 1) && (length($search_id) > $len)) {
-        $search_id = substr($search_id, 0, $len);
+        if (substr($search_id, 0, 1) eq '$') {
+            $search_id = '$' . substr($search_id, 1, $len);
+        } else {
+            $search_id = substr($search_id, 0, $len);
+        }
     }
 
     # Escape reply prefix and ID so '$' in Matrix IDs doesn't act as EOL anchor
     my $reply_prefix = quotemeta(Irssi::settings_get_str('matterircd_complete_override_reply_prefix'));
     my $escaped_id   = quotemeta($search_id);
 
-    # Allow optional reply indicators (configured prefix, ->, or ↪) and optional literal @@
-    $window->command("last -regexp \\[(${reply_prefix}|->|↪)?(\@\@)?${escaped_id}");
+    # Allow optional reply indicators (configured prefix, ->, or ↪) and optional literal @@, or after comma for post IDs
+    $window->command("last -regexp (?:\\[(${reply_prefix}|->|↪)?|,)(\@\@)?${escaped_id}");
     Irssi::gui_input_set($input);
     Irssi::gui_input_set_pos($pos);
     queue_thread_preview();
@@ -954,13 +958,31 @@ sub signal_complete_word_msgthread_id {
     }
     return unless exists($MSGTHREADID_CACHE{$target});
 
+    # Skip whitespace-separated prefixes because completing only $word cannot remove the separator
+    return if defined($linestart) && $linestart =~ /\@\@\s+/;
+
+    my $has_at_prefix = 0;
     if (substr($word, 0, 2) eq '@@') {
         $word = substr($word, 2);
+        $has_at_prefix = 1;
+    } elsif (defined($linestart) && $linestart =~ /\@\@\$?$/) {
+        $has_at_prefix = 1;
     }
+
+    # Normalize search term by stripping leading '$' so typing either '@@ytj' or '@@$ytj' matches
+    my $has_dollar = 0;
+    if (substr($word, 0, 1) eq '$') {
+        $word = substr($word, 1);
+        $has_dollar = 1;
+    } elsif (defined($linestart) && $linestart =~ /\@\@\$$/) {
+        $has_dollar = 1;
+    }
+
+    return unless $has_at_prefix || $has_dollar;
 
     # Only shorten when replying at line start. In commands (like /msg mattermost scrollback)
     # or mid-line references, matterircd requires the full canonical ID.
-    my $is_reply = (!defined($linestart) || $linestart !~ /\S/);
+    my $is_reply = (!defined($linestart) || $linestart =~ /^\s*(?:\@\@\$?)?$/);
     my $min_len = 0;
     if ($is_reply) {
         $min_len = Irssi::settings_get_int('matterircd_complete_message_thread_id_min')
@@ -975,13 +997,19 @@ sub signal_complete_word_msgthread_id {
 
     foreach my $msgthread_id (@candidates) {
         next if $seen{$msgthread_id}++;
-        next unless index($msgthread_id, $word) == 0;
+        # Preserve Matrix ID filtering when the user explicitly typed '$'
+        next if $has_dollar && substr($msgthread_id, 0, 1) ne '$';
+
+        # Strip leading '$' for comparison
+        my $clean_id = (substr($msgthread_id, 0, 1) eq '$') ? substr($msgthread_id, 1) : $msgthread_id;
+        next unless index($clean_id, $word) == 0;
 
         my $insert_id = $msgthread_id;
         my $thread_m_style = ($msgthread_id =~ /^[0-9a-f]{3}$/) ? 1 : 0;
 
         if (($min_len > 0) && ($min_len < 25) && ($thread_m_style != 1)) {
-            my $len = (length($word) > $min_len) ? length($word) : $min_len;
+            my $offset = (substr($msgthread_id, 0, 1) eq '$') ? 1 : 0;
+            my $len = (length($word) + $offset > $min_len + $offset) ? (length($word) + $offset) : ($min_len + $offset);
             my $full_len = length($msgthread_id);
 
             while ($len < $full_len) {
@@ -1000,7 +1028,15 @@ sub signal_complete_word_msgthread_id {
             $insert_id = substr($msgthread_id, 0, $len);
         }
 
-        push(@$complist, "\@\@${insert_id}");
+        # If Irssi split at '$', $linestart already contains '@@$'. Only complete the remainder.
+        if (defined($linestart) && $linestart =~ /\@\@\$$/) {
+            my $remainder = (substr($insert_id, 0, 1) eq '$') ? substr($insert_id, 1) : $insert_id;
+            push(@$complist, $remainder);
+        } elsif (defined($linestart) && $linestart =~ /\@\@$/) {
+            push(@$complist, $insert_id);
+        } else {
+            push(@$complist, "\@\@${insert_id}");
+        }
     }
 }
 Irssi::signal_add_last('complete word', 'signal_complete_word_msgthread_id');
@@ -1026,7 +1062,7 @@ sub cache_msgthreadid {
     }
 
     # Mattermost message/thread IDs.
-    if ($msg =~ /\[(?:->|↪)?\@\@([0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43})(?:,\@\@([0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43}))?\]/) {
+    if ($msg =~ /\[(?:->|↪)?\@\@([0-9a-z]{26}|\$[0-9A-Za-z\-_\.\+\/]{43})(?:,\@\@([0-9a-z]{26}|\$[0-9A-Za-z\-_\.\+\/]{43}))?\]/) {
         my $msgthreadid = $1;
         my $msgpostid = $2 ? $2 : '';
 
@@ -1063,7 +1099,7 @@ sub cache_msgthreadid {
         $key = $target;
     } else {
         # It's a private query so use $nick
-        $key = $nick
+        $key = $nick;
     }
 
     my $cache_size = Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
@@ -1084,7 +1120,7 @@ sub cache_msgthreadid {
         }
     }
 
-    # Most recent posts / replies to threads.
+    # Most recent posts / replies to threads (kept in most-recent cache only).
     for my $msgpostid (@msgpost_ids) {
         $MSGTHREADID_LAST_NICK{$key}{$msgpostid} = $nick;
         if (cache_store(\@{$MSGTHREADID_MOST_RECENT_CACHE{$key}}, $msgpostid, $cache_size)) {
