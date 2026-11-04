@@ -365,7 +365,7 @@ sub cmd_matterircd_complete_thread_id_get_color {
 
     if ($wi && ($wi->{type} eq 'CHANNEL' || $wi->{type} eq 'QUERY')) {
         my ($full_id, $match_count) = msgthreadid_find($wi->{name}, $id);
-        if (!$full_id && $id =~ /^(?:[0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43}|[0-9a-f]{3})$/) {
+        if (!$full_id && $id =~ /^(?:[0-9a-z]{26}|\$[0-9A-Za-z\-_\.\+\/]{43}|[0-9a-f]{3})$/) {
             $full_id = $id;
             $match_count = 1;
         }
@@ -468,7 +468,7 @@ sub update_msgthreadid {
     my $reply_prefix = Irssi::settings_get_str('matterircd_complete_override_reply_prefix');
     my $thread_m_style = 0;
 
-    if ($msg =~ s/\[(->|↪)?\@\@([0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43})(?:,\@\@([0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43}))?\]/\@\@PLACEHOLDER\@\@/) {
+    if ($msg =~ s/\[(->|↪)?\@\@([0-9a-z]{26}|\$[0-9A-Za-z\-_\.\+\/]{43})(?:,\@\@([0-9a-z]{26}|\$[0-9A-Za-z\-_\.\+\/]{43}))?\]/\@\@PLACEHOLDER\@\@/) {
         $prefix = $reply_prefix ? $reply_prefix : $1 if $1;
         $msgthreadid = $2;
         $msgpostid = $3 ? $3 : '';
@@ -510,9 +510,17 @@ sub update_msgthreadid {
         # here to both allow word selection to just select parts of
         # the message/thread ID when copying & pasting and save on
         # screen real estate.
-        $msgthreadid = substr($msgthreadid, 0, $len) . '…';
+        if (substr($msgthreadid, 0, 1) eq '$') {
+            $msgthreadid = '$' . substr($msgthreadid, 1, $len) . '…';
+        } else {
+            $msgthreadid = substr($msgthreadid, 0, $len) . '…';
+        }
         if ($msgpostid ne '') {
-            $msgpostid = substr($msgpostid, 0, $len) . '…';
+            if (substr($msgpostid, 0, 1) eq '$') {
+                $msgpostid = '$' . substr($msgpostid, 1, $len) . '…';
+            } else {
+                $msgpostid = substr($msgpostid, 0, $len) . '…';
+            }
         }
     }
     if ($msgpostid eq '') {
@@ -652,15 +660,15 @@ sub cmd_last_message_permalink {
     # Check for short or full ID in command arguments or active input prompt
     my $input = Irssi::parse_special('$L');
     my $target_id;
-    if (defined $data && $data =~ /^\s*(?:\@\@)?([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})\s*$/) {
+    if (defined $data && $data =~ /^\s*(?:\@\@)?([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.\+\/]{1,43})\s*$/) {
         $target_id = $1;
-    } elsif ($input =~ /^@@([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})(?:\s|$)/) {
+    } elsif ($input =~ /^@@([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.\+\/]{1,43})(?:\s|$)/) {
         $target_id = $1;
     }
 
     if (defined $target_id && length $target_id) {
         my ($full_id, $match_count) = msgthreadid_find($channel, $target_id);
-        if (!$full_id && $target_id =~ /^(?:[0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43})$/) {
+        if (!$full_id && $target_id =~ /^(?:[0-9a-z]{26}|\$[0-9A-Za-z\-_\.\+\/]{43})$/) {
             $full_id = $target_id;
             $match_count = 1;
         }
@@ -771,9 +779,13 @@ sub cmd_message_thread_id_search {
                 @{$MSGTHREADID_MOST_RECENT_CACHE{$target} // []}
             );
 
-            # Expand beyond $len if another cached thread shares the same prefix
-            while ($len < $full_len) {
-                my $prefix = substr($msgthreadid, 0, $len);
+            # If Matrix ID, shorten to '$' + $len chars
+            my $offset = (substr($msgthreadid, 0, 1) eq '$') ? 1 : 0;
+            my $cur_len = $len + $offset;
+
+            # Expand beyond $cur_len if another cached thread shares the same prefix
+            while ($cur_len < $full_len) {
+                my $prefix = substr($msgthreadid, 0, $cur_len);
                 my $collision = 0;
                 for my $other (@other_ids) {
                     if (index($other, $prefix) == 0) {
@@ -782,16 +794,16 @@ sub cmd_message_thread_id_search {
                     }
                 }
                 last unless $collision;
-                $len++;
+                $cur_len++;
             }
 
-            $insert_id = substr($msgthreadid, 0, $len);
+            $insert_id = substr($msgthreadid, 0, $cur_len);
         }
 
         # Save input text.
         my $input = Irssi::parse_special('$L');
         # Remove existing thread.
-        $input =~ s/^@@(?:[0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})?\s*//;
+        $input =~ s/^@@(?:[0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.\+\/]{1,43})?\s*//;
         # Insert message/thread ID from cache.
         Irssi::gui_input_set_pos(0);
         Irssi::gui_input_set("\@\@${insert_id} ${input}");
@@ -842,8 +854,8 @@ sub cmd_message_thread_id_last {
     my $reply_prefix = quotemeta(Irssi::settings_get_str('matterircd_complete_override_reply_prefix'));
     my $escaped_id   = quotemeta($search_id);
 
-    # Allow optional reply indicators (configured prefix, ->, or ↪) and optional literal @@, or after comma for post IDs
-    $window->command("last -regexp (?:\\[(${reply_prefix}|->|↪)?|,)(\@\@)?${escaped_id}");
+    # Constrain both root thread IDs and post IDs to remain inside bracketed markers [...]
+    $window->command("last -regexp \\[(?:(${reply_prefix}|->|↪)?|[^\\\]]*?,)(\@\@)?${escaped_id}");
     Irssi::gui_input_set($input);
     Irssi::gui_input_set_pos($pos);
     queue_thread_preview();
@@ -891,7 +903,7 @@ sub signal_gui_key_pressed_msgthreadid {
         $input =~ s/\x03//g;
 
         my $pos = 0;
-        if ($input =~ s/^(\@\@(?:[0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})?\s*)//) {
+        if ($input =~ s/^(\@\@(?:[0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.\+\/]{1,43})?\s*)//) {
             $pos = Irssi::gui_input_get_pos() - length($1);
         }
 
@@ -958,8 +970,12 @@ sub signal_complete_word_msgthread_id {
     }
     return unless exists($MSGTHREADID_CACHE{$target});
 
-    # Skip whitespace-separated prefixes because completing only $word cannot remove the separator
-    return if defined($linestart) && $linestart =~ /\@\@\s+/;
+    # Irssi trims trailing whitespace from $linestart, so check raw input before cursor.
+    # Reject incomplete prefixes with whitespace (such as "@@ ytj" or "@@$ ytj") even
+    # when the cursor is positioned mid-word.
+    my $pos = Irssi::gui_input_get_pos();
+    my $before_cursor = substr(Irssi::parse_special('$L'), 0, $pos);
+    return if $before_cursor =~ /\@\@\$?\s+\S*$/;
 
     my $has_at_prefix = 0;
     if (substr($word, 0, 2) eq '@@') {
@@ -1205,8 +1221,7 @@ sub signal_message_own_msgthreadid {
 
     return unless chatnet_enabled($server);
     return unless Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
-
-    if ($msg !~ /^@@((?:[0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43})|(?:[0-9a-f]{3}))\s+([+-]:\S+:)?/) {
+    if ($msg !~ /^@@((?:[0-9a-z]{26}|\$[0-9A-Za-z\-_\.\+\/]{43})|(?:[0-9a-f]{3}))\s+([+-]:\S+:)?/) {
         return;
     }
 
@@ -1261,15 +1276,19 @@ sub signal_message_own_msgthreadid {
         # here to both allow word selection to just select parts of
         # the message/thread ID when copying & pasting and save on
         # screen real estate.
-        $msgthreadid = substr($msgthreadid, 0, $len) . "…";
+        if (substr($msgthreadid, 0, 1) eq '$') {
+            $msgthreadid = '$' . substr($msgthreadid, 1, $len) . "…";
+        } else {
+            $msgthreadid = substr($msgthreadid, 0, $len) . "…";
+        }
     }
 
     my $reply_prefix = Irssi::settings_get_str('matterircd_complete_override_reply_prefix');
     if (Irssi::settings_get_bool('matterircd_complete_reply_msg_thread_id_at_start')) {
-        $msg =~ s/^@@(?:[0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43}) /${thread_color}[${reply_prefix}${msgthreadid}]\x0f /;
+        $msg =~ s/^@@(?:[0-9a-z]{26}|\$[0-9A-Za-z\-_\.\+\/]{43}) /${thread_color}[${reply_prefix}${msgthreadid}]\x0f /;
         $msg =~ s/^@@[0-9a-f]{3} /${thread_color}[${reply_prefix}${msgthreadid}]\x0f /;
     } else {
-        $msg =~ s/^@@(?:[0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43}) //;
+        $msg =~ s/^@@(?:[0-9a-z]{26}|\$[0-9A-Za-z\-_\.\+\/]{43}) //;
         $msg =~ s/^@@[0-9a-f]{3} //;
         $msg =~ s/$/ ${thread_color}[${reply_prefix}${msgthreadid}]\x0f/;
     }
@@ -1403,7 +1422,7 @@ sub update_thread_preview {
     my $new_preview = '';
     my $new_preview_full = '';
 
-    if ($input =~ /^@@([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})/) {
+    if ($input =~ /^@@([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.\+\/]{1,43})/) {
         my $id = $1;
         my $target = $window->{active}->{name};
         my ($full_id, $match_count) = msgthreadid_find($target, $id);
@@ -1418,18 +1437,29 @@ sub update_thread_preview {
             my $display_id = $full_id;
             my $thread_m_style = ($full_id =~ /^[0-9a-f]{3}$/) ? 1 : 0;
             if (($len < 25) && ($thread_m_style != 1)) {
-                $display_id = substr($full_id, 0, $len) . '…';
+                # For Matrix IDs starting with '$', keep the '$' and take $len characters after it
+                if (substr($full_id, 0, 1) eq '$') {
+                    $display_id = '$' . substr($full_id, 1, $len) . '…';
+                } else {
+                    $display_id = substr($full_id, 0, $len) . '…';
+                }
             }
-            $new_preview = "${thread_color_fmt}[${reply_prefix}${display_id}]%n ";
+
+            # Escape '$' for Irssi format strings so Matrix IDs aren't parsed as expandos
+            (my $safe_display_id = $display_id) =~ s/\$/\$\$/g;
+            (my $safe_full_id    = $full_id)    =~ s/\$/\$\$/g;
+
+            $new_preview = "%K[${thread_color_fmt}${reply_prefix}${safe_display_id}%n%K] ";
 
             # Full preview with author for window bar
             my $author = $MSGTHREADID_LAST_NICK{$target}{$full_id};
             my $hide_nick = Irssi::settings_get_bool('matterircd_complete_live_thread_preview_hide_nick');
-            my $author_fmt = (!$hide_nick && defined $author && length $author) ? " %K(%n\@${author}%K)%n" : "";
-            $new_preview_full = "%N${thread_color_fmt}[${reply_prefix}${full_id}]%n${author_fmt}";
+            my $author_fmt = (!$hide_nick && defined $author && length $author) ? " %K(\@${author}%K)" : "";
+            $new_preview_full = "%K[${thread_color_fmt}${reply_prefix}${safe_full_id}${author_fmt}%n%K]";
         } else {
-            $new_preview = "%K[%R${reply_prefix}${id}?%n%K] ";
-            $new_preview_full = "%N%R[${reply_prefix}${id}?]%n";
+            (my $safe_id = $id) =~ s/\$/\$\$/g;
+            $new_preview = "%K[%R${reply_prefix}${safe_id}?%n%K] ";
+            $new_preview_full = "%K[%R${reply_prefix}${safe_id}?%n%K]";
         }
     }
 
@@ -1453,7 +1483,7 @@ sub signal_send_text {
     return unless $wi->{type} eq 'CHANNEL' || $wi->{type} eq 'QUERY';
     return unless Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
 
-    if ($line =~ /^@@([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})(\s.*)?$/) {
+    if ($line =~ /^@@([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.\+\/]{1,43})(\s.*)?$/) {
         my $id = $1;
         my $rest = $2 // '';
         my $target = $wi->{name};
@@ -1712,7 +1742,7 @@ sub cmd_nicknames_search {
         my $compl_char = Irssi::settings_get_str('completion_char');
         # Remove any existing nickname and insert one from the cache.
         my $msgid = "";
-        if ($input =~ s/^(\@\@(?:[0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})\s*)//) {
+        if ($input =~ s/^(\@\@(?:[0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.\+\/]{1,43})\s*)//) {
             $msgid = $1;
             $msgid .= " " if $msgid !~ /\s$/;
         }
@@ -1754,7 +1784,7 @@ sub signal_gui_key_pressed_nicks {
 
         # Preserve any leading @@thread ID if present
         my $msgid = "";
-        if ($input =~ s/^(\@\@(?:[0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})\s*)//) {
+        if ($input =~ s/^(\@\@(?:[0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.\+\/]{1,43})\s*)//) {
             $msgid = $1;
             $msgid .= " " if $msgid !~ /\s$/;
         }
@@ -1925,7 +1955,7 @@ sub signal_message_own_public_replied {
     return unless chatnet_enabled($server);
     return unless Irssi::settings_get_int('matterircd_complete_replied_cache_size');
 
-    if ($msg !~ /^@@([0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43}|[0-9a-f]{3})/) {
+    if ($msg !~ /^@@([0-9a-z]{26}|\$[0-9A-Za-z\-_\.\+\/]{43}|[0-9a-f]{3})/) {
         return;
     }
     my $msgid = $1;
@@ -1951,7 +1981,7 @@ sub signal_message_public {
     # For '/me' actions, it has trailing space so we need to use
     # \s* here.
     my $msgthreadid;
-    if ($msg =~ /\[(?:->|↪)?\@\@([0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43})[\],]/) {
+    if ($msg =~ /\[(?:->|↪)?\@\@([0-9a-z]{26}|\$[0-9A-Za-z\-_\.\+\/]{43})[\],]/) {
         $msgthreadid = $1;
     } elsif ($msg =~ /\[(?:->|↪)?([0-9a-f]{3})[\],]/) {
         $msgthreadid = $1;
@@ -2057,7 +2087,7 @@ sub signal_message_own_reactions {
     return unless chatnet_enabled($server);
     return unless Irssi::settings_get_int('matterircd_complete_reactions_cache_size');
 
-    if ($msg !~ /^@@([0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43}|[0-9a-f]{3})\s*\+:(.*):\s*/) {
+    if ($msg !~ /^@@([0-9a-z]{26}|\$[0-9A-Za-z\-_\.\+\/]{43}|[0-9a-f]{3})\s*\+:(.*):\s*/) {
         return;
     }
     my $reaction = $2;
@@ -2154,9 +2184,17 @@ sub sb_matterircd_typing {
 
         for my $tid (@threads) {
             my $nicks = join(",", @{$thread_nicks{$tid}});
-            my $short = ($tid !~ /^[0-9a-f]{3}$/ && $len > 0 && $len < 25 && length($tid) > $len) ? substr($tid, 0, $len) . "…" : $tid;
+            my $short = $tid;
+            if ($tid !~ /^[0-9a-f]{3}$/ && $len > 0 && $len < 25 && length($tid) > $len) {
+                if (substr($tid, 0, 1) eq '$') {
+                    $short = '$' . substr($tid, 1, $len) . '…';
+                } else {
+                    $short = substr($tid, 0, $len) . '…';
+                }
+            }
+            (my $safe_short = $short) =~ s/\$/\$\$/g;
             my $color = thread_color_format($tid);
-            push(@typists, "${nicks} %N${color}[${reply_prefix}${short}]%n%G");
+            push(@typists, "${nicks} %N${color}[${reply_prefix}${safe_short}]%n%G");
         }
 
         if (@typists) {
@@ -2313,7 +2351,7 @@ Irssi::signal_add_first('server event tags', sub {
         my $status = lc($1);
         my $thread_id = '';
 
-        if ($tags =~ /(?:^|;)\+(?:draft\/)?thread=(?:@@)?([0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43}|[0-9a-f]{3})(?:;|$)/i) {
+        if ($tags =~ /(?:^|;)\+(?:draft\/)?thread=(?:@@)?([0-9a-z]{26}|\$[0-9A-Za-z\-_\.\+\/]{43}|[0-9a-f]{3})(?:;|$)/i) {
             $thread_id = $1;
         }
 
@@ -2459,9 +2497,9 @@ Irssi::signal_add('gui key pressed', sub {
     # If replying to a thread inline, retain its ID alongside the channel/DM target
     my $thread = '';
     if ($input_line =~ /^@@/) {
-        if ($input_line =~ /^@@([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})/) {
+        if ($input_line =~ /^@@([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.\+\/]{1,43})/) {
             my ($full_id) = msgthreadid_find($target, $1);
-            if (!$full_id && $1 =~ /^(?:[0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43}|[0-9a-f]{3})$/) {
+            if (!$full_id && $1 =~ /^(?:[0-9a-z]{26}|\$[0-9A-Za-z\-_\.\+\/]{43}|[0-9a-f]{3})$/) {
                 $full_id = $1;
             }
 
@@ -2500,9 +2538,9 @@ Irssi::signal_add('send text', sub {
     delete $last_typing_sent{$server_tag}{$witem->{name}};
 
     # Also clear debounce timer for the thread if sending an inline reply
-    if ($line =~ /^@@([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.]{1,43})/) {
+    if ($line =~ /^@@([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.\+\/]{1,43})/) {
         my ($full_id) = msgthreadid_find($witem->{name}, $1);
-        if (!$full_id && $1 =~ /^(?:[0-9a-z]{26}|\$[0-9A-Za-z\-_\.]{43}|[0-9a-f]{3})$/) {
+        if (!$full_id && $1 =~ /^(?:[0-9a-z]{26}|\$[0-9A-Za-z\-_\.\+\/]{43}|[0-9a-f]{3})$/) {
             $full_id = $1;
         }
 
