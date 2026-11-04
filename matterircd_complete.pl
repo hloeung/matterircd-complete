@@ -351,7 +351,7 @@ sub thread_color {
     # Pick the color in the allowed_color list.
     # n should be comprised between 1 and the array length.
     $n = xcolor_to_irssi($n);
-    $n = "$prepend\x03$n";
+    $n = $prepend . ($n =~ /^\cD/ ? "" : "\x03") . $n;
     return $n;
 }
 sub cmd_matterircd_complete_thread_id_get_color {
@@ -378,7 +378,7 @@ sub cmd_matterircd_complete_thread_id_get_color {
 
     my ($color, $prepend) = get_thread_format($id);
     my $n = xcolor_to_irssi($color);
-    _wi_print($wi, "Thread color for $prepend\x03$n${id}\x0f is $color");
+    _wi_print($wi, "Thread color for $prepend" . ($n =~ /^\cD/ ? "" : "\x03") . "$n${id}\x0f is $color");
 }
 Irssi::command_bind('matterircd_complete_thread_id_get_color', 'cmd_matterircd_complete_thread_id_get_color');
 
@@ -3019,7 +3019,7 @@ sub cmd_matterircd_complete_thread_id_get_colors {
     my $colors_text = "Selected colors: ";
     foreach (@thread_id_selected_colors) {
         my $n = xcolor_to_irssi($_);
-        $colors_text .= "\x03$n$_";
+        $colors_text .= ($n =~ /^\cD/ ? "" : "\x03") . "$n$_";
     }
     $colors_text .= "\x0f";
     _wi_print($wi, $colors_text);
