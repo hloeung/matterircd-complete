@@ -835,15 +835,19 @@ sub cmd_message_thread_id_last {
     my $thread_m_style = ($id =~ /^[0-9a-f]{3}$/) ? 1 : 0;
     my $search_id = $id;
     if (($len > 0) && ($len < 25) && ($thread_m_style != 1) && (length($search_id) > $len)) {
-        $search_id = substr($search_id, 0, $len);
+        if (substr($search_id, 0, 1) eq '$') {
+            $search_id = '$' . substr($search_id, 1, $len);
+        } else {
+            $search_id = substr($search_id, 0, $len);
+        }
     }
 
     # Escape reply prefix and ID so '$' in Matrix IDs doesn't act as EOL anchor
     my $reply_prefix = quotemeta(Irssi::settings_get_str('matterircd_complete_override_reply_prefix'));
     my $escaped_id   = quotemeta($search_id);
 
-    # Allow optional reply indicators (configured prefix, ->, or ↪) and optional literal @@
-    $window->command("last -regexp \\[(${reply_prefix}|->|↪)?(\@\@)?${escaped_id}");
+    # Allow optional reply indicators (configured prefix, ->, or ↪) and optional literal @@, or after comma for post IDs
+    $window->command("last -regexp (?:\\[(${reply_prefix}|->|↪)?|,)(\@\@)?${escaped_id}");
     Irssi::gui_input_set($input);
     Irssi::gui_input_set_pos($pos);
     queue_thread_preview();
@@ -958,11 +962,14 @@ sub signal_complete_word_msgthread_id {
     }
     return unless exists($MSGTHREADID_CACHE{$target});
 
+    # Skip whitespace-separated prefixes because completing only $word cannot remove the separator
+    return if defined($linestart) && $linestart =~ /\@\@\s+/;
+
     my $has_at_prefix = 0;
     if (substr($word, 0, 2) eq '@@') {
         $word = substr($word, 2);
         $has_at_prefix = 1;
-    } elsif (defined($linestart) && $linestart =~ /\@\@\s*$/) {
+    } elsif (defined($linestart) && $linestart =~ /\@\@\$?$/) {
         $has_at_prefix = 1;
     }
 
@@ -971,7 +978,7 @@ sub signal_complete_word_msgthread_id {
     if (substr($word, 0, 1) eq '$') {
         $word = substr($word, 1);
         $has_dollar = 1;
-    } elsif (defined($linestart) && $linestart =~ /\@\@\$\s*$/) {
+    } elsif (defined($linestart) && $linestart =~ /\@\@\$$/) {
         $has_dollar = 1;
     }
 
@@ -994,6 +1001,8 @@ sub signal_complete_word_msgthread_id {
 
     foreach my $msgthread_id (@candidates) {
         next if $seen{$msgthread_id}++;
+        # Preserve Matrix ID filtering when the user explicitly typed '$'
+        next if $has_dollar && substr($msgthread_id, 0, 1) ne '$';
 
         # Strip leading '$' for comparison
         my $clean_id = (substr($msgthread_id, 0, 1) eq '$') ? substr($msgthread_id, 1) : $msgthread_id;
@@ -1024,9 +1033,11 @@ sub signal_complete_word_msgthread_id {
         }
 
         # If Irssi split at '$', $linestart already contains '@@$'. Only complete the remainder.
-        if (defined($linestart) && $linestart =~ /\@\@\$\s*$/) {
+        if (defined($linestart) && $linestart =~ /\@\@\$$/) {
             my $remainder = (substr($insert_id, 0, 1) eq '$') ? substr($insert_id, 1) : $insert_id;
             push(@$complist, $remainder);
+        } elsif (defined($linestart) && $linestart =~ /\@\@$/) {
+            push(@$complist, $insert_id);
         } else {
             push(@$complist, "\@\@${insert_id}");
         }
@@ -1092,7 +1103,7 @@ sub cache_msgthreadid {
         $key = $target;
     } else {
         # It's a private query so use $nick
-        $key = $nick
+        $key = $nick;
     }
 
     my $cache_size = Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
@@ -1113,14 +1124,11 @@ sub cache_msgthreadid {
         }
     }
 
-    # Most recent posts / replies to threads.
+    # Most recent posts / replies to threads (kept in most-recent cache only).
     for my $msgpostid (@msgpost_ids) {
         $MSGTHREADID_LAST_NICK{$key}{$msgpostid} = $nick;
         if (cache_store(\@{$MSGTHREADID_MOST_RECENT_CACHE{$key}}, $msgpostid, $cache_size)) {
             stats_increment(\$MSGTHREADID_MOST_RECENT_CACHE_STATS);
-        }
-        if (cache_store(\@{$MSGTHREADID_CACHE{$key}}, $msgpostid, $cache_size)) {
-            stats_increment(\$MSGTHREADID_CACHE_STATS);
         }
     }
 
