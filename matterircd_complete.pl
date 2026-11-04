@@ -600,7 +600,7 @@ sub cmd_matterircd_complete_msgthreadid_cache_dump {
 
     my $channel = $data ? $data : $wi->{name};
     # Remove leading and trailing whitespace.
-    $channel =~ tr/ 	//d;
+    $channel =~ tr/ \t//d;
 
     _wi_print($wi, "${channel}: Message/Thread ID cache");
 
@@ -609,10 +609,13 @@ sub cmd_matterircd_complete_msgthreadid_cache_dump {
         return;
     }
 
+    my $fixed_color = Irssi::settings_get_int('matterircd_complete_thread_id_color');
+
     foreach my $msgthread_id (@{$MSGTHREADID_CACHE{$channel}}) {
         my $nick = $MSGTHREADID_LAST_NICK{$channel}{$msgthread_id};
         my $nick_str = (defined $nick && length $nick) ? " (\@${nick})" : "";
-        _wi_print($wi, "${channel}: ${msgthread_id}${nick_str}");
+        my $color = ($fixed_color == -1) ? thread_color($msgthread_id) : sprintf("\x03%02d", $fixed_color);
+        _wi_print($wi, "${channel}: ${color}${msgthread_id}\x0f${nick_str}");
     }
 
     _wi_print($wi, "${channel}: Total: " . scalar @{$MSGTHREADID_CACHE{$channel}});
@@ -629,7 +632,7 @@ sub cmd_matterircd_complete_msgthreadid_most_recent_cache_dump {
 
     my $channel = $data ? $data : $wi->{name};
     # Remove leading and trailing whitespace.
-    $channel =~ tr/ 	//d;
+    $channel =~ tr/ \t//d;
 
     _wi_print($wi, "${channel}: Most recent Message/Thread ID cache");
 
@@ -638,11 +641,14 @@ sub cmd_matterircd_complete_msgthreadid_most_recent_cache_dump {
         return;
     }
 
+    my $fixed_color = Irssi::settings_get_int('matterircd_complete_thread_id_color');
+
     foreach my $msgthread_id (@{$MSGTHREADID_MOST_RECENT_CACHE{$channel}}) {
-         my $nick = $MSGTHREADID_LAST_NICK{$channel}{$msgthread_id};
-         my $nick_str = (defined $nick && length $nick) ? " (\@${nick})" : "";
-         _wi_print($wi, "${channel}: ${msgthread_id}${nick_str}");
-     }
+        my $nick = $MSGTHREADID_LAST_NICK{$channel}{$msgthread_id};
+        my $nick_str = (defined $nick && length $nick) ? " (\@${nick})" : "";
+        my $color = ($fixed_color == -1) ? thread_color($msgthread_id) : sprintf("\x03%02d", $fixed_color);
+        _wi_print($wi, "${channel}: ${color}${msgthread_id}\x0f${nick_str}");
+    }
 
     _wi_print($wi, "${channel}: Total: " . scalar @{$MSGTHREADID_MOST_RECENT_CACHE{$channel}});
 }
@@ -1833,7 +1839,7 @@ sub cmd_matterircd_complete_replied_cache_dump {
 
     my $channel = $data ? $data : $wi->{name};
     # Remove leading and trailing whitespace.
-    $channel =~ tr/ 	//d;
+    $channel =~ tr/ \t//d;
 
     _wi_print($wi, "${channel}: Replied cache");
 
@@ -1842,8 +1848,11 @@ sub cmd_matterircd_complete_replied_cache_dump {
         return;
     }
 
+    my $fixed_color = Irssi::settings_get_int('matterircd_complete_thread_id_color');
+
     foreach my $threadid (@{$REPLIED_CACHE{$channel}}) {
-        _wi_print($wi, "${channel}: ${threadid}");
+        my $color = ($fixed_color == -1) ? thread_color($threadid) : sprintf("\x03%02d", $fixed_color);
+        _wi_print($wi, "${channel}: ${color}${threadid}\x0f");
     }
     _wi_print($wi, "${channel}: Total: " . scalar @{$REPLIED_CACHE{$channel}});
 }
