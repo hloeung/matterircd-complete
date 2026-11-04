@@ -854,8 +854,8 @@ sub cmd_message_thread_id_last {
     my $reply_prefix = quotemeta(Irssi::settings_get_str('matterircd_complete_override_reply_prefix'));
     my $escaped_id   = quotemeta($search_id);
 
-    # Allow optional reply indicators (configured prefix, ->, or ↪) and optional literal @@, or after comma for post IDs
-    $window->command("last -regexp (?:\\[(${reply_prefix}|->|↪)?|,)(\@\@)?${escaped_id}");
+    # Constrain both root thread IDs and post IDs to remain inside bracketed markers [...]
+    $window->command("last -regexp \\[(?:(${reply_prefix}|->|↪)?|[^\\\]]*?,)(\@\@)?${escaped_id}");
     Irssi::gui_input_set($input);
     Irssi::gui_input_set_pos($pos);
     queue_thread_preview();
@@ -970,11 +970,12 @@ sub signal_complete_word_msgthread_id {
     }
     return unless exists($MSGTHREADID_CACHE{$target});
 
-    # Irssi trims trailing whitespace from $linestart, so check raw input before cursor
-    # to prevent completing invalid whitespace-separated prefixes like "@@ ytj".
+    # Irssi trims trailing whitespace from $linestart, so check raw input before cursor.
+    # Reject incomplete prefixes with whitespace (such as "@@ ytj" or "@@$ ytj") even
+    # when the cursor is positioned mid-word.
     my $pos = Irssi::gui_input_get_pos();
     my $before_cursor = substr(Irssi::parse_special('$L'), 0, $pos);
-    return if $before_cursor =~ /\@\@\s+\$?\Q$word\E$/;
+    return if $before_cursor =~ /\@\@\$?\s+\S*$/;
 
     my $has_at_prefix = 0;
     if (substr($word, 0, 2) eq '@@') {
