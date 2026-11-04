@@ -510,9 +510,17 @@ sub update_msgthreadid {
         # here to both allow word selection to just select parts of
         # the message/thread ID when copying & pasting and save on
         # screen real estate.
-        $msgthreadid = substr($msgthreadid, 0, $len) . '…';
+        if (substr($msgthreadid, 0, 1) eq '$') {
+            $msgthreadid = '$' . substr($msgthreadid, 1, $len) . '…';
+        } else {
+            $msgthreadid = substr($msgthreadid, 0, $len) . '…';
+        }
         if ($msgpostid ne '') {
-            $msgpostid = substr($msgpostid, 0, $len) . '…';
+            if (substr($msgpostid, 0, 1) eq '$') {
+                $msgpostid = '$' . substr($msgpostid, 1, $len) . '…';
+            } else {
+                $msgpostid = substr($msgpostid, 0, $len) . '…';
+            }
         }
     }
     if ($msgpostid eq '') {
@@ -962,8 +970,11 @@ sub signal_complete_word_msgthread_id {
     }
     return unless exists($MSGTHREADID_CACHE{$target});
 
-    # Skip whitespace-separated prefixes because completing only $word cannot remove the separator
-    return if defined($linestart) && $linestart =~ /\@\@\s+/;
+    # Irssi trims trailing whitespace from $linestart, so check raw input before cursor
+    # to prevent completing invalid whitespace-separated prefixes like "@@ ytj".
+    my $pos = Irssi::gui_input_get_pos();
+    my $before_cursor = substr(Irssi::parse_special('$L'), 0, $pos);
+    return if $before_cursor =~ /\@\@\s+\$?\Q$word\E$/;
 
     my $has_at_prefix = 0;
     if (substr($word, 0, 2) eq '@@') {
@@ -1264,7 +1275,11 @@ sub signal_message_own_msgthreadid {
         # here to both allow word selection to just select parts of
         # the message/thread ID when copying & pasting and save on
         # screen real estate.
-        $msgthreadid = substr($msgthreadid, 0, $len) . "…";
+        if (substr($msgthreadid, 0, 1) eq '$') {
+            $msgthreadid = '$' . substr($msgthreadid, 1, $len) . "…";
+        } else {
+            $msgthreadid = substr($msgthreadid, 0, $len) . "…";
+        }
     }
 
     my $reply_prefix = Irssi::settings_get_str('matterircd_complete_override_reply_prefix');
