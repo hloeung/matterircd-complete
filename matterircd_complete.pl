@@ -2860,6 +2860,7 @@ our %whois_supported_keys = (
     'photo'     => 'photo',
     'position'  => 'position',
     'role'      => 'role',
+    'secure'    => 'secure',
 );
 
 sub sig_server_event_whois {
