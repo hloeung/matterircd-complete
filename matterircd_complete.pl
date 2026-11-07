@@ -1843,7 +1843,7 @@ sub signal_gui_key_pressed_nicks {
 
         # Remove @nick prefix (supports bare '@', '@ ', '@nick', '@nick:', '@nick: ')
         # Full Matrix mentions (@user:homeserver[:port]) are tried first.
-        if ($input =~ s/^(\@(?!\@)[^\s:]+:[^\s:]+\.[^\s:]+(?::\d+)?\Q${compl_char}\E?\s*)//
+        if (($compl_char eq ':' and $input =~ s/^(\@(?!\@)[^\s:]+:[^\s:]+\.[^\s:]+(?::\d+)?\Q${compl_char}\E?\s*)//)
             or $input =~ s/^(\@(?!\@)[^\s\Q${compl_char}\E]*\Q${compl_char}\E?\s*)//) {
             $pos = Irssi::gui_input_get_pos() - length($1);
         }
