@@ -1532,6 +1532,33 @@ Irssi::signal_add_first('send text', 'signal_send_text');
 
 Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_nick_cache_size', 16);
 
+# Matrix separator configured in matterircd (user<sep>homeserver). "[]"
+# is the special default giving user[homeserver]. Used to convert nicks
+# to Matrix IDs (user:homeserver) on completion. Empty disables.
+Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_matrix_separator', '[]');
+
+sub nick_to_matrix_id {
+    my ($nick) = @_;
+
+    my $sep = Irssi::settings_get_str('matterircd_complete_matrix_separator');
+    return $nick if $sep eq '';
+    # Nicks capped by matterircd (^h + 12 hex digits) lose their full ID.
+    return $nick if $nick =~ /\^h[0-9a-f]{12}\]?$/i;
+
+    # Homeserver must look like a domain to avoid mangling regular nicks.
+    my ($user, $host);
+    if ($sep eq '[]') {
+        ($user, $host) = $nick =~ /^(.+)\[([^\[\]]+\.[^\[\]]+)\]$/;
+    } else {
+        ($user, $host) = $nick =~ /^(.+?)\Q$sep\E([^.\s]+(?:\.[^.\s]+)+)$/;
+    }
+    return $nick unless defined $user;
+
+    # matterircd escapes special characters in both parts as ^hh (hex).
+    s/\^([0-9a-fA-F]{2})/chr(hex($1))/ge for ($user, $host);
+    return "$user:$host";
+}
+
 my %NICKNAMES_CACHE;
 sub cmd_matterircd_complete_nick_cache_dump {
     my ($data, $server, $wi) = @_;
@@ -1571,6 +1598,7 @@ sub signal_complete_word_nicks {
     }
     my $compl_char = Irssi::settings_get_str('completion_char');
     my $own_nick = $window->{active}->{ownnick}->{nick};
+    my $is_whois = ($linestart && $linestart =~ /^\s*\/(?:whois|wii?|w)\b/i);
 
     # We need to store the results in a temporary array so we can
     # sort.
@@ -1586,7 +1614,8 @@ sub signal_complete_word_nicks {
             next;
         }
         # Only those matching partial word.
-        elsif ($nick =~ /^\Q$word\E/i) {
+        elsif ($nick =~ /^\Q$word\E/i
+               or (not $is_whois and nick_to_matrix_id($nick) =~ /^\Q$word\E/i)) {
             push(@tmp, $nick);
         }
     }
@@ -1601,11 +1630,12 @@ sub signal_complete_word_nicks {
     }
 
     foreach my $nick (@tmp) {
+        my $mnick = $prefix eq "" ? $nick : nick_to_matrix_id($nick);
         # Only add completion character on line start.
         if (not $linestart) {
-            push(@$complist, "${prefix}${nick}${compl_char}");
+            push(@$complist, "${prefix}${mnick}${compl_char}");
         } else {
-            push(@$complist, "${prefix}${nick}");
+            push(@$complist, "${prefix}${mnick}");
         }
     }
 
@@ -1618,11 +1648,12 @@ sub signal_complete_word_nicks {
     # the cache.
     foreach my $nick (reverse @{$NICKNAMES_CACHE{$window->{active}->{name}}}) {
         my $nick_compl;
+        my $mnick = $prefix eq "" ? $nick : nick_to_matrix_id($nick);
         # Only add completion character on line start.
         if (not $linestart) {
-            $nick_compl = "${prefix}${nick}${compl_char}";
+            $nick_compl = "${prefix}${mnick}${compl_char}";
         } else {
-            $nick_compl = "${prefix}${nick}";
+            $nick_compl = "${prefix}${mnick}";
         }
         # Skip over if nick is already first in completion list.
         if ((scalar(@{$complist}) > 0) and ($nick_compl eq @{$complist}[0])) {
@@ -1632,9 +1663,9 @@ sub signal_complete_word_nicks {
         elsif ($in_channel{$nick}) {
             # Only add completion character on line start.
             if (not $linestart) {
-                unshift(@$complist, "${prefix}${nick}${compl_char}");
+                unshift(@$complist, "${prefix}${mnick}${compl_char}");
             } else {
-                unshift(@$complist, "${prefix}${nick}");
+                unshift(@$complist, "${prefix}${mnick}");
             }
         }
     }
@@ -1666,10 +1697,25 @@ sub signal_message_own_public_nicks {
     return unless chatnet_enabled($server);
     return unless Irssi::settings_get_int('matterircd_complete_nick_cache_size');
 
-    if ($msg !~ /^@([^@ \t:,\)]+)/) {
+    if ($msg !~ /^@([^@ \t,\)]+)/) {
         return;
     }
-    my $nick = $1;
+    my $mention = $1;
+    $mention =~ s/:+$//;
+    my $nick;
+    # Completed Matrix mentions (@user:homeserver) map back to the IRC nick.
+    if (my $mwi = $server->window_item_find($target)) {
+        foreach my $cur ($mwi->nicks()) {
+            if (nick_to_matrix_id($cur->{nick}) eq $mention) {
+                $nick = $cur->{nick};
+                last;
+            }
+        }
+    }
+    # Otherwise plain nick, as before: up to the first colon.
+    if (not defined $nick) {
+        ($nick) = $mention =~ /^([^:]+)/;
+    }
 
     my $cache_size = Irssi::settings_get_int('matterircd_complete_nick_cache_size');
     # We want to make sure that the nick or user is still online and
@@ -1752,7 +1798,10 @@ sub cmd_nicknames_search {
             $msgid = $1;
             $msgid .= " " if $msgid !~ /\s$/;
         }
-        $input =~ s/^\@[^${compl_char}]+$compl_char //;
+        if (not ($compl_char eq ':' and $input =~ s/^\@[^\s:]+:[^\s:]+\.[^\s:]+(?::\d+)?:\s*//)) {
+            $input =~ s/^\@[^${compl_char}]+$compl_char //;
+        }
+        $nickname = nick_to_matrix_id($nickname);
         Irssi::gui_input_set_pos(0);
         Irssi::gui_input_set("${msgid}\@${nickname}${compl_char} ${input}");
     }
@@ -1796,7 +1845,9 @@ sub signal_gui_key_pressed_nicks {
         }
 
         # Remove @nick prefix (supports bare '@', '@ ', '@nick', '@nick:', '@nick: ')
-        if ($input =~ s/^(\@(?!\@)[^\s\Q${compl_char}\E]*\Q${compl_char}\E?\s*)//) {
+        # Full Matrix mentions (@user:homeserver[:port]) are tried first.
+        if (($compl_char eq ':' and $input =~ s/^(\@(?!\@)[^\s:]+:[^\s:]+\.[^\s:]+(?::\d+)?\Q${compl_char}\E?\s*)//)
+            or $input =~ s/^(\@(?!\@)[^\s\Q${compl_char}\E]*\Q${compl_char}\E?\s*)//) {
             $pos = Irssi::gui_input_get_pos() - length($1);
         }
 
