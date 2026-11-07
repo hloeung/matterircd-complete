@@ -505,7 +505,7 @@ sub update_msgthreadid {
     }
 
     my $len = Irssi::settings_get_int('matterircd_complete_shorten_message_thread_id');
-    if (($len < 25) && ($nick ne 'mattermost') && ($thread_m_style != 1)) {
+    if (($len < 25) && ($nick !~ /^(?:mattermost|matrix)$/) && ($thread_m_style != 1)) {
         # Shorten to length configured. We use unicode ellipsis (...)
         # here to both allow word selection to just select parts of
         # the message/thread ID when copying & pasting and save on
