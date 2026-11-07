@@ -1798,7 +1798,10 @@ sub cmd_nicknames_search {
             $msgid = $1;
             $msgid .= " " if $msgid !~ /\s$/;
         }
-        $input =~ s/^\@[^${compl_char}]+$compl_char //;
+        if (not ($compl_char eq ':' and $input =~ s/^\@[^\s:]+:[^\s:]+\.[^\s:]+(?::\d+)?:\s*//)) {
+            $input =~ s/^\@[^${compl_char}]+$compl_char //;
+        }
+        $nickname = nick_to_matrix_id($nickname);
         Irssi::gui_input_set_pos(0);
         Irssi::gui_input_set("${msgid}\@${nickname}${compl_char} ${input}");
     }
