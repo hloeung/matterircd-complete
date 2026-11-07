@@ -1544,12 +1544,17 @@ sub nick_to_matrix_id {
     return $nick if $sep eq '';
 
     # Homeserver must look like a domain to avoid mangling regular nicks.
+    my ($user, $host);
     if ($sep eq '[]') {
-        return "$1:$2" if $nick =~ /^(.+)\[([^\[\]]+\.[^\[\]]+)\]$/;
-    } elsif ($nick =~ /^(.+?)\Q$sep\E([^.\s]+(?:\.[^.\s]+)+)$/) {
-        return "$1:$2";
+        ($user, $host) = $nick =~ /^(.+)\[([^\[\]]+\.[^\[\]]+)\]$/;
+    } else {
+        ($user, $host) = $nick =~ /^(.+?)\Q$sep\E([^.\s]+(?:\.[^.\s]+)+)$/;
     }
-    return $nick;
+    return $nick unless defined $user;
+
+    # matterircd escapes special characters in both parts as ^hh (hex).
+    s/\^([0-9a-fA-F]{2})/chr(hex($1))/ge for ($user, $host);
+    return "$user:$host";
 }
 
 my %NICKNAMES_CACHE;
@@ -1688,10 +1693,23 @@ sub signal_message_own_public_nicks {
     return unless chatnet_enabled($server);
     return unless Irssi::settings_get_int('matterircd_complete_nick_cache_size');
 
-    if ($msg !~ /^@([^@ \t:,\)]+)/) {
+    if ($msg !~ /^@([^@ \t,\)]+)/) {
         return;
     }
-    my $nick = $1;
+    my $mention = $1;
+    $mention =~ s/:+$//;
+    my $nick = $mention;
+    # Completed Matrix mentions (@user:homeserver) map back to the IRC nick.
+    if (my $mwi = $server->window_item_find($target)) {
+        foreach my $cur ($mwi->nicks()) {
+            if (nick_to_matrix_id($cur->{nick}) eq $mention) {
+                $nick = $cur->{nick};
+                last;
+            }
+        }
+    }
+    # Otherwise plain nick, as before: up to the first colon.
+    $nick =~ s/:.*//s if $nick eq $mention;
 
     my $cache_size = Irssi::settings_get_int('matterircd_complete_nick_cache_size');
     # We want to make sure that the nick or user is still online and
