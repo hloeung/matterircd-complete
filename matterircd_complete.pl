@@ -1532,6 +1532,26 @@ Irssi::signal_add_first('send text', 'signal_send_text');
 
 Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_nick_cache_size', 16);
 
+# Matrix separator configured in matterircd (user<sep>homeserver). "[]"
+# is the special default giving user[homeserver]. Used to convert nicks
+# to Matrix IDs (user:homeserver) on completion. Empty disables.
+Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_matrix_separator', '[]');
+
+sub nick_to_matrix_id {
+    my ($nick) = @_;
+
+    my $sep = Irssi::settings_get_str('matterircd_complete_matrix_separator');
+    return $nick if $sep eq '';
+
+    # Homeserver must look like a domain to avoid mangling regular nicks.
+    if ($sep eq '[]') {
+        return "$1:$2" if $nick =~ /^(.+)\[([^\[\]]+\.[^\[\]]+)\]$/;
+    } elsif ($nick =~ /^(.+?)\Q$sep\E([^.\s]+(?:\.[^.\s]+)+)$/) {
+        return "$1:$2";
+    }
+    return $nick;
+}
+
 my %NICKNAMES_CACHE;
 sub cmd_matterircd_complete_nick_cache_dump {
     my ($data, $server, $wi) = @_;
@@ -1601,11 +1621,12 @@ sub signal_complete_word_nicks {
     }
 
     foreach my $nick (@tmp) {
+        my $mnick = $prefix eq "" ? $nick : nick_to_matrix_id($nick);
         # Only add completion character on line start.
         if (not $linestart) {
-            push(@$complist, "${prefix}${nick}${compl_char}");
+            push(@$complist, "${prefix}${mnick}${compl_char}");
         } else {
-            push(@$complist, "${prefix}${nick}");
+            push(@$complist, "${prefix}${mnick}");
         }
     }
 
@@ -1618,11 +1639,12 @@ sub signal_complete_word_nicks {
     # the cache.
     foreach my $nick (reverse @{$NICKNAMES_CACHE{$window->{active}->{name}}}) {
         my $nick_compl;
+        my $mnick = $prefix eq "" ? $nick : nick_to_matrix_id($nick);
         # Only add completion character on line start.
         if (not $linestart) {
-            $nick_compl = "${prefix}${nick}${compl_char}";
+            $nick_compl = "${prefix}${mnick}${compl_char}";
         } else {
-            $nick_compl = "${prefix}${nick}";
+            $nick_compl = "${prefix}${mnick}";
         }
         # Skip over if nick is already first in completion list.
         if ((scalar(@{$complist}) > 0) and ($nick_compl eq @{$complist}[0])) {
@@ -1632,9 +1654,9 @@ sub signal_complete_word_nicks {
         elsif ($in_channel{$nick}) {
             # Only add completion character on line start.
             if (not $linestart) {
-                unshift(@$complist, "${prefix}${nick}${compl_char}");
+                unshift(@$complist, "${prefix}${mnick}${compl_char}");
             } else {
-                unshift(@$complist, "${prefix}${nick}");
+                unshift(@$complist, "${prefix}${mnick}");
             }
         }
     }
