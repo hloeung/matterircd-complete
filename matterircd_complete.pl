@@ -2571,6 +2571,9 @@ Irssi::signal_add('gui key pressed', sub {
 
             return unless $full_id;
 
+            # Matrix thread IDs ($-prefixed) don't support typing indicators
+            return if substr($full_id, 0, 1) eq '$';
+
             $thread = "\@\@${full_id}";
         } else {
             # Still typing or completing @@ prefix; do not broadcast to channel
