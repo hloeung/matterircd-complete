@@ -1542,6 +1542,8 @@ sub nick_to_matrix_id {
 
     my $sep = Irssi::settings_get_str('matterircd_complete_matrix_separator');
     return $nick if $sep eq '';
+    # Nicks capped by matterircd (^h + 12 hex digits) lose their full ID.
+    return $nick if $nick =~ /\^h[0-9a-f]{12}\]?$/i;
 
     # Homeserver must look like a domain to avoid mangling regular nicks.
     my ($user, $host);
@@ -1596,6 +1598,7 @@ sub signal_complete_word_nicks {
     }
     my $compl_char = Irssi::settings_get_str('completion_char');
     my $own_nick = $window->{active}->{ownnick}->{nick};
+    my $is_whois = ($linestart && $linestart =~ /^\s*\/(?:whois|wii?|w)\b/i);
 
     # We need to store the results in a temporary array so we can
     # sort.
@@ -1611,7 +1614,8 @@ sub signal_complete_word_nicks {
             next;
         }
         # Only those matching partial word.
-        elsif ($nick =~ /^\Q$word\E/i) {
+        elsif ($nick =~ /^\Q$word\E/i
+               or (not $is_whois and nick_to_matrix_id($nick) =~ /^\Q$word\E/i)) {
             push(@tmp, $nick);
         }
     }
@@ -1698,7 +1702,7 @@ sub signal_message_own_public_nicks {
     }
     my $mention = $1;
     $mention =~ s/:+$//;
-    my $nick = $mention;
+    my $nick;
     # Completed Matrix mentions (@user:homeserver) map back to the IRC nick.
     if (my $mwi = $server->window_item_find($target)) {
         foreach my $cur ($mwi->nicks()) {
@@ -1709,7 +1713,9 @@ sub signal_message_own_public_nicks {
         }
     }
     # Otherwise plain nick, as before: up to the first colon.
-    $nick =~ s/:.*//s if $nick eq $mention;
+    if (not defined $nick) {
+        ($nick) = $mention =~ /^([^:]+)/;
+    }
 
     my $cache_size = Irssi::settings_get_int('matterircd_complete_nick_cache_size');
     # We want to make sure that the nick or user is still online and
@@ -1836,7 +1842,9 @@ sub signal_gui_key_pressed_nicks {
         }
 
         # Remove @nick prefix (supports bare '@', '@ ', '@nick', '@nick:', '@nick: ')
-        if ($input =~ s/^(\@(?!\@)[^\s\Q${compl_char}\E]*\Q${compl_char}\E?\s*)//) {
+        # Full Matrix mentions (@user:homeserver[:port]) are tried first.
+        if ($input =~ s/^(\@(?!\@)[^\s:]+:[^\s:]+\.[^\s:]+(?::\d+)?\Q${compl_char}\E?\s*)//
+            or $input =~ s/^(\@(?!\@)[^\s\Q${compl_char}\E]*\Q${compl_char}\E?\s*)//) {
             $pos = Irssi::gui_input_get_pos() - length($1);
         }
 
