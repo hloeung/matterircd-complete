@@ -1489,6 +1489,12 @@ sub signal_send_text {
     return unless $wi->{type} eq 'CHANNEL' || $wi->{type} eq 'QUERY';
     return unless Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
 
+    # Double-click selecting a Matrix event ID drops the leading '$' so
+    # restore it when pasted.
+    if ($line =~ s/^@@([0-9A-Za-z\-_]{43})(\s|$)/\@\@\$$1$2/) {
+        Irssi::signal_continue($line, $server, $wi);
+    }
+
     if ($line =~ /^@@([0-9a-z]{1,26}|\$[0-9A-Za-z\-_\.\+\/]{1,43})(\s.*)?$/) {
         my $id = $1;
         my $rest = $2 // '';
