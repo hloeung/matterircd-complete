@@ -162,6 +162,7 @@ Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_networks', '
 Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_nick_ignore', '');
 Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_channel_dont_ignore', '');
 Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_permalink_base_url', 'https://mattermost.example.com/team/pl/');
+Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_debug', 0);
 
 
 sub _wi_print {
@@ -172,6 +173,14 @@ sub _wi_print {
     } else {
         Irssi::print($msg);
     }
+}
+
+sub _debug {
+    my ($msg) = @_;
+    return unless Irssi::settings_get_bool('matterircd_complete_debug');
+    $msg //= '';
+    $msg =~ s/%/%%/g;
+    Irssi::print("[matterircd_complete DEBUG] $msg", Irssi::MSGLEVEL_CLIENTCRAP);
 }
 
 #==============================================================================
