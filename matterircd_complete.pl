@@ -129,6 +129,11 @@
 #   Or next to message-tags (Use matterircd_thread for short and matterircd_thread_full for full message IDs)::
 #     /statusbar window add -alignment left -priority 15 matterircd_thread_full
 #     /save
+#
+# Common channels in /whois replies (319 RPL_WHOISCHANNELS) are marked in bold
+# on enabled networks by default. To disable:
+#
+#   /set matterircd_complete_disable_whois_bold ON
 
 use strict;
 use warnings;
@@ -3460,6 +3465,7 @@ sub UNLOAD {
     return if $exited;
     typing_cleanup_all();
     exit_save();
+    unhook_whois_print_format();
 
     for my $timer (values %active_whois_timers) {
         Irssi::timeout_remove($timer);
@@ -3474,6 +3480,113 @@ sub exit_save {
     save_cache("true")
 }
 Irssi::signal_add('gui exit', 'exit_save');
+
+#==============================================================================
+
+# Bold common channels in WHOIS replies (Numeric 319 RPL_WHOISCHANNELS)
+
+Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_disable_whois_bold', 0);
+
+my $whois_bold;
+my $whois_print_format_hooked = 0;
+
+sub unhook_whois_print_format {
+    return unless $whois_print_format_hooked;
+    Irssi::signal_remove('print format', 'sig_print_format_whois_channels');
+    $whois_print_format_hooked = 0;
+}
+
+# Attach 'print format' only for the synchronous duration of a 319 numeric so
+# Irssi's Perl XS layer does not marshal Theme/TextDest/Server on every chat line.
+# Note: 'server event' covers both redirected '/whois' ('whois default event')
+# and unredirected '/quote whois' ('event 319').
+sub sig_server_event_319_hook {
+    return unless defined $_[1] && index($_[1], '319 ') == 0;
+
+    my ($server) = @_;
+    return unless chatnet_enabled($server);
+    return if Irssi::settings_get_bool('matterircd_complete_disable_whois_bold');
+
+    if (!$whois_print_format_hooked) {
+        Irssi::signal_add_first('print format', 'sig_print_format_whois_channels');
+        $whois_print_format_hooked = 1;
+    }
+}
+
+# Format fe-common/irc 'whois_channels' rather than rewriting raw 319 in 'server event':
+# Irssi's event_whois_channels() runs show_lowascii() on 319 payloads (turning raw
+# control codes like \x02/\x04 into literal ^B/^D) and does not expand %_ in $1.
+# format_string_expand('%_') (\x04b) toggles bold without resetting theme colors
+# and is stripped cleanly by Irssi's strip_codes() for logs and 'print text'.
+sub sig_print_format_whois_channels {
+    return unless defined $_[3] && $_[3] eq 'whois_channels';
+    return unless defined $_[1] && $_[1] eq 'fe-common/irc';
+    return if Irssi::settings_get_bool('matterircd_complete_disable_whois_bold');
+
+    my ($theme, $module, $dest, $format, @args) = @_;
+    return unless ref($dest) && @args >= 2 && defined $args[1] && length $args[1];
+
+    my $server = $dest->{server};
+    return unless ref($server) && $server->can('channel_find');
+
+    my $debug = Irssi::settings_get_bool('matterircd_complete_debug');
+    my $server_tag = $debug ? ($server->{tag} // '') : '';
+
+    if ($debug) {
+        my $chatnet = $server->{chatnet} // '';
+        _debug("whois_channels caught on tag='$server_tag' chatnet='$chatnet': $args[1]");
+    }
+
+    if (!chatnet_enabled($server)) {
+        _debug("whois_channels skipped: server not enabled in matterircd_complete_networks") if $debug;
+        return;
+    }
+
+    $whois_bold //= Irssi::format_string_expand('%_');
+    my $nick_flags = ($server->can('get_nick_flags') ? ($server->get_nick_flags() // '') : '') . '~&@%+';
+    my $chantypes  = ($server->can('isupport') && $server->isupport('CHANTYPES')) || '#&!+';
+    my $changed    = 0;
+
+    $args[1] =~ s{(\S+)}{
+        my $c = $1;
+        my $pure_c = $c;
+
+        # Strip membership prefixes (including IRCv3 multi-prefix like @%#chan) only
+        # when a CHANTYPES prefix remains after them (preserving &local and +~chan).
+        while (length($pure_c) > 1 && index($nick_flags, substr($pure_c, 0, 1)) != -1) {
+            my $rem  = substr($pure_c, 1);
+            my $scan = $rem;
+            $scan = substr($scan, 1) while length($scan) > 1
+                && index($nick_flags, substr($scan, 0, 1)) != -1
+                && index($chantypes, substr($scan, 0, 1)) == -1;
+            last unless length($scan) > 1 && index($chantypes, substr($scan, 0, 1)) != -1;
+            $pure_c = $rem;
+        }
+
+        # Require an explicit CHANTYPES prefix so channel_find() never prepends '#' to bare words
+        my $chanrec = length($pure_c) > 1 && index($chantypes, substr($pure_c, 0, 1)) != -1
+            ? ($server->channel_find($pure_c) || ($pure_c ne $c && index($chantypes, substr($c, 0, 1)) != -1 && $server->channel_find($c)))
+            : undef;
+
+        if ($chanrec) {
+            _debug("Channel '$pure_c' (token '$c') MATCHED joined channel -> bolding") if $debug;
+            $changed = 1;
+            $whois_bold . $c . $whois_bold;
+        } else {
+            _debug("Channel '$pure_c' (token '$c') NOT joined on tag '$server_tag'") if $debug;
+            $c;
+        }
+    }ge;
+
+    return unless $changed;
+
+    Irssi::signal_continue($theme, $module, $dest, $format, @args);
+}
+
+Irssi::signal_add_first('server event', 'sig_server_event_319_hook');
+Irssi::signal_add_last('server event', 'unhook_whois_print_format');
+Irssi::signal_add_last('server incoming', 'unhook_whois_print_format');
+
 
 # Set up on load!
 setup_colors();
