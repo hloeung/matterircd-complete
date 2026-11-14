@@ -2561,6 +2561,8 @@ Irssi::signal_add('gui key pressed', sub {
     my $target = $window->{active}->{name};
     # Ignore local/virtual channels (e.g. &messages)
     return unless $target && substr($target, 0, 1) ne '&';
+    # Matrix and Slack only support per-channel/DM typing, not per-thread
+    return if $target =~ /^@@(?:\$|sl[0-9a-v]{34,80}$)/i;
 
     # Ignore when typing Irssi slash commands (e.g. /win 1, /join)
     my $input_line = Irssi::parse_special('$L') // '';
@@ -2589,8 +2591,8 @@ Irssi::signal_add('gui key pressed', sub {
 
             return unless $full_id;
 
-            # Matrix thread IDs ($-prefixed) don't support typing indicators
-            return if substr($full_id, 0, 1) eq '$';
+            # Matrix ($-prefixed) and Slack (sl-prefixed) only support per-channel/DM typing, not per-thread
+            return if substr($full_id, 0, 1) eq '$' || $full_id =~ /^sl[0-9a-v]{34,80}$/;
 
             $thread = "\@\@${full_id}";
         } else {
