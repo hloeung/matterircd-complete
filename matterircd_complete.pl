@@ -35,7 +35,7 @@
 #   Ctrl+g - Insert latest message/thread ID.
 #   Ctrl+c - Abort inserting message/thread ID. Also clears existing.
 #
-#   @@+TAB to tab auto-complete message/thread ID.
+#   @@+TAB / >@@+TAB to tab auto-complete message/thread ID.
 #   @ +TAB to tab auto-complete IRC nick. Active users appear first.
 #
 # By default, message/thread IDs are shortened to the first few
@@ -685,9 +685,9 @@ sub cmd_last_message_permalink {
     # Check for short or full ID in command arguments or active input prompt
     my $input = Irssi::parse_special('$L');
     my $target_id;
-    if (defined $data && $data =~ /^\s*(?:\@\@)?($THREAD_ID_PARTIAL_RE)\s*$/) {
+    if (defined $data && $data =~ /^\s*(?:>?\@\@)?($THREAD_ID_PARTIAL_RE)\s*$/) {
         $target_id = $1;
-    } elsif ($input =~ /^@@($THREAD_ID_PARTIAL_RE)(?:\s|$)/) {
+    } elsif ($input =~ /^>?@@($THREAD_ID_PARTIAL_RE)(?:\s|$)/) {
         $target_id = $1;
     }
 
@@ -826,11 +826,11 @@ sub cmd_message_thread_id_search {
 
         # Save input text.
         my $input = Irssi::parse_special('$L');
-        # Remove existing thread.
-        $input =~ s/^@@(?:$THREAD_ID_PARTIAL_RE)?\s*//;
+        # Remove existing thread, preserving >@@ quote prefix if present.
+        my $quote = ($input =~ s/^(>)?@@(?:$THREAD_ID_PARTIAL_RE)?\s*// && defined $1) ? $1 : '';
         # Insert message/thread ID from cache.
         Irssi::gui_input_set_pos(0);
-        Irssi::gui_input_set("\@\@${insert_id} ${input}");
+        Irssi::gui_input_set("${quote}\@\@${insert_id} ${input}");
         queue_thread_preview();
     }
 }
@@ -848,10 +848,10 @@ sub cmd_message_thread_id_last {
     my $pos = Irssi::gui_input_get_pos();
     my $id;
 
-    # Support argument passed directly: /message_thread_id_last [@@]<id>
-    if (defined $data && $data =~ /^\s*(?:\@\@)?($THREAD_ID_PARTIAL_RE)\s*$/) {
+    # Support argument passed directly: /message_thread_id_last [[>]@@]<id>
+    if (defined $data && $data =~ /^\s*(?:>?\@\@)?($THREAD_ID_PARTIAL_RE)\s*$/) {
         $id = $1;
-    } elsif ($input =~ /^@@($THREAD_ID_PARTIAL_RE)(?:\s|$)/) {
+    } elsif ($input =~ /^>?@@($THREAD_ID_PARTIAL_RE)(?:\s|$)/) {
         $id = $1;
     } elsif (exists $MSGTHREADID_CACHE{$target} && @{$MSGTHREADID_CACHE{$target}}) {
         # Fallback to latest thread if prompt is empty
@@ -898,11 +898,11 @@ my $O_PRESSED   = 0;
 sub signal_gui_key_pressed_msgthreadid {
     my ($key) = @_;
 
-    # If search mode is not active, only intercept Ctrl+C when an @@ prefix is present
+    # If search mode is not active, only intercept Ctrl+C when an @@ or >@@ prefix is present
     if (! $MSGTHREADID_CACHE_SEARCH_ENABLED) {
         return unless $key == $KEY_CTRL_C;
         my $input = Irssi::parse_special('$L');
-        return unless $input =~ /^@@/;
+        return unless $input =~ /^>?@@/;
     }
 
     my $server = Irssi::active_server();
@@ -925,7 +925,7 @@ sub signal_gui_key_pressed_msgthreadid {
         $input =~ s/\x03//g;
 
         my $pos = 0;
-        if ($input =~ s/^(\@\@(?:$THREAD_ID_PARTIAL_RE)?\s*)//) {
+        if ($input =~ s/^(>?\@\@(?:$THREAD_ID_PARTIAL_RE)?(?:\s+\@>(?=\s|$))?\s*)//) {
             $pos = Irssi::gui_input_get_pos() - length($1);
         }
 
@@ -999,8 +999,13 @@ sub signal_complete_word_msgthread_id {
     my $before_cursor = substr(Irssi::parse_special('$L'), 0, $pos);
     return if $before_cursor =~ /\@\@\$?\s+\S*$/;
 
+    my $has_quote_prefix = 0;
     my $has_at_prefix = 0;
-    if (substr($word, 0, 2) eq '@@') {
+    if (substr($word, 0, 3) eq '>@@') {
+        $word = substr($word, 3);
+        $has_quote_prefix = 1;
+        $has_at_prefix = 1;
+    } elsif (substr($word, 0, 2) eq '@@') {
         $word = substr($word, 2);
         $has_at_prefix = 1;
     } elsif (defined($linestart) && $linestart =~ /\@\@\$?$/) {
@@ -1020,7 +1025,7 @@ sub signal_complete_word_msgthread_id {
 
     # Only shorten when replying at line start. In commands (like /msg mattermost scrollback)
     # or mid-line references, matterircd requires the full canonical ID.
-    my $is_reply = (!defined($linestart) || $linestart =~ /^\s*(?:\@\@\$?)?$/);
+    my $is_reply = (!defined($linestart) || $linestart =~ /^\s*(?:>?\@\@\$?)?$/);
     my $min_len = 0;
     if ($is_reply) {
         $min_len = Irssi::settings_get_int('matterircd_complete_message_thread_id_min')
@@ -1069,14 +1074,14 @@ sub signal_complete_word_msgthread_id {
             $insert_id = substr($msgthread_id, 0, $len);
         }
 
-        # If Irssi split at '$', $linestart already contains '@@$'. Only complete the remainder.
+        # If Irssi split at '$', $linestart already contains '@@$' (or '>@@$'). Only complete the remainder.
         if (defined($linestart) && $linestart =~ /\@\@\$$/) {
             my $remainder = (substr($insert_id, 0, 1) eq '$') ? substr($insert_id, 1) : $insert_id;
             push(@$complist, $remainder);
         } elsif (defined($linestart) && $linestart =~ /\@\@$/) {
             push(@$complist, $insert_id);
         } else {
-            push(@$complist, "\@\@${insert_id}");
+            push(@$complist, ($has_quote_prefix ? ">\@\@" : "\@\@") . $insert_id);
         }
     }
 }
@@ -1246,22 +1251,25 @@ sub signal_message_own_msgthreadid {
 
     return unless chatnet_enabled($server);
     return unless Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
-    if ($msg !~ /^@@($THREAD_ID_ANY_RE)\s+([+-]:\S+:)?/) {
+    if ($msg !~ /^(>?)@@($THREAD_ID_ANY_RE)\s+([+-]:\S+:)?/) {
         return;
     }
 
-    my $msgthreadid = $1;
-    my $reaction = $2 ? $2 : '';
+    my $quote = $1;
+    my $msgthreadid = $2;
+    my $is_unthreaded_quote = ($quote ne '');
+    my $reaction = (!$is_unthreaded_quote && $3) ? $3 : '';
 
     # matterircd generated 3-letter hexadecimal.
     my $thread_m_style = 0;
-    if ($msg =~ /^@@(?:[0-9a-f]{3}) /) {
+    if ($msg =~ /^>?@@(?:[0-9a-f]{3}) /) {
         $thread_m_style = 1;
     }
 
-    # If it's a reaction and it's already in the most recent cache, skip to increase accuracy of auto completion
+    # Skip root-thread cache update for reactions and unthreaded >@@ quotes,
+    # since neither replies in-thread and the ID may be a child post ID.
     my $found_in_recent = 0;
-    if ($reaction ne '') {
+    if ($reaction ne '' || $is_unthreaded_quote) {
         if (grep { $_ eq $msgthreadid } @{$MSGTHREADID_CACHE{$target}}) {
             $found_in_recent = 1;
         }
@@ -1271,7 +1279,7 @@ sub signal_message_own_msgthreadid {
         my $cache_size = Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
 
         # Only conversation replies become sticky and enter the root thread cycle cache
-        if ($reaction eq '') {
+        if ($reaction eq '' && !$is_unthreaded_quote) {
             $MSGTHREADID_CACHE_SEARCH_RECENT{$target} = $msgthreadid;
             $MSGTHREADID_CACHE_SEARCH_RECENT_TIME{$target} = time();
 
@@ -1281,7 +1289,7 @@ sub signal_message_own_msgthreadid {
             }
         }
 
-        # Reactions can still refresh their place in the general most-recent cache for Tab completion
+        # Reactions and quotes can still refresh their place in the general most-recent cache for Tab completion
         if (cache_store(\@{$MSGTHREADID_MOST_RECENT_CACHE{$target}}, $msgthreadid, $cache_size)) {
             $MSGTHREADID_CACHE_INDEX = 0;
             stats_increment(\$MSGTHREADID_MOST_RECENT_CACHE_STATS);
@@ -1304,13 +1312,13 @@ sub signal_message_own_msgthreadid {
         $msgthreadid = shorten_thread_id($msgthreadid, $len);
     }
 
-    my $reply_prefix = Irssi::settings_get_str('matterircd_complete_override_reply_prefix');
+    my $reply_prefix = $is_unthreaded_quote ? '>' : Irssi::settings_get_str('matterircd_complete_override_reply_prefix');
     if (Irssi::settings_get_bool('matterircd_complete_reply_msg_thread_id_at_start')) {
-        $msg =~ s/^@@(?:$THREAD_ID_RE) /${thread_color}[${reply_prefix}${msgthreadid}]\x0f /;
-        $msg =~ s/^@@[0-9a-f]{3} /${thread_color}[${reply_prefix}${msgthreadid}]\x0f /;
+        $msg =~ s/^>?@@(?:$THREAD_ID_RE) /${thread_color}[${reply_prefix}${msgthreadid}]\x0f /;
+        $msg =~ s/^>?@@[0-9a-f]{3} /${thread_color}[${reply_prefix}${msgthreadid}]\x0f /;
     } else {
-        $msg =~ s/^@@(?:$THREAD_ID_RE) //;
-        $msg =~ s/^@@[0-9a-f]{3} //;
+        $msg =~ s/^>?@@(?:$THREAD_ID_RE) //;
+        $msg =~ s/^>?@@[0-9a-f]{3} //;
         $msg =~ s/$/ ${thread_color}[${reply_prefix}${msgthreadid}]\x0f/;
     }
 
@@ -1425,7 +1433,7 @@ sub update_thread_preview {
     $preview_tag = undef;
 
     my $input = Irssi::parse_special('$L');
-    if ($current_thread_preview eq '' && $current_thread_preview_full eq '' && substr($input, 0, 2) ne '@@') {
+    if ($current_thread_preview eq '' && $current_thread_preview_full eq '' && substr($input, 0, 2) ne '@@' && substr($input, 0, 3) ne '>@@') {
         return;
     }
 
@@ -1443,12 +1451,13 @@ sub update_thread_preview {
     my $new_preview = '';
     my $new_preview_full = '';
 
-    if ($input =~ /^@@($THREAD_ID_PARTIAL_RE)/) {
-        my $id = $1;
+    if ($input =~ /^(>?)@@($THREAD_ID_PARTIAL_RE)/) {
+        my $quote = $1;
+        my $id = $2;
         my $target = $window->{active}->{name};
         my ($full_id, $match_count) = msgthreadid_find($target, $id);
 
-        my $reply_prefix = Irssi::settings_get_str('matterircd_complete_override_reply_prefix');
+        my $reply_prefix = $quote ne '' ? $quote : Irssi::settings_get_str('matterircd_complete_override_reply_prefix');
         if ($full_id) {
             my $thread_color_fmt = thread_color_format($full_id);
 
@@ -1497,17 +1506,19 @@ sub signal_send_text {
 
     # Double-click selecting a Matrix event ID drops the leading '$' so
     # restore it when pasted.
-    if ($line =~ s/^@@([0-9A-Za-z\-_]{43})(\s|$)/\@\@\$$1$2/) {
-        Irssi::signal_continue($line, $server, $wi);
+    my $modified = 0;
+    if ($line =~ s/^(>?)@@([0-9A-Za-z\-_]{43})(\s|$)/$1\@\@\$$2$3/) {
+        $modified = 1;
     }
 
-    if ($line =~ /^@@($THREAD_ID_PARTIAL_RE)(\s.*)?$/) {
-        my $id = $1;
-        my $rest = $2 // '';
+    if ($line =~ /^(>?)@@($THREAD_ID_PARTIAL_RE)(\s.*)?$/) {
+        my $quote = $1;
+        my $id = $2;
+        my $rest = $3 // '';
         my $target = $wi->{name};
 
-        # Prevent sending an accidental bare thread ID without message content
-        if ($rest !~ /\S/) {
+        # Prevent sending an accidental bare thread/quote ID without message content
+        if ($rest !~ /\S/ || ($quote eq '' && $rest =~ /^\s*\@>\s*$/)) {
             Irssi::signal_stop();
             Irssi::gui_input_set($line =~ /\s$/ ? $line : "${line} ");
             return;
@@ -1522,7 +1533,11 @@ sub signal_send_text {
 
         my $full_id = msgthreadid_find($target, $id);
         if ($full_id && $full_id ne $id) {
-            $line = "\@\@${full_id}${rest}";
+            $line = "${quote}\@\@${full_id}${rest}";
+            $modified = 1;
+        }
+
+        if ($modified) {
             Irssi::signal_continue($line, $server, $wi);
         }
     } elsif ($current_thread_preview ne '' || $current_thread_preview_full ne '') {
@@ -1602,7 +1617,7 @@ sub signal_complete_word_nicks {
     my ($complist, $window, $word, $linestart, $want_space) = @_;
 
     return unless chatnet_enabled($window->{active_server});
-    return if substr($word, 0, 2) eq '@@';
+    return if substr($word, 0, 2) eq '@@' || substr($word, 0, 3) eq '>@@';
     return unless $window->{active} and $window->{active}->{type} eq 'CHANNEL';
 
     if (substr($word, 0, 1) eq '@') {
@@ -1806,7 +1821,7 @@ sub cmd_nicknames_search {
         my $compl_char = Irssi::settings_get_str('completion_char');
         # Remove any existing nickname and insert one from the cache.
         my $msgid = "";
-        if ($input =~ s/^(\@\@(?:$THREAD_ID_PARTIAL_RE)\s*)//) {
+        if ($input =~ s/^(>?\@\@(?:$THREAD_ID_PARTIAL_RE)(?:\s+\@>(?=\s|$))?\s*)//) {
             $msgid = $1;
             $msgid .= " " if $msgid !~ /\s$/;
         }
@@ -1827,7 +1842,7 @@ sub signal_gui_key_pressed_nicks {
     if (! $NICKNAMES_CACHE_SEARCH_ENABLED) {
         return unless $key == $KEY_CTRL_C;
         my $input = Irssi::parse_special('$L');
-        return unless $input =~ /^(?:\@\@\S+\s+)?\@(?!\@)/;
+        return unless $input =~ /^(?:>?\@\@\S+\s+(?:\@>\s+)?)?\@(?!\@|>)/;
     }
 
     my $server = Irssi::active_server();
@@ -1851,7 +1866,7 @@ sub signal_gui_key_pressed_nicks {
 
         # Preserve any leading @@thread ID if present
         my $msgid = "";
-        if ($input =~ s/^(\@\@(?:$THREAD_ID_PARTIAL_RE)\s*)//) {
+        if ($input =~ s/^(>?\@\@(?:$THREAD_ID_PARTIAL_RE)(?:\s+\@>(?=\s|$))?\s*)//) {
             $msgid = $1;
             $msgid .= " " if $msgid !~ /\s$/;
         }
@@ -1953,7 +1968,9 @@ sub cmd_matterircd_complete_replied_cache_clear {
 
     if (scalar(@msgids) > 0) {
         foreach my $id (@msgids) {
-            if (rindex($id, "@@", 0) == 0) {
+            if (rindex($id, ">@@", 0) == 0) {
+                $id = substr($id, 3);
+            } elsif (rindex($id, "@@", 0) == 0) {
                 $id = substr($id, 2);
             }
             # Strip trailing ellipsis if copied from scrollback or statusbar
@@ -2550,16 +2567,21 @@ Irssi::signal_add('gui key pressed', sub {
     return if $key == 47 && $input_line eq '';
     return if $input_line =~ m{^/(?!/)};
 
-    # Do not leak typing to channel when typing @ or @@ prefix
-    return if $key == 64 && ($input_line eq '' || $input_line eq '@');
+    # Do not leak typing to channel when typing @, @@, >, >@, or >@@ prefix
+    return if ($key == 64 || $key == 62) && $input_line eq '';
+    return if $key == 64 && ($input_line eq '@' || $input_line eq '>' || $input_line eq '>@');
 
-    # Do not emit while entering a thread ID or its trailing separator.
-    return if $input_line =~ /^@@\S*$/;
+    # Do not emit while entering a thread/quote ID or its trailing separator.
+    return if $input_line =~ /^>?@@\S*$/;
 
     # Ignore when typing reactions (e.g. @@<id> +:+1: or @@<id> +:thumbsup:)
     return if ($key == 43 || $key == 45) && ($input_line =~ /^@@\S+\s+$/ || ($target =~ /^@@/ && $input_line eq ''));
     return if $input_line =~ /^@@\S+\s+[+-](?::|$)/;
     return if $target =~ /^@@/ && $input_line =~ /^[+-](?::|$)/;
+
+    # Do not emit while entering the @> quote token or its trailing separator.
+    return if $key == 64 && $input_line =~ /^@@\S+\s+$/;
+    return if $input_line =~ /^@@\S+\s+\@>?$/;
 
     # If replying to a thread inline, retain its ID alongside the channel/DM target
     my $thread = '';
