@@ -1,10 +1,10 @@
 #
-# Supports Mattermost, Matrix, Slack, Microsoft Teams (MSTeams), and
-# Rocket.Chat bridges in matterircd.
+# Supports Mattermost, Matrix, Slack, Microsoft Teams (MSTeams), Google Chat,
+# and Rocket.Chat bridges in matterircd.
 #
 # For the full matterircd_complete experience, your matterircd.toml
 # should have SuffixContext=true, ThreadContext="mattermost" (or
-# "matrix" / "slack" / "msteams" / "rocketchat"), and Unicode=true.
+# "matrix" / "slack" / "msteams" / "googlechat" / "rocketchat"), and Unicode=true.
 #
 # Add it to ~/.irssi/scripts/autorun, or:
 #
@@ -39,7 +39,7 @@
 #   @ +TAB to tab auto-complete IRC nick. Active users appear first.
 #
 # By default, message/thread IDs are shortened to the first few
-# characters (default 5, preserving bridge prefixes like $, sl, or mt).
+# characters (default 5, preserving bridge prefixes like $, sl, mt, or gc).
 # It is also grayed out to try reduce noise and make it easier to read
 # conversations. To disable this use:
 #
@@ -95,7 +95,7 @@
 # You can also pass a count directly: /scrollback 10
 #
 #   /set matterircd_complete_scrollback_lines 5
-#   /set matterircd_complete_service_account_nick mattermost  # or matrix / slack / msteams / rocketchat
+#   /set matterircd_complete_service_account_nick mattermost  # or matrix / slack / msteams / googlechat / rocketchat
 #
 # Add the private-channel indicator to the statusbar:
 #
@@ -361,16 +361,17 @@ sub thread_color {
 
 # Canonical and partial thread/message ID patterns across supported bridges:
 # Slack (sl[0-9a-v]{34,80}), Mattermost (26-char), MSTeams (mt[0-9a-v]{16}),
-# Rocket.Chat (17-char), Matrix ($ + 43-char), and legacy matterircd 3-char hex.
-my $THREAD_ID_RE = qr/sl[0-9a-v]{34,80}|[0-9a-z]{26}|mt[0-9a-v]{16}|[0-9A-Za-z]{17}|\$[0-9A-Za-z\-_\.\+\/]{43}/;
+# Rocket.Chat (17-char), Google Chat (gc[0-9A-Za-z_-]{11}), Matrix ($ + 43-char),
+# and legacy matterircd 3-char hex.
+my $THREAD_ID_RE = qr/sl[0-9a-v]{34,80}|[0-9a-z]{26}|mt[0-9a-v]{16}|[0-9A-Za-z]{17}|gc[0-9A-Za-z_-]{11}|\$[0-9A-Za-z\-_\.\+\/]{43}/;
 my $THREAD_ID_ANY_RE = qr/$THREAD_ID_RE|[0-9a-f]{3}/;
-my $THREAD_ID_PARTIAL_RE = qr/sl[0-9a-v]{25,80}|[0-9a-z]{18,26}|[0-9A-Za-z]{1,17}|\$[0-9A-Za-z\-_\.\+\/]{1,43}/;
+my $THREAD_ID_PARTIAL_RE = qr/sl[0-9a-v]{25,80}|[0-9a-z]{18,26}|[0-9A-Za-z]{14,17}|gc[0-9A-Za-z_-]{1,11}|[0-9A-Za-z]{1,13}|\$[0-9A-Za-z\-_\.\+\/]{1,43}/;
 
 sub thread_id_prefix_offset {
     my ($id, $full_id) = @_;
     return 1 if substr($id, 0, 1) eq '$';
-    return 2 if ($full_id && $full_id =~ /^(?:sl[0-9a-v]{34,80}|mt[0-9a-v]{16})$/)
-             || $id =~ /^(?:sl[0-9a-v]{25,80}|mt[0-9a-v]{16})$/;
+    return 2 if ($full_id && $full_id =~ /^(?:sl[0-9a-v]{34,80}|mt[0-9a-v]{16}|gc[0-9A-Za-z_-]{11})$/)
+             || $id =~ /^(?:sl[0-9a-v]{25,80}|mt[0-9a-v]{16}|gc[0-9A-Za-z_-]{11})$/;
     return 0;
 }
 
@@ -533,7 +534,7 @@ sub update_msgthreadid {
     }
 
     my $len = Irssi::settings_get_int('matterircd_complete_shorten_message_thread_id');
-    if (($len < 25) && ($nick !~ /^(?:mattermost|matrix|slack|msteams|rocketchat)$/) && ($thread_m_style != 1)) {
+    if (($len < 25) && ($nick !~ /^(?:mattermost|matrix|slack|msteams|googlechat|rocketchat)$/) && ($thread_m_style != 1)) {
         # Shorten to length configured. We use unicode ellipsis (...)
         # here to both allow word selection to just select parts of
         # the message/thread ID when copying & pasting and save on
@@ -1101,7 +1102,7 @@ sub cache_msgthreadid {
         }
     }
 
-    # Mattermost, Matrix, Slack, MSTeams, and Rocket.Chat message/thread IDs.
+    # Mattermost, Matrix, Slack, MSTeams, Google Chat, and Rocket.Chat message/thread IDs.
     if ($msg =~ /\[(?:->|↪)?\@\@($THREAD_ID_RE)(?:,\@\@($THREAD_ID_RE))?\]/) {
         my $msgthreadid = $1;
         my $msgpostid = $2 ? $2 : '';
