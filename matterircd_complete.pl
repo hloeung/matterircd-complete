@@ -39,7 +39,7 @@
 #   @ +TAB to tab auto-complete IRC nick. Active users appear first.
 #
 # By default, message/thread IDs are shortened to the first few
-# characters (default 5, preserving bridge prefixes like $, sl, mt, or gc).
+# characters (default 5, preserving the leading $ on Matrix event IDs).
 # It is also grayed out to try reduce noise and make it easier to read
 # conversations. To disable this use:
 #
@@ -360,23 +360,20 @@ sub thread_color {
 }
 
 # Canonical and partial thread/message ID patterns across supported bridges:
-# Slack (sl[0-9a-v]{34,80}), Mattermost (26-char), MSTeams (mt[0-9a-v]{16}),
-# Rocket.Chat (17-char), Google Chat (gc[0-9A-Za-z_-]{11}), Matrix ($ + 43-char),
+# Matrix ($ + 43-char), Slack (34-80 char), Mattermost (26-char),
+# Rocket.Chat (17-char), MSTeams (16-char), Google Chat (11-char),
 # and legacy matterircd 3-char hex.
-my $THREAD_ID_RE = qr/sl[0-9a-v]{34,80}|[0-9a-z]{26}|mt[0-9a-v]{16}|[0-9A-Za-z]{17}|gc[0-9A-Za-z_-]{11}|\$[0-9A-Za-z\-_\.\+\/]{43}/;
+my $THREAD_ID_RE = qr/\$[0-9A-Za-z\-_\.\+\/]{43}|[0-9a-v]{34,80}|[0-9a-z]{26}|[0-9A-Za-z]{17}|[0-9a-v]{16}|[0-9A-Za-z_-]{11}/;
 my $THREAD_ID_ANY_RE = qr/$THREAD_ID_RE|[0-9a-f]{3}/;
-my $THREAD_ID_PARTIAL_RE = qr/sl[0-9a-v]{25,80}|[0-9a-z]{18,26}|[0-9A-Za-z]{14,17}|gc[0-9A-Za-z_-]{1,11}|[0-9A-Za-z]{1,13}|\$[0-9A-Za-z\-_\.\+\/]{1,43}/;
+my $THREAD_ID_PARTIAL_RE = qr/\$[0-9A-Za-z\-_\.\+\/]{1,43}|[0-9a-v]{44,80}|[0-9A-Za-z\-_\.\+\/]{43}|[0-9a-v]{27,42}|[0-9a-z]{18,26}|[0-9A-Za-z]{12,17}|[0-9A-Za-z_-]{1,11}/;
 # Quote-in-reply prefix: '>' with optional length modifier (e.g. >5l, >6w, >10c).
 my $QUOTE_MOD_RE = qr/[1-9][0-9]*[lLwWcC]/;
 my $QUOTE_PREFIX_RE = qr/>(?:$QUOTE_MOD_RE)?/;
 my $INPUT_PREFIX_RE = qr/(?:$QUOTE_PREFIX_RE\@\@(?:$THREAD_ID_PARTIAL_RE|!!)|\@\@(?:$THREAD_ID_PARTIAL_RE|!!)(?:\s+$QUOTE_PREFIX_RE(?:\@(?=\s|$)|\@\@(?:$THREAD_ID_PARTIAL_RE|!!)))?)/;
 
 sub thread_id_prefix_offset {
-    my ($id, $full_id) = @_;
-    return 1 if substr($id, 0, 1) eq '$';
-    return 2 if ($full_id && $full_id =~ /^(?:sl[0-9a-v]{34,80}|mt[0-9a-v]{16}|gc[0-9A-Za-z_-]{11})$/)
-             || $id =~ /^(?:sl[0-9a-v]{25,80}|mt[0-9a-v]{16}|gc[0-9A-Za-z_-]{11})$/;
-    return 0;
+    my ($id) = @_;
+    return substr($id, 0, 1) eq '$' ? 1 : 0;
 }
 
 sub shorten_thread_id {
@@ -398,7 +395,10 @@ sub cmd_matterircd_complete_thread_id_get_color {
 
     if ($wi && ($wi->{type} eq 'CHANNEL' || $wi->{type} eq 'QUERY')) {
         my ($full_id, $match_count) = msgthreadid_find($wi->{name}, $id);
-        if (!$full_id && $id =~ /^(?:$THREAD_ID_ANY_RE)$/) {
+        if (!$full_id && $id =~ /^[0-9A-Za-z\-_\.\+\/]{43}$/) {
+            $full_id = "\$${id}";
+            $match_count = 1;
+        } elsif (!$full_id && $id =~ /^(?:$THREAD_ID_ANY_RE)$/) {
             $full_id = $id;
             $match_count = 1;
         }
@@ -697,7 +697,10 @@ sub cmd_last_message_permalink {
 
     if (defined $target_id && length $target_id) {
         my ($full_id, $match_count) = msgthreadid_find($channel, $target_id);
-        if (!$full_id && $target_id =~ /^(?:$THREAD_ID_RE)$/) {
+        if (!$full_id && $target_id =~ /^[0-9A-Za-z\-_\.\+\/]{43}$/) {
+            $full_id = "\$${target_id}";
+            $match_count = 1;
+        } elsif (!$full_id && $target_id =~ /^(?:$THREAD_ID_RE)$/) {
             $full_id = $target_id;
             $match_count = 1;
         }
@@ -870,8 +873,13 @@ sub cmd_message_thread_id_last {
     my $len = Irssi::settings_get_int('matterircd_complete_shorten_message_thread_id');
     my $thread_m_style = ($id =~ /^[0-9a-f]{3}$/) ? 1 : 0;
     my $search_id = $id;
-    my ($full_id) = msgthreadid_find($target, $id);
-    my $offset = thread_id_prefix_offset($search_id, $full_id);
+    if (substr($search_id, 0, 1) ne '$') {
+        my ($full_id) = msgthreadid_find($target, $search_id);
+        if (($full_id && substr($full_id, 0, 1) eq '$') || $search_id =~ /^[0-9A-Za-z\-_\.\+\/]{43}$/) {
+            $search_id = "\$${search_id}";
+        }
+    }
+    my $offset = thread_id_prefix_offset($search_id);
     if (($len > 0) && ($len < 25) && ($thread_m_style != 1) && (length($search_id) > $len + $offset)) {
         $search_id = substr($search_id, 0, $len + $offset);
     }
@@ -1379,13 +1387,17 @@ sub msgthreadid_find {
     return unless defined $id && length($id);
 
     my $want_all = wantarray;
+    my $has_dollar = (substr($id, 0, 1) eq '$') ? 1 : 0;
     my @matches = ();
     my %seen = ();
 
     # Search most recent cache first (replies to posts, reactions, etc.)
     if (exists $MSGTHREADID_MOST_RECENT_CACHE{$target}) {
         for my $cached_id (@{$MSGTHREADID_MOST_RECENT_CACHE{$target}}) {
-            if (index($cached_id, $id) == 0) {
+            my $matched = $has_dollar
+                ? (index($cached_id, $id) == 0)
+                : (substr($cached_id, 0, 1) eq '$' ? index($cached_id, $id, 1) == 1 : index($cached_id, $id) == 0);
+            if ($matched) {
                 return $cached_id unless $want_all;
                 push(@matches, $cached_id) unless $seen{$cached_id}++;
             }
@@ -1395,7 +1407,10 @@ sub msgthreadid_find {
     # Search main thread ID cache
     if (exists $MSGTHREADID_CACHE{$target}) {
         for my $cached_id (@{$MSGTHREADID_CACHE{$target}}) {
-            if (index($cached_id, $id) == 0) {
+            my $matched = $has_dollar
+                ? (index($cached_id, $id) == 0)
+                : (substr($cached_id, 0, 1) eq '$' ? index($cached_id, $id, 1) == 1 : index($cached_id, $id) == 0);
+            if ($matched) {
                 return $cached_id unless $want_all;
                 push(@matches, $cached_id) unless $seen{$cached_id}++;
             }
@@ -1581,10 +1596,10 @@ sub signal_send_text {
     # Double-click selecting a Matrix event ID drops the leading '$' so
     # restore it when pasted (for both the leading ID and a cross-post quote ID).
     my $modified = 0;
-    if ($line =~ s/^((?:$QUOTE_PREFIX_RE)?)\@\@([0-9A-Za-z\-_]{43})(\s|$)/$1\@\@\$$2$3/) {
+    if ($line =~ s/^((?:$QUOTE_PREFIX_RE)?)\@\@([0-9A-Za-z\-_\.\+\/]{43})(\s|$)/$1\@\@\$$2$3/) {
         $modified = 1;
     }
-    if ($line =~ s/^(\@\@(?:$THREAD_ID_PARTIAL_RE|!!)\s+$QUOTE_PREFIX_RE)\@\@([0-9A-Za-z\-_]{43})(\s|$)/$1\@\@\$$2$3/) {
+    if ($line =~ s/^(\@\@(?:$THREAD_ID_PARTIAL_RE|!!)\s+$QUOTE_PREFIX_RE)\@\@([0-9A-Za-z\-_\.\+\/]{43})(\s|$)/$1\@\@\$$2$3/) {
         $modified = 1;
     }
 
@@ -2069,7 +2084,13 @@ sub cmd_matterircd_complete_replied_cache_clear {
             }
 
             my %seen;
-            my @matches = grep { rindex($_, $id, 0) == 0 && !$seen{$_}++ } @{$REPLIED_CACHE{$channel}};
+            my $has_dollar = (substr($id, 0, 1) eq '$') ? 1 : 0;
+            my @matches = grep {
+                my $m = $has_dollar
+                    ? (index($_, $id) == 0)
+                    : (substr($_, 0, 1) eq '$' ? index($_, $id, 1) == 1 : index($_, $id) == 0);
+                $m && !$seen{$_}++;
+            } @{$REPLIED_CACHE{$channel}};
 
             if (@matches > 1) {
                 _wi_print($wi, "[matterircd_complete] Ambiguous thread ID prefix '${id}' (" . scalar(@matches) . " matches) in replied cache for ${channel}");
@@ -2647,7 +2668,7 @@ Irssi::signal_add('gui key pressed', sub {
     # Ignore local/virtual channels (e.g. &messages)
     return unless $target && substr($target, 0, 1) ne '&';
     # Matrix, Slack, MSTeams, and Rocket.Chat only support per-channel/DM typing, not per-thread
-    return if $target =~ /^@@(?:\$|sl[0-9a-v]{34,80}$|mt[0-9a-v]{16}$|[0-9A-Za-z]{17}$)/i;
+    return if $target =~ /^@@(?:\$|[0-9A-Za-z\-_\.\+\/]{43}$|[0-9a-v]{34,80}$|[0-9A-Za-z]{17}$|[0-9a-v]{16}$)/i;
 
     # Ignore when typing Irssi slash commands (e.g. /win 1, /join)
     my $input_line = Irssi::parse_special('$L') // '';
@@ -2688,8 +2709,8 @@ Irssi::signal_add('gui key pressed', sub {
 
             return unless $full_id;
 
-            # Matrix ($-prefixed), Slack (sl-prefixed), MSTeams (mt-prefixed), and Rocket.Chat (17-char) only support per-channel/DM typing, not per-thread
-            return if substr($full_id, 0, 1) eq '$' || $full_id =~ /^(?:sl[0-9a-v]{34,80}|mt[0-9a-v]{16}|[0-9A-Za-z]{17})$/;
+            # Matrix ($-prefixed or bare 43-char), Slack (34-80 char), MSTeams (16-char), and Rocket.Chat (17-char) only support per-channel/DM typing, not per-thread
+            return if substr($full_id, 0, 1) eq '$' || $full_id =~ /^(?:[0-9A-Za-z\-_\.\+\/]{43}|[0-9a-v]{34,80}|[0-9A-Za-z]{17}|[0-9a-v]{16})$/;
 
             $thread = "\@\@${full_id}";
         } else {
