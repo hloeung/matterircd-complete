@@ -40,10 +40,15 @@
 #
 # By default, message/thread IDs are shortened to the first few
 # characters (default 5, preserving the leading $ on Matrix event IDs).
-# It is also grayed out to try reduce noise and make it easier to read
-# conversations. To disable this use:
+# It is also colorized to make it easier to follow threaded
+# conversations. To disable shortening use:
 #
 #   /set matterircd_complete_shorten_message_thread_id 0
+#
+# To disable matterircd_complete's internal thread coloring (for example,
+# when using server-side ThreadContextColor in matterircd.toml), use:
+#
+#   /set matterircd_complete_thread_id_colors OFF
 #
 # Use the dump commands to show the contents of the cache:
 #
@@ -215,6 +220,9 @@ my @solarized_light_theme_unwanted = (
     qw[5S 4L 7Q 5T 4T 4M 5M 6M 6N 1Z 2Z 1Y 2X 2W 3X 3W 1U 2V 1X 2Y 3V 3Z 3Y 2U], # hand picked too light + redundant
 );
 
+# Disable internal thread coloring to preserve and reuse server-sent IRC
+# thread colors from matterircd (ThreadContextColor).
+Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_thread_id_colors', 1);
 Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_thread_id_color', -1);
 # Default color theme to none, so we use all available colors.
 Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_thread_id_color_theme', '');
@@ -231,6 +239,30 @@ $color_config{'unwanted_colors'} = '';
 my $COLOR_CONFIG_INITIALIZED = 0;
 # Initialize
 my @thread_id_selected_colors = ();
+# Server-sent IRC 99-color codes (00-98) seen per channel/query and thread/post ID.
+my %MSGTHREADID_SERVER_COLOR;
+
+# Mapping from standard IRC 99-color codes (00-98) to Irssi format codes
+# matching Irssi's mirc_colors / mirc_colors24 tables (gui-printtext.c).
+my @MIRC16_TO_FORMAT = qw(%W %k %b %g %R %r %m %y %Y %G %c %C %B %M %K %w);
+my @MIRC_EXT_XCOLOR = (
+    qw[20 36 3C 26 16 1D 17 18 11 22 21 31],
+    qw[30 46 4I 2C 1C 1J 1E 19 12 33 32 41],
+    qw[40 56 5O 3I 1I 1X 1L 1H 13 45 43 51],
+    qw[60 6C 6U 4U 1U 2Y 1Z 2N 15 5B 65 62],
+    qw[67 6J 6V 5V 2V 3Y 2Z 3N 2B 5H 6B 69],
+    qw[6L 6R 6X 5X 4X 4Y 4Z 4T 4N 5N 6N 6G],
+    qw[10 7B 7D 7F 7H 7J 7M 7P 7S 7W 6Z],
+);
+my @MIRC_EXT_HEX = (
+    qw[470000 472100 474700 324700 004700 00472C 004747 002747 000047 2E0047 470047 47002A],
+    qw[740000 743A00 747400 517400 007400 007449 007474 004074 000074 4B0074 740074 740045],
+    qw[B50000 B56300 B5B500 7DB500 00B500 00B571 00B5B5 0063B5 0000B5 7500B5 B500B5 B5006B],
+    qw[FF0000 FF8C00 FFFF00 B2FF00 00FF00 00FFA0 00FFFF 008CFF 0000FF A500FF FF00FF FF0098],
+    qw[FF5959 FFB459 FFFF71 CFFF60 6FFF6F 65FFC9 6DFFFF 59B4FF 5959FF C459FF FF66FF FF59BC],
+    qw[FF9C9C FFD39C FFFF9C E2FF9C 9CFF9C 9CFFDB 9CFFFF 9CD3FF 9C9CFF DC9CFF FF9CFF FF94D3],
+    qw[000000 131313 282828 363636 4D4D4D 656565 818181 9F9F9F BCBCBC E2E2E2 FFFFFF],
+);
 
 # Rely on message/thread IDs stored in message cache so we can shorten
 # to save on screen real-estate.
@@ -359,6 +391,56 @@ sub thread_color {
     return $n;
 }
 
+sub mirc_color_to_format {
+    my ($num) = @_;
+    return '' unless defined $num && $num =~ /^\d{1,2}$/;
+    $num = int($num);
+    return '' if $num < 0 || $num > 98;
+    return $MIRC16_TO_FORMAT[$num] if $num < 16;
+    if (Irssi::settings_get_bool('colors_ansi_24bit')) {
+        return '%Z' . $MIRC_EXT_HEX[$num - 16];
+    }
+    return '%X' . $MIRC_EXT_XCOLOR[$num - 16];
+}
+
+sub normalize_mirc_color {
+    my ($num) = @_;
+    return undef unless defined $num && $num =~ /^\d{1,2}$/;
+    $num = int($num);
+    return undef if $num < 0 || $num > 98;
+    return sprintf('%02d', $num);
+}
+
+sub get_server_thread_color {
+    my ($id, $channel) = @_;
+    return undef unless defined $id && $id ne '';
+    if (defined $channel && exists $MSGTHREADID_SERVER_COLOR{$channel}
+        && defined $MSGTHREADID_SERVER_COLOR{$channel}{$id}) {
+        return $MSGTHREADID_SERVER_COLOR{$channel}{$id};
+    }
+    if ($id !~ /^[0-9a-f]{3}$/) {
+        for my $ch (keys %MSGTHREADID_SERVER_COLOR) {
+            return $MSGTHREADID_SERVER_COLOR{$ch}{$id}
+                if defined $MSGTHREADID_SERVER_COLOR{$ch}{$id};
+        }
+    }
+    return undef;
+}
+
+sub resolve_thread_color {
+    my ($id, $channel, $srv_color) = @_;
+    if (!Irssi::settings_get_bool('matterircd_complete_thread_id_colors')) {
+        my $c = normalize_mirc_color($srv_color);
+        $c = get_server_thread_color($id, $channel) unless defined $c;
+        return defined($c) ? "\x03${c}" : '';
+    }
+    my $fixed_color = Irssi::settings_get_int('matterircd_complete_thread_id_color');
+    if ($fixed_color != -1) {
+        return sprintf("\x03%02d", $fixed_color);
+    }
+    return thread_color($id);
+}
+
 # Canonical and partial thread/message ID patterns across supported bridges:
 # Matrix ($ + 43-char), Slack (34-80 char), Mattermost (26-char),
 # Rocket.Chat (17-char), MSTeams (16-char), Google Chat (11-char),
@@ -407,6 +489,18 @@ sub cmd_matterircd_complete_thread_id_get_color {
             return;
         }
         $id = $full_id;
+    }
+
+    my $channel = ($wi && ($wi->{type} eq 'CHANNEL' || $wi->{type} eq 'QUERY')) ? $wi->{name} : undef;
+
+    if (!Irssi::settings_get_bool('matterircd_complete_thread_id_colors')) {
+        my $srv_color = get_server_thread_color($id, $channel);
+        if (defined $srv_color) {
+            _wi_print($wi, "Server thread color for \x03${srv_color}${id}\x03 is IRC color ${srv_color}");
+        } else {
+            _wi_print($wi, "Internal thread colors are disabled and no server color is cached for ${id}");
+        }
+        return;
     }
 
     my ($color, $prepend) = get_thread_format($id);
@@ -498,17 +592,23 @@ sub update_msgthreadid {
     my $prefix = '';
     my $msgthreadid = '';
     my $msgpostid = '';
+    my $srv_thread_color;
+    my $srv_post_color;
     my $reply_prefix = Irssi::settings_get_str('matterircd_complete_override_reply_prefix');
     my $thread_m_style = 0;
 
-    if ($msg =~ s/\[(->|↪)?\@\@($THREAD_ID_RE)(?:,\@\@($THREAD_ID_RE))?\]/\@\@PLACEHOLDER\@\@/) {
-        $prefix = $reply_prefix ? $reply_prefix : $1 if $1;
-        $msgthreadid = $2;
-        $msgpostid = $3 ? $3 : '';
-    } elsif ($msg =~ s/\[(->|↪)?([0-9a-f]{3})(?:,([0-9a-f]{3}))?\]/\@\@PLACEHOLDER\@\@/) {
-        $prefix = $reply_prefix ? $reply_prefix : $1 if $1;
-        $msgthreadid = $2;
-        $msgpostid = $3 ? $3 : '';
+    if ($msg =~ s/(?:\x03(\d{1,2}))?\[(->|↪)?\@\@($THREAD_ID_RE)(?:,(?:\x03(\d{1,2}))?\@\@($THREAD_ID_RE)(?(4)(?:\x03(?:\d{1,2})?)?))?\](?(1)(?:\x0f|\x03(?!\d))?)/\@\@PLACEHOLDER\@\@/) {
+        $srv_thread_color = $1;
+        $prefix = $reply_prefix ? $reply_prefix : $2 if $2;
+        $msgthreadid = $3;
+        $srv_post_color = $4;
+        $msgpostid = $5 ? $5 : '';
+    } elsif ($msg =~ s/(?:\x03(\d{1,2}))?\[(->|↪)?([0-9a-f]{3})(?:,(?:\x03(\d{1,2}))?([0-9a-f]{3})(?(4)(?:\x03(?:\d{1,2})?)?))?\](?(1)(?:\x0f|\x03(?!\d))?)/\@\@PLACEHOLDER\@\@/) {
+        $srv_thread_color = $1;
+        $prefix = $reply_prefix ? $reply_prefix : $2 if $2;
+        $msgthreadid = $3;
+        $srv_post_color = $4;
+        $msgpostid = $5 ? $5 : '';
         $thread_m_style = 1;
     }
     if (not $msgthreadid) {
@@ -516,15 +616,14 @@ sub update_msgthreadid {
         return;
     }
 
-    my $thread_color = Irssi::settings_get_int('matterircd_complete_thread_id_color');
+    my $channel_key = (defined($target) && (substr($target, 0, 1) eq '#' || $nick eq $server->{nick})) ? $target : $nick;
+    my $internal_colors = Irssi::settings_get_bool('matterircd_complete_thread_id_colors');
+    my $thread_color = resolve_thread_color($msgthreadid, $channel_key, $srv_thread_color);
     my $post_color = '';
-    if ($thread_color == -1) {
-        $thread_color = thread_color($msgthreadid);
-        if ($msgpostid ne '') {
-            $post_color = thread_color($msgpostid);
-        }
-    } else {
-        $thread_color = "\x03${thread_color}";
+    if ($msgpostid ne '') {
+        my $eff_srv_post_color = defined($srv_post_color) ? $srv_post_color : $srv_thread_color;
+        $post_color = resolve_thread_color($msgpostid, $channel_key, $eff_srv_post_color);
+        $post_color = '' if $post_color eq $thread_color;
     }
 
     # Show that message is reply to a thread. (backwards compatibility
@@ -546,12 +645,17 @@ sub update_msgthreadid {
         $msgthreadid = shorten_thread_id($msgthreadid, $len);
         $msgpostid   = shorten_thread_id($msgpostid, $len) if $msgpostid ne '';
     }
+
+    my $reset_code = $internal_colors ? "\x0f" : "\x03";
+    my $color_end = ($thread_color ne '') ? $reset_code : '';
+
     if ($msgpostid eq '') {
-        $msg =~ s/\@\@PLACEHOLDER\@\@/${thread_color}[${prefix}${msgthreadid}]\x0f/;
+        $msg =~ s/\@\@PLACEHOLDER\@\@/${thread_color}[${prefix}${msgthreadid}]${color_end}/;
     } elsif ($post_color ne '') {
-        $msg =~ s/\@\@PLACEHOLDER\@\@/${thread_color}[${prefix}${msgthreadid},${post_color}${msgpostid}${thread_color}]\x0f/;
+        my $restore_color = ($thread_color ne '') ? $thread_color : $reset_code;
+        $msg =~ s/\@\@PLACEHOLDER\@\@/${thread_color}[${prefix}${msgthreadid},${post_color}${msgpostid}${restore_color}]${color_end}/;
     } else {
-        $msg =~ s/\@\@PLACEHOLDER\@\@/${thread_color}[${prefix}${msgthreadid},${msgpostid}]\x0f/;
+        $msg =~ s/\@\@PLACEHOLDER\@\@/${thread_color}[${prefix}${msgthreadid},${msgpostid}]${color_end}/;
     }
 
     Irssi::signal_continue($server, $msg, $nick, $address, $target);
@@ -632,13 +736,12 @@ sub cmd_matterircd_complete_msgthreadid_cache_dump {
         return;
     }
 
-    my $fixed_color = Irssi::settings_get_int('matterircd_complete_thread_id_color');
-
     foreach my $msgthread_id (@{$MSGTHREADID_CACHE{$channel}}) {
         my $nick = $MSGTHREADID_LAST_NICK{$channel}{$msgthread_id};
         my $nick_str = (defined $nick && length $nick) ? " (\@${nick})" : "";
-        my $color = ($fixed_color == -1) ? thread_color($msgthread_id) : sprintf("\x03%02d", $fixed_color);
-        _wi_print($wi, "${channel}: ${color}${msgthread_id}\x0f${nick_str}");
+        my $color = resolve_thread_color($msgthread_id, $channel);
+        my $color_end = ($color ne '') ? "\x0f" : "";
+        _wi_print($wi, "${channel}: ${color}${msgthread_id}${color_end}${nick_str}");
     }
 
     _wi_print($wi, "${channel}: Total: " . scalar @{$MSGTHREADID_CACHE{$channel}});
@@ -664,13 +767,12 @@ sub cmd_matterircd_complete_msgthreadid_most_recent_cache_dump {
         return;
     }
 
-    my $fixed_color = Irssi::settings_get_int('matterircd_complete_thread_id_color');
-
     foreach my $msgthread_id (@{$MSGTHREADID_MOST_RECENT_CACHE{$channel}}) {
         my $nick = $MSGTHREADID_LAST_NICK{$channel}{$msgthread_id};
         my $nick_str = (defined $nick && length $nick) ? " (\@${nick})" : "";
-        my $color = ($fixed_color == -1) ? thread_color($msgthread_id) : sprintf("\x03%02d", $fixed_color);
-        _wi_print($wi, "${channel}: ${color}${msgthread_id}\x0f${nick_str}");
+        my $color = resolve_thread_color($msgthread_id, $channel);
+        my $color_end = ($color ne '') ? "\x0f" : "";
+        _wi_print($wi, "${channel}: ${color}${msgthread_id}${color_end}${nick_str}");
     }
 
     _wi_print($wi, "${channel}: Total: " . scalar @{$MSGTHREADID_MOST_RECENT_CACHE{$channel}});
@@ -1122,10 +1224,14 @@ sub cache_msgthreadid {
         }
     }
 
+    my ($srv_thread_color, $srv_post_color);
+
     # Mattermost, Matrix, Slack, MSTeams, Google Chat, and Rocket.Chat message/thread IDs.
-    if ($msg =~ /\[(?:->|↪)?\@\@($THREAD_ID_RE)(?:,\@\@($THREAD_ID_RE))?\]/) {
-        my $msgthreadid = $1;
-        my $msgpostid = $2 ? $2 : '';
+    if ($msg =~ /(?:\x03(\d{1,2}))?\[(?:->|↪)?\@\@($THREAD_ID_RE)(?:,(?:\x03(\d{1,2}))?\@\@($THREAD_ID_RE)(?(3)(?:\x03(?:\d{1,2})?)?))?\](?(1)(?:\x0f|\x03(?!\d))?)/) {
+        $srv_thread_color = normalize_mirc_color($1);
+        my $msgthreadid = $2;
+        $srv_post_color = normalize_mirc_color($3);
+        my $msgpostid = $4 ? $4 : '';
 
         if ($msgpostid ne '') {
             push(@msgpost_ids, $msgpostid);
@@ -1133,13 +1239,17 @@ sub cache_msgthreadid {
         push(@msgids, $msgthreadid);
     }
     # matterircd generated 3-letter hexadecimal.
-    elsif ($msg =~ /(?:^\[(?:->|↪)?([0-9a-f]{3})\])|(?:\[(?:->|↪)?([0-9a-f]{3})\]\s*$)/) {
-        push(@msgids, $1 ? $1 : $2);
+    elsif ($msg =~ /^(?:\x03(\d{1,2}))?\[(?:->|↪)?([0-9a-f]{3})\](?(1)(?:\x0f|\x03(?!\d))?)/
+        || $msg =~ /(?:\x03(\d{1,2}))?\[(?:->|↪)?([0-9a-f]{3})\](?(1)(?:\x0f|\x03(?!\d))?)\s*$/) {
+        $srv_thread_color = normalize_mirc_color($1);
+        push(@msgids, $2);
     }
     # matterircd generated 3-letter hexadecimal replying to threads.
-    elsif ($msg =~ /\[(?:->|↪)?([0-9a-f]{3})(?:,([0-9a-f]{3}))?\]/) {
-        my $msgthreadid = $1;
-        my $msgpostid = $2 ? $2 : '';
+    elsif ($msg =~ /(?:\x03(\d{1,2}))?\[(?:->|↪)?([0-9a-f]{3})(?:,(?:\x03(\d{1,2}))?([0-9a-f]{3})(?(3)(?:\x03(?:\d{1,2})?)?))?\](?(1)(?:\x0f|\x03(?!\d))?)/) {
+        $srv_thread_color = normalize_mirc_color($1);
+        my $msgthreadid = $2;
+        $srv_post_color = normalize_mirc_color($3);
+        my $msgpostid = $4 ? $4 : '';
 
         if ($msgpostid ne '') {
             push(@msgpost_ids, $msgpostid);
@@ -1147,8 +1257,10 @@ sub cache_msgthreadid {
         push(@msgids, $msgthreadid);
     }
     # matterircd generated 3-letter hexadecimal replying to threads (legacy).
-    elsif ($msg =~ /(?:^\[[0-9a-f]{3}->([0-9a-f]{3})\])|(?:\[[0-9a-f]{3}->([0-9a-f]{3})\]\s*$)/) {
-        push(@msgids, $1 ? $1 : $2);
+    elsif ($msg =~ /^(?:\x03(\d{1,2}))?\[[0-9a-f]{3}->([0-9a-f]{3})\](?(1)(?:\x0f|\x03(?!\d))?)/
+        || $msg =~ /(?:\x03(\d{1,2}))?\[[0-9a-f]{3}->([0-9a-f]{3})\](?(1)(?:\x0f|\x03(?!\d))?)\s*$/) {
+        $srv_thread_color = normalize_mirc_color($1);
+        push(@msgids, $2);
     }
     else {
         return;
@@ -1172,6 +1284,7 @@ sub cache_msgthreadid {
     # Parent / thread IDs only.
     for my $msgid (@msgids) {
         $MSGTHREADID_LAST_NICK{$key}{$msgid} = $nick;
+        $MSGTHREADID_SERVER_COLOR{$key}{$msgid} = $srv_thread_color if defined $srv_thread_color;
         if ($nick eq $server->{nick}) {
             $MSGTHREADID_CACHE_SEARCH_RECENT{$key} = $msgid;
             $MSGTHREADID_CACHE_SEARCH_RECENT_TIME{$key} = time();
@@ -1182,8 +1295,10 @@ sub cache_msgthreadid {
     }
 
     # Most recent posts / replies to threads (kept in most-recent cache only).
+    my $eff_srv_post_color = defined($srv_post_color) ? $srv_post_color : $srv_thread_color;
     for my $msgpostid (@msgpost_ids) {
         $MSGTHREADID_LAST_NICK{$key}{$msgpostid} = $nick;
+        $MSGTHREADID_SERVER_COLOR{$key}{$msgpostid} = $eff_srv_post_color if defined $eff_srv_post_color;
         if (cache_store(\@{$MSGTHREADID_MOST_RECENT_CACHE{$key}}, $msgpostid, $cache_size)) {
             stats_increment(\$MSGTHREADID_MOST_RECENT_CACHE_STATS);
         }
@@ -1196,15 +1311,21 @@ sub cache_msgthreadid {
         }
     }
 
-    # %MSGTHREADID_LAST_NICK is only read for IDs still in the caches, don't
-    # let it grow with every ID ever seen. Once it is well past the size of
-    # the caches, only keep the IDs they still hold.
+    # %MSGTHREADID_LAST_NICK and %MSGTHREADID_SERVER_COLOR are only read for
+    # IDs still in the caches, don't let them grow with every ID ever seen.
     my $last_nick = $MSGTHREADID_LAST_NICK{$key};
     my $cached = @{$MSGTHREADID_CACHE{$key}} + @{$MSGTHREADID_MOST_RECENT_CACHE{$key}};
     if ($last_nick && keys(%$last_nick) > 2 * $cached + 16) {
         my %keep = map { $_ => $last_nick->{$_} } grep { exists $last_nick->{$_} }
             (@{$MSGTHREADID_CACHE{$key}}, @{$MSGTHREADID_MOST_RECENT_CACHE{$key}});
         $MSGTHREADID_LAST_NICK{$key} = \%keep;
+    }
+
+    my $srv_colors = $MSGTHREADID_SERVER_COLOR{$key};
+    if ($srv_colors && keys(%$srv_colors) > 2 * $cached + 16) {
+        my %keep = map { $_ => $srv_colors->{$_} } grep { exists $srv_colors->{$_} }
+            (@{$MSGTHREADID_CACHE{$key}}, @{$MSGTHREADID_MOST_RECENT_CACHE{$key}});
+        $MSGTHREADID_SERVER_COLOR{$key} = \%keep;
     }
 
     # Track last message's IDs per channel for permalink generation.
@@ -1236,6 +1357,7 @@ sub cmd_matterircd_complete_msgthreadid_cache_clear {
         %MSGTHREADID_CACHE = ();
         %MSGTHREADID_MOST_RECENT_CACHE = ();
         %MSGTHREADID_LAST_NICK = ();
+        %MSGTHREADID_SERVER_COLOR = ();
         %LAST_CHANNEL_MSGTHREAD = ();
         %MSGTHREADID_CACHE_SEARCH_RECENT = ();
         %MSGTHREADID_CACHE_SEARCH_RECENT_TIME = ();
@@ -1248,6 +1370,7 @@ sub cmd_matterircd_complete_msgthreadid_cache_clear {
     delete $MSGTHREADID_CACHE{$channel};
     delete $MSGTHREADID_MOST_RECENT_CACHE{$channel};
     delete $MSGTHREADID_LAST_NICK{$channel};
+    delete $MSGTHREADID_SERVER_COLOR{$channel};
     delete $LAST_CHANNEL_MSGTHREAD{$channel};
     delete $MSGTHREADID_CACHE_SEARCH_RECENT{$channel};
     delete $MSGTHREADID_CACHE_SEARCH_RECENT_TIME{$channel};
@@ -1335,9 +1458,12 @@ sub signal_message_own_msgthreadid {
         }
     }
 
-    my $fixed_color = Irssi::settings_get_int('matterircd_complete_thread_id_color');
-    my $thread_color = ($fixed_color == -1) ? thread_color($msgthreadid) : "\x03${fixed_color}";
-    my $post_color = ($quotepostid ne '' && $fixed_color == -1) ? thread_color($quotepostid) : '';
+    my $internal_colors = Irssi::settings_get_bool('matterircd_complete_thread_id_colors');
+    my $thread_color = resolve_thread_color($msgthreadid, $target);
+    my $post_color = ($quotepostid ne '') ? resolve_thread_color($quotepostid, $target) : '';
+    $post_color = '' if $post_color eq $thread_color;
+    my $reset_code = $internal_colors ? "\x0f" : "\x03";
+    my $color_end = ($thread_color ne '') ? $reset_code : '';
 
     my $len = Irssi::settings_get_int('matterircd_complete_shorten_message_thread_id');
     # Shorten to length configured. We use unicode ellipsis (...)
@@ -1349,21 +1475,22 @@ sub signal_message_own_msgthreadid {
 
     my $badge;
     if ($is_unthreaded_quote) {
-        $badge = "${thread_color}[${quote_prefix}${short_id}]\x0f";
+        $badge = "${thread_color}[${quote_prefix}${short_id}]${color_end}";
     } else {
         my $reply_prefix = Irssi::settings_get_str('matterircd_complete_override_reply_prefix');
         if ($quotepostid ne '') {
             my $short_quote = ($quotepostid eq '!!' || $quotepostid =~ /^[0-9a-f]{3}$/)
                 ? $quotepostid : shorten_thread_id($quotepostid, $len);
             if ($post_color ne '') {
-                $badge = "${thread_color}[${reply_prefix}${short_id} ${post_color}${quote_prefix}${short_quote}${thread_color}]\x0f";
+                my $restore_color = ($thread_color ne '') ? $thread_color : $reset_code;
+                $badge = "${thread_color}[${reply_prefix}${short_id} ${post_color}${quote_prefix}${short_quote}${restore_color}]${color_end}";
             } else {
-                $badge = "${thread_color}[${reply_prefix}${short_id} ${quote_prefix}${short_quote}]\x0f";
+                $badge = "${thread_color}[${reply_prefix}${short_id} ${quote_prefix}${short_quote}]${color_end}";
             }
         } elsif ($self_quote ne '') {
-            $badge = "${thread_color}[${reply_prefix}${short_id} ${self_quote}\@]\x0f";
+            $badge = "${thread_color}[${reply_prefix}${short_id} ${self_quote}\@]${color_end}";
         } else {
-            $badge = "${thread_color}[${reply_prefix}${short_id}]\x0f";
+            $badge = "${thread_color}[${reply_prefix}${short_id}]${color_end}";
         }
     }
 
@@ -1466,12 +1593,16 @@ sub queue_thread_preview {
 }
 
 sub thread_color_format {
-    my ($str) = @_;
+    my ($str, $channel) = @_;
+
+    if (!Irssi::settings_get_bool('matterircd_complete_thread_id_colors')) {
+        my $srv_color = get_server_thread_color($str, $channel);
+        return defined($srv_color) ? (mirc_color_to_format($srv_color) || '%n') : '%n';
+    }
 
     my $thread_color = Irssi::settings_get_int('matterircd_complete_thread_id_color');
     if ($thread_color != -1) {
-        my @mirc_to_format = qw(%W %k %b %g %R %r %m %y %Y %G %c %C %B %M %K %w);
-        return $mirc_to_format[$thread_color % 16] // '%n';
+        return mirc_color_to_format($thread_color) || '%n';
     }
 
     my ($color, $prepend) = get_thread_format($str);
@@ -1523,7 +1654,7 @@ sub update_thread_preview {
 
         my ($thread_color_fmt, $part_compact, $part_full);
         if ($full_id) {
-            $thread_color_fmt = thread_color_format($full_id);
+            $thread_color_fmt = thread_color_format($full_id, $target);
             my $display_id = shorten_thread_id($full_id, $len);
 
             # Escape '$' for Irssi format strings so Matrix IDs aren't parsed as expandos
@@ -1548,7 +1679,7 @@ sub update_thread_preview {
             my ($qprefix, $qid) = ($1, $2);
             my ($full_qid) = msgthreadid_find($target, $qid);
             if ($full_qid) {
-                my $q_color_fmt = thread_color_format($full_qid);
+                my $q_color_fmt = thread_color_format($full_qid, $target);
                 my $q_display_id = shorten_thread_id($full_qid, $len);
                 (my $safe_q_display = $q_display_id) =~ s/\$/\$\$/g;
                 (my $safe_q_full    = $full_qid)     =~ s/\$/\$\$/g;
@@ -2032,11 +2163,10 @@ sub cmd_matterircd_complete_replied_cache_dump {
         return;
     }
 
-    my $fixed_color = Irssi::settings_get_int('matterircd_complete_thread_id_color');
-
     foreach my $threadid (@{$REPLIED_CACHE{$channel}}) {
-        my $color = ($fixed_color == -1) ? thread_color($threadid) : sprintf("\x03%02d", $fixed_color);
-        _wi_print($wi, "${channel}: ${color}${threadid}\x0f");
+        my $color = resolve_thread_color($threadid, $channel);
+        my $color_end = ($color ne '') ? "\x0f" : "";
+        _wi_print($wi, "${channel}: ${color}${threadid}${color_end}");
     }
     _wi_print($wi, "${channel}: Total: " . scalar @{$REPLIED_CACHE{$channel}});
 }
@@ -2383,7 +2513,7 @@ sub sb_matterircd_typing {
             my $nicks = join(",", @{$thread_nicks{$tid}});
             my $short = shorten_thread_id($tid, $len);
             (my $safe_short = $short) =~ s/\$/\$\$/g;
-            my $color = thread_color_format($tid);
+            my $color = thread_color_format($tid, $window->{active}->{name});
             push(@typists, "${nicks} %N${color}[${reply_prefix}${safe_short}]%n%G");
         }
 
@@ -3213,6 +3343,9 @@ sub array_splice_values {
 }
 
 sub setup_colors {
+    # Skip internal color setup when internal thread coloring is disabled
+    return unless Irssi::settings_get_bool('matterircd_complete_thread_id_colors');
+
     # Skip colors setup if we're using a fixed color
     my $fixed_color = Irssi::settings_get_int('matterircd_complete_thread_id_color');
     return if $fixed_color ne -1;
@@ -3289,6 +3422,11 @@ Irssi::signal_add('setup reread', 'setup_colors');
 
 sub cmd_matterircd_complete_thread_id_get_colors {
     my ($data, $server, $wi) = @_;
+
+    if (!Irssi::settings_get_bool('matterircd_complete_thread_id_colors')) {
+        _wi_print($wi, "Internal thread colors are disabled (matterircd_complete_thread_id_colors is OFF); using server-sent colors from matterircd when available");
+        return;
+    }
 
     # Display a warning if we're using a fixed color
     my $fixed_color = Irssi::settings_get_int('matterircd_complete_thread_id_color');
@@ -3436,6 +3574,23 @@ sub save_cache {
         }
     }
 
+    # Save server-sent thread colors for IDs still in the caches
+    foreach my $channel (sort keys %MSGTHREADID_SERVER_COLOR) {
+        my $srv_colors = $MSGTHREADID_SERVER_COLOR{$channel};
+        next unless $srv_colors;
+        my %active;
+        for my $list ($MSGTHREADID_CACHE{$channel}, $MSGTHREADID_MOST_RECENT_CACHE{$channel}, $REPLIED_CACHE{$channel}) {
+            next unless $list;
+            $active{$_} = 1 for @{$list};
+        }
+        my @pairs = map { "$_=$srv_colors->{$_}" }
+            grep { exists $active{$_} && defined $srv_colors->{$_} && $srv_colors->{$_} =~ /^\d{2}$/ }
+            sort keys %{$srv_colors};
+        if (@pairs) {
+            print($fh "THREADCOLOR ${channel} " . join(',', @pairs) . "\n");
+        }
+    }
+
     # Save DM topics (newlines escaped to preserve single-line cache records)
     foreach my $tag (keys %DM_TOPIC_CACHE) {
         foreach my $target (keys %{$DM_TOPIC_CACHE{$tag}}) {
@@ -3482,6 +3637,15 @@ sub load_cache {
     my $total = 0;
     while(<FH>) {
         chomp;
+        if (/^THREADCOLOR\s+(\S+)\s+(\S+)$/) {
+            my ($channel, $entries) = ($1, $2);
+            for my $pair (split(',', $entries)) {
+                if ($pair =~ /^(.+)=(\d{2})$/) {
+                    $MSGTHREADID_SERVER_COLOR{$channel}{$1} = $2;
+                }
+            }
+            next;
+        }
         if (/^DMTOPIC(2)?\s+(\S+)\s+(\S+)\s+(.*)$/) {
             my ($version, $tag, $target, $topic) = ($1, $2, $3, $4);
             if ($version) {
