@@ -50,6 +50,12 @@
 #
 #   /set matterircd_complete_thread_id_colors OFF
 #
+# To disable matterircd_complete's client-side replied-thread highlighting
+# and tracking (for example, when using server-side HighlightRepliedThreads
+# in matterircd.toml), use:
+#
+#   /set matterircd_complete_add_nick_replied OFF
+#
 # Use the dump commands to show the contents of the cache:
 #
 #   /matterircd_complete_msgthreadid_cache_dump
@@ -2230,6 +2236,7 @@ sub signal_message_own_public_replied {
     my($server, $msg, $target) = @_;
 
     return unless chatnet_enabled($server);
+    return unless Irssi::settings_get_bool('matterircd_complete_add_nick_replied');
     return unless Irssi::settings_get_int('matterircd_complete_replied_cache_size');
 
     if ($msg !~ /^@@($THREAD_ID_ANY_RE)/) {
@@ -2270,6 +2277,7 @@ sub signal_message_public {
     my $tid = lc($msgthreadid);
     clear_typing($server->{tag}, "\@\@${tid}", $nick);
 
+    return unless Irssi::settings_get_bool('matterircd_complete_add_nick_replied');
     return unless Irssi::settings_get_int('matterircd_complete_replied_cache_size');
 
     if ($nick eq $server->{nick}) {
@@ -2279,8 +2287,6 @@ sub signal_message_public {
         }
         return;
     }
-
-    return unless Irssi::settings_get_bool('matterircd_complete_add_nick_replied');
 
     if ($REPLIED_CACHE{$target} && grep { $_ eq $msgthreadid } @{$REPLIED_CACHE{$target}}) {
         # Add user's (or our own) nick for hilighting if not in
