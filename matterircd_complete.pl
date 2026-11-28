@@ -271,6 +271,15 @@ Irssi::settings_add_int('matterircd_complete', 'matterircd_complete_message_thre
 Irssi::settings_add_bool('matterircd_complete', 'matterircd_complete_shorten_message_thread_id_hide_prefix', 1);
 Irssi::settings_add_str('matterircd_complete', 'matterircd_complete_override_reply_prefix', '↪');
 
+sub reply_prefix_re {
+    my $override = Irssi::settings_get_str('matterircd_complete_override_reply_prefix');
+    my @prefixes = ('->', '↪');
+    if (defined($override) && $override ne '' && $override ne '->' && $override ne '↪') {
+        unshift(@prefixes, $override);
+    }
+    return join('|', map { quotemeta($_) } @prefixes);
+}
+
 # Taken from nickcolor_expando irssi script and adapted for our use
 sub xcolor_to_irssi {
     # Set to foreground xcolor
@@ -595,17 +604,18 @@ sub update_msgthreadid {
     my $srv_thread_color;
     my $srv_post_color;
     my $reply_prefix = Irssi::settings_get_str('matterircd_complete_override_reply_prefix');
+    my $rp_re = reply_prefix_re();
     my $thread_m_style = 0;
 
-    if ($msg =~ s/(?:\x03(\d{1,2}))?\[(->|↪)?\@\@($THREAD_ID_RE)(?:,(?:\x03(\d{1,2}))?\@\@($THREAD_ID_RE)(?(4)(?:\x03(?:\d{1,2})?)?))?\](?(1)(?:\x0f|\x03(?!\d))?)/\@\@PLACEHOLDER\@\@/) {
+    if ($msg =~ s/(?:\x03(\d{1,2}))?\[($rp_re|[^\]\s\@,\x03]+)?\@\@($THREAD_ID_RE)(?:,(?:\x03(\d{1,2}))?\@\@($THREAD_ID_RE)(?(4)(?:\x03(?:\d{1,2})?)?))?\](?(1)(?:\x0f|\x03(?!\d))?)/\@\@PLACEHOLDER\@\@/) {
         $srv_thread_color = $1;
-        $prefix = $reply_prefix ? $reply_prefix : $2 if $2;
+        $prefix = (defined($reply_prefix) && $reply_prefix ne '') ? $reply_prefix : $2 if defined($2) && $2 ne '';
         $msgthreadid = $3;
         $srv_post_color = $4;
         $msgpostid = $5 ? $5 : '';
-    } elsif ($msg =~ s/(?:\x03(\d{1,2}))?\[(->|↪)?([0-9a-f]{3})(?:,(?:\x03(\d{1,2}))?([0-9a-f]{3})(?(4)(?:\x03(?:\d{1,2})?)?))?\](?(1)(?:\x0f|\x03(?!\d))?)/\@\@PLACEHOLDER\@\@/) {
+    } elsif ($msg =~ s/(?:\x03(\d{1,2}))?\[($rp_re)?([0-9a-f]{3})(?:,(?:\x03(\d{1,2}))?([0-9a-f]{3})(?(4)(?:\x03(?:\d{1,2})?)?))?\](?(1)(?:\x0f|\x03(?!\d))?)/\@\@PLACEHOLDER\@\@/) {
         $srv_thread_color = $1;
-        $prefix = $reply_prefix ? $reply_prefix : $2 if $2;
+        $prefix = (defined($reply_prefix) && $reply_prefix ne '') ? $reply_prefix : $2 if defined($2) && $2 ne '';
         $msgthreadid = $3;
         $srv_post_color = $4;
         $msgpostid = $5 ? $5 : '';
@@ -987,11 +997,11 @@ sub cmd_message_thread_id_last {
     }
 
     # Escape reply prefix and ID so '$' in Matrix IDs doesn't act as EOL anchor
-    my $reply_prefix = quotemeta(Irssi::settings_get_str('matterircd_complete_override_reply_prefix'));
-    my $escaped_id   = quotemeta($search_id);
+    my $rp_re      = reply_prefix_re();
+    my $escaped_id = quotemeta($search_id);
 
     # Constrain both root thread IDs and post IDs to remain inside bracketed markers [...]
-    $window->command("last -regexp \\[(?:(${reply_prefix}|->|↪)?|[^\\\]]*?,)(\@\@)?${escaped_id}");
+    $window->command("last -regexp \\[(?:(${rp_re}|[^\\]\\s\@,\\x03]+)?|[^\\\]]*?,)(\@\@)?${escaped_id}");
     Irssi::gui_input_set($input);
     Irssi::gui_input_set_pos($pos);
     queue_thread_preview();
@@ -1225,9 +1235,10 @@ sub cache_msgthreadid {
     }
 
     my ($srv_thread_color, $srv_post_color);
+    my $rp_re = reply_prefix_re();
 
     # Mattermost, Matrix, Slack, MSTeams, Google Chat, and Rocket.Chat message/thread IDs.
-    if ($msg =~ /(?:\x03(\d{1,2}))?\[(?:->|↪)?\@\@($THREAD_ID_RE)(?:,(?:\x03(\d{1,2}))?\@\@($THREAD_ID_RE)(?(3)(?:\x03(?:\d{1,2})?)?))?\](?(1)(?:\x0f|\x03(?!\d))?)/) {
+    if ($msg =~ /(?:\x03(\d{1,2}))?\[(?:$rp_re|[^\]\s\@,\x03]+)?\@\@($THREAD_ID_RE)(?:,(?:\x03(\d{1,2}))?\@\@($THREAD_ID_RE)(?(3)(?:\x03(?:\d{1,2})?)?))?\](?(1)(?:\x0f|\x03(?!\d))?)/) {
         $srv_thread_color = normalize_mirc_color($1);
         my $msgthreadid = $2;
         $srv_post_color = normalize_mirc_color($3);
@@ -1239,13 +1250,13 @@ sub cache_msgthreadid {
         push(@msgids, $msgthreadid);
     }
     # matterircd generated 3-letter hexadecimal.
-    elsif ($msg =~ /^(?:\x03(\d{1,2}))?\[(?:->|↪)?([0-9a-f]{3})\](?(1)(?:\x0f|\x03(?!\d))?)/
-        || $msg =~ /(?:\x03(\d{1,2}))?\[(?:->|↪)?([0-9a-f]{3})\](?(1)(?:\x0f|\x03(?!\d))?)\s*$/) {
+    elsif ($msg =~ /^(?:\x03(\d{1,2}))?\[(?:$rp_re)?([0-9a-f]{3})\](?(1)(?:\x0f|\x03(?!\d))?)/
+        || $msg =~ /(?:\x03(\d{1,2}))?\[(?:$rp_re)?([0-9a-f]{3})\](?(1)(?:\x0f|\x03(?!\d))?)\s*$/) {
         $srv_thread_color = normalize_mirc_color($1);
         push(@msgids, $2);
     }
     # matterircd generated 3-letter hexadecimal replying to threads.
-    elsif ($msg =~ /(?:\x03(\d{1,2}))?\[(?:->|↪)?([0-9a-f]{3})(?:,(?:\x03(\d{1,2}))?([0-9a-f]{3})(?(3)(?:\x03(?:\d{1,2})?)?))?\](?(1)(?:\x0f|\x03(?!\d))?)/) {
+    elsif ($msg =~ /(?:\x03(\d{1,2}))?\[(?:$rp_re)?([0-9a-f]{3})(?:,(?:\x03(\d{1,2}))?([0-9a-f]{3})(?(3)(?:\x03(?:\d{1,2})?)?))?\](?(1)(?:\x0f|\x03(?!\d))?)/) {
         $srv_thread_color = normalize_mirc_color($1);
         my $msgthreadid = $2;
         $srv_post_color = normalize_mirc_color($3);
@@ -2257,10 +2268,11 @@ sub signal_message_public {
 
     # For '/me' actions, it has trailing space so we need to use
     # \s* here.
+    my $rp_re = reply_prefix_re();
     my $msgthreadid;
-    if ($msg =~ /\[(?:->|↪)?\@\@($THREAD_ID_RE)[\],]/) {
+    if ($msg =~ /\[(?:$rp_re|[^\]\s\@,\x03]+)?\@\@($THREAD_ID_RE)[\],]/) {
         $msgthreadid = $1;
-    } elsif ($msg =~ /\[(?:->|↪)?([0-9a-f]{3})[\],]/) {
+    } elsif ($msg =~ /\[(?:$rp_re)?([0-9a-f]{3})[\],]/) {
         $msgthreadid = $1;
     } else {
         return;
