@@ -466,7 +466,8 @@ my $THREAD_ID_PARTIAL_RE = qr/\$[0-9A-Za-z\-_\.\+\/]{1,43}|[0-9a-v]{44,80}|[0-9A
 # Quote-in-reply prefix: '>' with optional length modifier (e.g. >5l, >6w, >10c).
 my $QUOTE_MOD_RE = qr/[1-9][0-9]*[lLwWcC]/;
 my $QUOTE_PREFIX_RE = qr/>(?:$QUOTE_MOD_RE)?/;
-my $INPUT_PREFIX_RE = qr/(?:$QUOTE_PREFIX_RE\@\@(?:$THREAD_ID_PARTIAL_RE|!!)|\@\@(?:$THREAD_ID_PARTIAL_RE|!!)(?:\s+$QUOTE_PREFIX_RE(?:\@(?=\s|$)|\@\@(?:$THREAD_ID_PARTIAL_RE|!!)))?)/;
+my $HISTORY_ID_RE = qr/!!|!\$/;
+my $INPUT_PREFIX_RE = qr/(?:$QUOTE_PREFIX_RE\@\@(?:$THREAD_ID_PARTIAL_RE|$HISTORY_ID_RE)|\@\@(?:$THREAD_ID_PARTIAL_RE|$HISTORY_ID_RE)(?:\s+$QUOTE_PREFIX_RE(?:\@(?=\s|$)|\@\@(?:$THREAD_ID_PARTIAL_RE|$HISTORY_ID_RE)))?)/;
 
 sub thread_id_prefix_offset {
     my ($id) = @_;
@@ -1055,7 +1056,7 @@ sub signal_gui_key_pressed_msgthreadid {
         $input =~ s/\x03//g;
 
         my $pos = 0;
-        if ($input =~ s/^((?:$QUOTE_PREFIX_RE\@\@(?:$THREAD_ID_PARTIAL_RE|!!)?|\@\@(?:$THREAD_ID_PARTIAL_RE|!!)?(?:\s+$QUOTE_PREFIX_RE(?:\@(?=\s|$)|\@\@(?:$THREAD_ID_PARTIAL_RE|!!)?))?)\s*)//) {
+        if ($input =~ s/^((?:$QUOTE_PREFIX_RE\@\@(?:$THREAD_ID_PARTIAL_RE|$HISTORY_ID_RE)?|\@\@(?:$THREAD_ID_PARTIAL_RE|$HISTORY_ID_RE)?(?:\s+$QUOTE_PREFIX_RE(?:\@(?=\s|$)|\@\@(?:$THREAD_ID_PARTIAL_RE|$HISTORY_ID_RE)?))?)\s*)//) {
             $pos = Irssi::gui_input_get_pos() - length($1);
         }
 
@@ -1157,8 +1158,8 @@ sub signal_complete_word_msgthread_id {
     # the full canonical ID.
     my $is_reply = (!defined($linestart)
         || $linestart =~ /^\s*(?:(?:$QUOTE_PREFIX_RE)?\@\@\$?)?$/
-        || ($quote_prefix ne '' && $linestart =~ /^\s*\@\@(?:$THREAD_ID_PARTIAL_RE|!!)$/)
-        || $linestart =~ /^\s*\@\@(?:$THREAD_ID_PARTIAL_RE|!!)\s+$QUOTE_PREFIX_RE\@\@\$?$/);
+        || ($quote_prefix ne '' && $linestart =~ /^\s*\@\@(?:$THREAD_ID_PARTIAL_RE|$HISTORY_ID_RE)$/)
+        || $linestart =~ /^\s*\@\@(?:$THREAD_ID_PARTIAL_RE|$HISTORY_ID_RE)\s+$QUOTE_PREFIX_RE\@\@\$?$/);
     my $min_len = 0;
     if ($is_reply) {
         $min_len = Irssi::settings_get_int('matterircd_complete_message_thread_id_min')
@@ -1410,32 +1411,32 @@ sub signal_message_own_msgthreadid {
     my ($msgthreadid, $quote_prefix, $quotepostid, $self_quote, $reaction) = ('', '', '', '', '');
     my $is_unthreaded_quote = 0;
 
-    if ($msg =~ s/^($QUOTE_PREFIX_RE)\@\@($THREAD_ID_ANY_RE|!!)\s+//) {
+    if ($msg =~ s/^($QUOTE_PREFIX_RE)\@\@($THREAD_ID_ANY_RE|$HISTORY_ID_RE)\s+//) {
         # Form 1: unthreaded quote (>@@<POST_ID> <msg> / ><N><l|w|c>@@<POST_ID> <msg>)
         $quote_prefix = $1;
         $msgthreadid = $2;
         $is_unthreaded_quote = 1;
-    } elsif ($msg =~ s/^\@\@($THREAD_ID_ANY_RE|!!)\s+($QUOTE_PREFIX_RE)\@\@($THREAD_ID_ANY_RE|!!)\s+//) {
+    } elsif ($msg =~ s/^\@\@($THREAD_ID_ANY_RE|$HISTORY_ID_RE)\s+($QUOTE_PREFIX_RE)\@\@($THREAD_ID_ANY_RE|$HISTORY_ID_RE)\s+//) {
         # Form 3: explicit-thread / cross-post quote (@@<THREAD_ID> >[<mod>]@@<POST_ID> <msg>)
         $msgthreadid = $1;
         $quote_prefix = $2;
         $quotepostid = $3;
-    } elsif ($msg =~ s/^\@\@($THREAD_ID_ANY_RE|!!)\s+($QUOTE_PREFIX_RE)\@\s+//) {
+    } elsif ($msg =~ s/^\@\@($THREAD_ID_ANY_RE|$HISTORY_ID_RE)\s+($QUOTE_PREFIX_RE)\@\s+//) {
         # Form 2: self-quote reply (@@<POST_ID> >[<mod>]@ <msg>)
         $msgthreadid = $1;
         $self_quote = $2;
-    } elsif ($msg =~ /^\@\@($THREAD_ID_ANY_RE)\s+([+-]:\S+:)?/) {
+    } elsif ($msg =~ /^\@\@($THREAD_ID_ANY_RE|$HISTORY_ID_RE)\s+([+-]:\S+:)?/) {
         # Regular thread reply or reaction (manual blockquotes like @@<ID> > text stay untouched)
         $msgthreadid = $1;
         $reaction = $2 ? $2 : '';
-        $msg =~ s/^\@\@(?:$THREAD_ID_ANY_RE)\s+//;
+        $msg =~ s/^\@\@(?:$THREAD_ID_ANY_RE|$HISTORY_ID_RE)\s+//;
     } else {
         return;
     }
 
     my $cache_size = Irssi::settings_get_int('matterircd_complete_message_thread_id_cache_size');
 
-    if ($msgthreadid ne '!!') {
+    if ($msgthreadid !~ /^$HISTORY_ID_RE$/) {
         # Skip root-thread cache update for reactions and unthreaded >@@ quotes,
         # since neither replies in-thread and the ID may be a child post ID.
         my $found_in_recent = 0;
@@ -1466,7 +1467,7 @@ sub signal_message_own_msgthreadid {
     }
 
     # For cross-post quotes, refresh the quoted post ID in the most-recent cache only
-    if ($quotepostid ne '' && $quotepostid ne '!!' && $quotepostid ne $msgthreadid) {
+    if ($quotepostid ne '' && $quotepostid !~ /^$HISTORY_ID_RE$/ && $quotepostid ne $msgthreadid) {
         if (!grep { $_ eq $quotepostid } @{$MSGTHREADID_CACHE{$target}}) {
             if (cache_store(\@{$MSGTHREADID_MOST_RECENT_CACHE{$target}}, $quotepostid, $cache_size)) {
                 $MSGTHREADID_CACHE_INDEX = 0;
@@ -1487,7 +1488,7 @@ sub signal_message_own_msgthreadid {
     # here to both allow word selection to just select parts of
     # the message/thread ID when copying & pasting and save on
     # screen real estate.
-    my $short_id = ($msgthreadid eq '!!' || $msgthreadid =~ /^[0-9a-f]{3}$/)
+    my $short_id = ($msgthreadid =~ /^$HISTORY_ID_RE$/ || $msgthreadid =~ /^[0-9a-f]{3}$/)
         ? $msgthreadid : shorten_thread_id($msgthreadid, $len);
 
     my $badge;
@@ -1496,7 +1497,7 @@ sub signal_message_own_msgthreadid {
     } else {
         my $reply_prefix = Irssi::settings_get_str('matterircd_complete_override_reply_prefix');
         if ($quotepostid ne '') {
-            my $short_quote = ($quotepostid eq '!!' || $quotepostid =~ /^[0-9a-f]{3}$/)
+            my $short_quote = ($quotepostid =~ /^$HISTORY_ID_RE$/ || $quotepostid =~ /^[0-9a-f]{3}$/)
                 ? $quotepostid : shorten_thread_id($quotepostid, $len);
             if ($post_color ne '') {
                 my $restore_color = ($thread_color ne '') ? $thread_color : $reset_code;
@@ -1747,11 +1748,11 @@ sub signal_send_text {
     if ($line =~ s/^((?:$QUOTE_PREFIX_RE)?)\@\@([0-9A-Za-z\-_\.\+\/]{43})(\s|$)/$1\@\@\$$2$3/) {
         $modified = 1;
     }
-    if ($line =~ s/^(\@\@(?:$THREAD_ID_PARTIAL_RE|!!)\s+$QUOTE_PREFIX_RE)\@\@([0-9A-Za-z\-_\.\+\/]{43})(\s|$)/$1\@\@\$$2$3/) {
+    if ($line =~ s/^(\@\@(?:$THREAD_ID_PARTIAL_RE|$HISTORY_ID_RE)\s+$QUOTE_PREFIX_RE)\@\@([0-9A-Za-z\-_\.\+\/]{43})(\s|$)/$1\@\@\$$2$3/) {
         $modified = 1;
     }
 
-    if ($line =~ /^((?:$QUOTE_PREFIX_RE)?)\@\@($THREAD_ID_PARTIAL_RE|!!)(\s.*)?$/) {
+    if ($line =~ /^((?:$QUOTE_PREFIX_RE)?)\@\@($THREAD_ID_PARTIAL_RE|$HISTORY_ID_RE)(\s.*)?$/) {
         my $quote = $1;
         my $id = $2;
         my $rest = $3 // '';
@@ -1759,7 +1760,7 @@ sub signal_send_text {
 
         # Prevent sending an accidental bare thread/quote ID without message content
         if ($rest !~ /\S/
-            || ($quote eq '' && $rest =~ /^\s+$QUOTE_PREFIX_RE(?:\@|\@\@(?:$THREAD_ID_PARTIAL_RE|!!)?)\s*$/)) {
+            || ($quote eq '' && $rest =~ /^\s+$QUOTE_PREFIX_RE(?:\@|\@\@(?:$THREAD_ID_PARTIAL_RE|$HISTORY_ID_RE)?)\s*$/)) {
             Irssi::signal_stop();
             Irssi::gui_input_set($line =~ /\s$/ ? $line : "${line} ");
             return;
@@ -1772,7 +1773,7 @@ sub signal_send_text {
             Irssi::statusbar_items_redraw('matterircd_thread_full');
         }
 
-        if ($id ne '!!') {
+        if ($id !~ /^$HISTORY_ID_RE$/) {
             my $full_id = msgthreadid_find($target, $id);
             if ($full_id && $full_id ne $id) {
                 $id = $full_id;
